@@ -1,0 +1,765 @@
+Project event_booking_platform {
+  database_type: 'PostgreSQL'
+  Note: '''
+  Event Platform on AWS Cloud
+
+  Design by Database per Service
+    - auth_db      : RDS - users, credentials
+    - catalog_db   : RDS + read replica - events, ticket types
+    - booking_db   : RDS Multi-AZ - orders, tickets, inventory
+    - payment_db   : RDS PCI-isolated - payments, refunds
+  
+  Note: Mail Worker has no database
+
+  ElastiCache Redis  (ephemeral):
+    - session:{token}              - user session
+    - seatlock:{ticket_type_id}    - counter quota ticket atomic when peak time
+    - waitroom:{event_id}          - Waiting room queue + admission token
+
+  - Relational at the end of file is Logical Reference
+  - Don't implement FOREIGN KEY because isolate RDS instance
+  '''
+}
+
+// =====================================================================
+// ENUMS
+// =====================================================================
+
+enum user_status {
+  PENDING_VERIFICATION [note: 'สมัครแล้วแต่ยังไม่ยืนยันอีเมล UC4']
+  ACTIVE
+  SUSPENDED [note: 'Admin ระงับบัญชี UC11']
+}
+
+enum organizer_approval_status {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum auth_token_purpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+enum event_status {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  SUSPENDED [note: 'Admin ยกเลิกการเผยแพร่ UC9 Alt Flow 3']
+}
+
+enum order_status {
+  PENDING [note: 'จองโควตาแล้ว รอชำระเงิน 8 นาที']
+  PENDING_VERIFICATION [note: 'Gateway timeout รอ reconciliation job']
+  CONFIRMED
+  CANCELLED
+  EXPIRED [note: 'หมดเวลาจอง ระบบคืนโควตาอัตโนมัติ']
+}
+
+enum ticket_status {
+  CONFIRMED
+  USED
+  CANCELLED
+  REFUNDED
+}
+
+enum check_in_result {
+  SUCCESS
+  DUPLICATE [note: 'ตั๋วถูกใช้ไปแล้ว UC8 Alt Flow 1']
+  INVALID_SIGNATURE [note: 'QR ปลอมแปลง UC8 Alt Flow 2']
+  TICKET_CANCELLED
+  WRONG_EVENT
+}
+
+enum waiting_room_status {
+  WAITING
+  ADMITTED
+  EXPIRED
+  ABANDONED
+}
+
+enum payment_status {
+  PENDING
+  PENDING_VERIFICATION
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum refund_status {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+enum outbox_status {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+// =====================================================================
+// 1) AUTH DB - RDS auth (users, credentials)
+// =====================================================================
+
+Table users {
+  id uuid [pk, default: `gen_random_uuid()`]
+  email varchar(255) [not null, unique, note: 'เก็บ lowercase เสมอ']
+  password_hash varchar(255) [not null, note: 'bcrypt หรือ argon2id ห้ามเก็บ plaintext UC4']
+  full_name varchar(150) [not null]
+  phone varchar(32)
+  status user_status [not null, default: 'PENDING_VERIFICATION']
+  email_verified_at timestamptz
+  failed_login_count int [not null, default: 0, note: 'ใช้ล็อกบัญชีชั่วคราว UC5 Alt Flow 2']
+  locked_until timestamptz
+  last_login_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    email [unique, name: 'uq_users_email']
+    (status, created_at) [name: 'idx_users_status']
+  }
+  Note: 'Guest ไม่มีแถวในตารางนี้ เพราะเป็นผู้ใช้ที่ยังไม่ลงทะเบียน'
+}
+
+Table roles {
+  id smallint [pk, increment]
+  code varchar(20) [not null, unique, note: 'ATTENDEE / ORGANIZER / ADMIN']
+  description varchar(200)
+}
+
+Table user_roles {
+  user_id uuid [not null]
+  role_id smallint [not null]
+  granted_by_user_id uuid [note: 'Admin ที่อนุมัติบทบาท UC11']
+  granted_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (user_id, role_id) [pk]
+  }
+}
+
+Table organizer_profiles {
+  user_id uuid [pk]
+  display_name varchar(150) [not null]
+  contact_email varchar(255)
+  contact_phone varchar(32)
+  approval_status organizer_approval_status [not null, default: 'PENDING']
+  approved_by_user_id uuid
+  approved_at timestamptz
+  reject_reason varchar(500)
+  created_at timestamptz [not null, default: `now()`]
+  Note: 'ข้อมูลผู้จัดงาน ต้องผ่านการอนุมัติจาก Admin ก่อนสร้างอีเวนต์ได้ UC11'
+}
+
+Table auth_tokens {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  purpose auth_token_purpose [not null]
+  token_hash varchar(255) [not null, note: 'เก็บเฉพาะ hash ของรหัสยืนยัน']
+  expires_at timestamptz [not null]
+  consumed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (user_id, purpose, expires_at) [name: 'idx_auth_tokens_lookup']
+  }
+  Note: 'ใช้ทั้งยืนยันอีเมล UC4 และรีเซ็ตรหัสผ่าน UC5 Alt Flow 3'
+}
+
+Table login_attempts {
+  id bigint [pk, increment]
+  email varchar(255) [not null]
+  user_id uuid
+  ip_address inet
+  user_agent varchar(500)
+  success boolean [not null]
+  attempted_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (email, attempted_at) [name: 'idx_login_attempts_email']
+  }
+  Note: 'ใช้ตรวจจับ brute force และตัดสินใจล็อกบัญชีหรือขอ CAPTCHA'
+}
+
+Table user_audit_logs {
+  id bigint [pk, increment]
+  actor_user_id uuid [not null, note: 'Admin ผู้กระทำ']
+  target_user_id uuid [not null, note: 'ผู้ใช้ที่ถูกกระทำ']
+  action varchar(60) [not null, note: 'SUSPEND / ACTIVATE / APPROVE_ORGANIZER / REJECT_ORGANIZER / FORCE_RESET_PASSWORD']
+  reason varchar(500)
+  before_value jsonb
+  after_value jsonb
+  ip_address inet
+  created_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (target_user_id, created_at) [name: 'idx_user_audit_target']
+    (actor_user_id, created_at) [name: 'idx_user_audit_actor']
+  }
+  Note: '''
+  Audit Log ตาม Post condition ของ UC11 เขียนอย่างเดียว ห้าม UPDATE หรือ DELETE
+
+  ครอบคลุมเฉพาะการกระทำที่เป้าหมายเป็นบัญชีผู้ใช้ ส่วนการยกเลิกเผยแพร่อีเวนต์
+  โดย Admin (UC9 Alt Flow 3) ให้ดูที่ catalog_db.event_change_logs แทน
+  เพื่อไม่ให้มี audit log ของอีเวนต์ซ้ำกันสองที่
+  '''
+}
+
+Ref: user_roles.user_id > users.id [delete: cascade]
+Ref: user_roles.role_id > roles.id
+Ref: user_roles.granted_by_user_id > users.id
+Ref: organizer_profiles.user_id - users.id [delete: cascade]
+Ref: organizer_profiles.approved_by_user_id > users.id
+Ref: auth_tokens.user_id > users.id [delete: cascade]
+Ref: login_attempts.user_id > users.id
+Ref: user_audit_logs.actor_user_id > users.id
+Ref: user_audit_logs.target_user_id > users.id [delete: cascade]
+
+// =====================================================================
+// 2) CATALOG DB - RDS catalog + read replica
+// =====================================================================
+
+Table categories {
+  id smallint [pk, increment]
+  name varchar(80) [not null]
+  slug varchar(80) [not null, unique]
+  is_active boolean [not null, default: true]
+}
+
+Table venues {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar(200) [not null]
+  address_line varchar(300)
+  district varchar(100)
+  province varchar(100)
+  postal_code varchar(10)
+  country char(2) [not null, default: 'TH']
+  latitude decimal(9,6) [note: 'ใช้แสดงแผนที่ใน UC2']
+  longitude decimal(9,6)
+
+  Indexes {
+    (province, district) [name: 'idx_venues_area']
+  }
+}
+
+Table events {
+  id uuid [pk, default: `gen_random_uuid()`]
+  organizer_user_id uuid [not null, note: 'logical ref -> auth_db.users.id']
+  category_id smallint
+  venue_id uuid
+  title varchar(200) [not null]
+  slug varchar(220) [not null, unique]
+  description text
+  cover_image_key varchar(500) [note: 'S3 object key อัปโหลดผ่าน Presigned URL UC9']
+  status event_status [not null, default: 'DRAFT']
+  is_high_demand boolean [not null, default: false, note: 'true = เปิดห้องรอเสมือน UC7']
+  start_at timestamptz [not null]
+  end_at timestamptz [not null]
+  timezone varchar(40) [not null, default: 'Asia/Bangkok']
+  check_in_open_at timestamptz [note: 'ช่วงเวลาที่เริ่มเช็คอินได้ UC8 Precondition']
+  check_in_close_at timestamptz
+  refund_cutoff_hours int [not null, default: 24, note: 'ยกเลิกได้ถึงกี่ชั่วโมงก่อนงาน UC6']
+  refund_percent decimal(5,2) [not null, default: 100.00, note: 'คืนเงินกี่เปอร์เซ็นต์']
+  published_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  updated_by_user_id uuid
+
+  Indexes {
+    (status, start_at) [name: 'idx_events_browse']
+    slug [unique]
+    category_id
+    venue_id
+    (organizer_user_id, status) [name: 'idx_events_by_organizer']
+  }
+  Note: '''
+  UC1 และ UC2 ค้นเฉพาะ status = PUBLISHED เท่านั้น
+  แนะนำเพิ่ม GIN index สำหรับ full-text search บน title และ description
+  ถ้าปริมาณค้นหาโตขึ้นค่อยย้ายไป OpenSearch
+  '''
+}
+
+Table ticket_types {
+  id uuid [pk, default: `gen_random_uuid()`]
+  event_id uuid [not null]
+  name varchar(100) [not null, note: 'เช่น Early Bird, Regular, VIP']
+  description varchar(300)
+  price decimal(12,2) [not null]
+  currency char(3) [not null, default: 'THB']
+  total_quota int [not null, note: 'นิยามโควตา ตัวนับจริงอยู่ booking_db.ticket_inventory']
+  max_per_user int [not null, default: 4, note: 'ขอบเขต 1-4 ใบ ตาม UC7']
+  sales_start_at timestamptz [not null]
+  sales_end_at timestamptz [not null]
+  is_active boolean [not null, default: true]
+  sort_order smallint [not null, default: 0]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (event_id, is_active) [name: 'idx_ticket_types_event']
+  }
+  Note: 'ห้ามลด total_quota ต่ำกว่ายอดที่ขายไปแล้ว ตาม UC9 Alt Flow 2 ต้องตรวจกับ booking service ก่อนบันทึก'
+}
+
+Table event_images {
+  id uuid [pk, default: `gen_random_uuid()`]
+  event_id uuid [not null]
+  s3_key varchar(500) [not null]
+  alt_text varchar(200)
+  sort_order smallint [not null, default: 0]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table event_change_logs {
+  id bigint [pk, increment]
+  event_id uuid [not null]
+  changed_by_user_id uuid [not null]
+  actor_role varchar(20) [not null, default: 'ORGANIZER', note: 'ORGANIZER หรือ ADMIN']
+  change_type varchar(40) [not null, note: 'CREATE / UPDATE / PUBLISH / CLOSE / UNPUBLISH']
+  diff jsonb [note: 'เก็บเฉพาะฟิลด์ที่เปลี่ยน']
+  reason varchar(500) [note: 'ใช้เมื่อ actor_role = ADMIN บังคับยกเลิกเผยแพร่ UC9 Alt Flow 3']
+  created_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (event_id, created_at) [name: 'idx_event_changes']
+    (actor_role, created_at) [name: 'idx_event_changes_by_role']
+  }
+  Note: '''
+  Post condition ของ UC9 ใครแก้อะไรเมื่อไหร่ ครอบคลุมทั้งการแก้ไขของ
+  Organizer เจ้าของงานเอง และการยกเลิกเผยแพร่โดย Admin (UC9 Alt Flow 3)
+  ในตารางเดียว เพื่อไม่ให้มี audit log ของอีเวนต์กระจายอยู่หลายที่
+  '''
+}
+
+Ref: events.category_id > categories.id
+Ref: events.venue_id > venues.id
+Ref: ticket_types.event_id > events.id [delete: cascade]
+Ref: event_images.event_id > events.id [delete: cascade]
+Ref: event_change_logs.event_id > events.id [delete: cascade]
+
+// =====================================================================
+// 3) BOOKING DB - RDS Multi-AZ
+// =====================================================================
+
+Table ticket_inventory {
+  ticket_type_id uuid [pk, note: 'logical ref -> catalog_db.ticket_types.id']
+  event_id uuid [not null]
+  total_quota int [not null]
+  reserved_count int [not null, default: 0, note: 'ถูกจองอยู่ในออเดอร์ PENDING']
+  sold_count int [not null, default: 0, note: 'ชำระเงินสำเร็จแล้ว']
+  version bigint [not null, default: 0, note: 'optimistic locking']
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    event_id
+  }
+  Note: '''
+  แหล่งความจริงของโควตา ตอบขอบเขตข้อ 5 ห้ามจองเกินจำนวนที่นั่งจริง
+
+  ตัดโควตาแบบ atomic ด้วย single statement เท่านั้น
+    UPDATE ticket_inventory
+       SET reserved_count = reserved_count + :n, version = version + 1
+     WHERE ticket_type_id = :id
+       AND total_quota - reserved_count - sold_count >= :n;
+  ถ้า affected rows = 0 แปลว่าบัตรหมด ให้ตอบ UC7 Alt Flow 1
+
+  ต้องมี CHECK constraint กันข้อมูลเพี้ยน
+    CHECK (reserved_count >= 0 AND sold_count >= 0)
+    CHECK (reserved_count + sold_count <= total_quota)
+
+  Redis seatlock ทำหน้าที่กันโหลดชั้นแรก แต่ตารางนี้คือคำตัดสินสุดท้าย
+  '''
+}
+
+Table orders {
+  id uuid [pk, default: `gen_random_uuid()`]
+  order_code varchar(20) [not null, unique, note: 'รหัสที่ผู้ใช้เห็น']
+  user_id uuid [not null, note: 'logical ref -> auth_db.users.id']
+  event_id uuid [not null]
+  status order_status [not null, default: 'PENDING']
+  quantity int [not null]
+  total_amount decimal(12,2) [not null]
+  currency char(3) [not null, default: 'THB']
+  idempotency_key varchar(100) [not null, unique, note: 'กันกดซ้ำ UC7 Alt Flow 3']
+  hold_expires_at timestamptz [not null, note: 'created_at + 8 นาที ตาม UC7']
+  cancel_reason varchar(300)
+  created_at timestamptz [not null, default: `now()`]
+  confirmed_at timestamptz
+  cancelled_at timestamptz
+
+  Indexes {
+    (user_id, created_at) [name: 'idx_orders_by_user']
+    (status, hold_expires_at) [name: 'idx_orders_expiry_job']
+    (event_id, status) [name: 'idx_orders_by_event']
+    order_code [unique]
+    idempotency_key [unique]
+  }
+  Note: 'Scheduled job กวาด status = PENDING ที่ hold_expires_at ผ่านไปแล้ว เปลี่ยนเป็น EXPIRED และคืนโควตาแบบ atomic'
+}
+
+Table order_audit_logs {
+  id bigint [pk, increment]
+  order_id uuid [not null, note: 'FK จริงเพราะอยู่ booking_db เดียวกับ orders']
+  actor_user_id uuid [not null, note: 'Admin ผู้กระทำ logical ref -> auth_db.users.id']
+  action varchar(60) [not null, note: 'FORCE_CANCEL / FORCE_REFUND / ADJUST_QUANTITY / OVERRIDE_HOLD_EXPIRY']
+  reason varchar(500) [not null, note: 'บังคับให้กรอกเหตุผลเสมอ เช่น fraud, chargeback, duplicate booking']
+  before_value jsonb [note: 'snapshot ของ orders แถวนั้นก่อนแก้ เช่น status, quantity']
+  after_value jsonb
+  ip_address inet
+  created_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (order_id, created_at) [name: 'idx_order_audit_by_order']
+    (actor_user_id, created_at) [name: 'idx_order_audit_by_actor']
+  }
+  Note: '''
+  จุดขยายสำหรับ Admin เข้าไปแทรกแซง order โดยตรง (เช่น force-cancel ตอนตรวจพบ
+  ทุจริต หรือลูกค้าร้องเรียนผ่านช่องทางอื่นนอกระบบ) ปัจจุบันยังไม่มี Use Case
+  Specification ฉบับทางการรองรับ action นี้ ควรเพิ่ม UC ใหม่ (เสนอชื่อ
+  "Admin Force Cancel Order") ในเอกสารก่อนพัฒนาจริง โดยอย่างน้อยต้องนิยาม
+    - ใครมีสิทธิ์ทำ (Admin เท่านั้น หรือ Admin ระดับสูงกว่า)
+    - บังคับคืนเงินอัตโนมัติผ่าน payment_db.refunds หรือไม่
+    - ต้องยกเลิก tickets ที่ออกไปแล้วพร้อมกันหรือเปล่า (ถ้า status เดิมเป็น
+      CONFIRMED และมี tickets.status = CONFIRMED อยู่ ต้องเปลี่ยนเป็น
+      CANCELLED ด้วยใน transaction เดียวกัน ไม่งั้นตั๋วจะยังเช็คอินได้ทั้งที่
+      order ถูกยกเลิกไปแล้ว)
+
+  ตารางนี้เขียนอย่างเดียว ห้าม UPDATE หรือ DELETE เหมือน audit log อื่นในระบบ
+  '''
+}
+
+Table order_items {
+  id uuid [pk, default: `gen_random_uuid()`]
+  order_id uuid [not null]
+  ticket_type_id uuid [not null]
+  ticket_type_name varchar(100) [not null, note: 'snapshot กันชื่อเปลี่ยนภายหลัง']
+  unit_price decimal(12,2) [not null, note: 'snapshot ราคา ณ เวลาซื้อ']
+  quantity int [not null]
+  subtotal decimal(12,2) [not null]
+
+  Indexes {
+    (order_id, ticket_type_id) [unique, name: 'uq_order_item']
+  }
+}
+
+Table tickets {
+  id uuid [pk, default: `gen_random_uuid()`]
+  ticket_code varchar(32) [not null, unique]
+  order_id uuid [not null]
+  order_item_id uuid [not null]
+  event_id uuid [not null]
+  ticket_type_id uuid [not null]
+  owner_user_id uuid [not null]
+  status ticket_status [not null, default: 'CONFIRMED']
+  qr_payload text [not null, note: 'JWS compact ที่ลงลายเซ็นดิจิทัลแล้ว']
+  qr_key_id varchar(60) [not null, note: 'kid ของคีย์ใน Secrets Manager สำหรับ key rotation ห้ามเก็บ private key ในฐานข้อมูล']
+  issued_at timestamptz [not null, default: `now()`]
+  used_at timestamptz
+  cancelled_at timestamptz
+
+  Indexes {
+    (owner_user_id, status) [name: 'idx_tickets_my_tickets']
+    (event_id, status) [name: 'idx_tickets_by_event']
+    ticket_code [unique]
+    order_id
+  }
+  Note: 'หนึ่งแถวคือหนึ่งใบ ถ้า quantity = 3 ต้องออก 3 แถว เพื่อให้เช็คอินแยกใบได้ UC3 และ UC8'
+}
+
+Table check_ins {
+  id bigint [pk, increment]
+  ticket_id uuid [not null]
+  event_id uuid [not null]
+  scanned_by_user_id uuid [not null, note: 'Organizer หรือเจ้าหน้าที่หน้างาน']
+  device_id varchar(80) [not null]
+  result check_in_result [not null]
+  scanned_at timestamptz [not null, default: `now()`]
+  note varchar(300)
+
+  Indexes {
+    (event_id, scanned_at) [name: 'idx_checkins_by_event']
+    ticket_id
+  }
+  Note: '''
+  บันทึกทุกครั้งที่สแกน รวมครั้งที่ล้มเหลว เพื่อตรวจสอบย้อนหลังและจับตั๋วซ้ำ
+
+  ต้องมี partial unique index กันเช็คอินสำเร็จซ้ำ
+    CREATE UNIQUE INDEX uq_checkin_success
+      ON check_ins (ticket_id) WHERE result = SUCCESS;
+  '''
+}
+
+Table waiting_room_entries {
+  id uuid [pk, default: `gen_random_uuid()`]
+  event_id uuid [not null]
+  user_id uuid [not null]
+  admission_token_hash varchar(255) [note: 'เก็บเฉพาะ hash']
+  queue_position bigint
+  status waiting_room_status [not null, default: 'WAITING']
+  joined_at timestamptz [not null, default: `now()`]
+  admitted_at timestamptz
+  expires_at timestamptz
+
+  Indexes {
+    (event_id, user_id) [unique, name: 'uq_waitroom_user']
+    (event_id, status, queue_position) [name: 'idx_waitroom_queue']
+  }
+  Note: 'คิวจริงทำงานบน Redis ตารางนี้เก็บไว้วิเคราะห์ผลตอนทำ Chaos Testing ว่าคนหลุดคิวตอนระบบล้มกี่คน'
+}
+
+Table waitlists {
+  id uuid [pk, default: `gen_random_uuid()`]
+  event_id uuid [not null]
+  ticket_type_id uuid [not null]
+  user_id uuid [not null]
+  quantity int [not null, default: 1]
+  notified_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (ticket_type_id, user_id) [unique, name: 'uq_waitlist_user']
+  }
+  Note: 'รองรับ UC7 Alt Flow 1 บัตรหมดแล้วขอเข้า Waitlist'
+}
+
+Table idempotency_keys {
+  key varchar(100) [pk]
+  user_id uuid [not null]
+  endpoint varchar(120) [not null]
+  request_hash varchar(64) [not null, note: 'กัน key ซ้ำแต่ payload ต่างกัน']
+  order_id uuid
+  response_status int
+  response_body jsonb
+  created_at timestamptz [not null, default: `now()`]
+  expires_at timestamptz [not null]
+
+  Indexes {
+    expires_at
+  }
+  Note: 'คำขอซ้ำจะได้ response เดิมกลับไป ไม่ตัดเงินซ้ำและไม่หักโควตาซ้ำ UC7 Alt Flow 3'
+}
+
+Table order_outbox_events {
+  id bigint [pk, increment]
+  order_id uuid [not null, note: 'FK จริงเพราะอยู่ booking_db เดียวกับ orders']
+  event_type varchar(60) [not null, note: 'BookingConfirmed / BookingCancelled / OrderExpired']
+  payload jsonb [not null]
+  status outbox_status [not null, default: 'PENDING']
+  retry_count int [not null, default: 0]
+  created_at timestamptz [not null, default: `now()`]
+  published_at timestamptz
+
+  Indexes {
+    (status, created_at) [name: 'idx_order_outbox_dispatch']
+    order_id
+  }
+  Note: '''
+  Transactional Outbox ของฝั่งออเดอร์ เขียนพร้อมกับ commit orders/ticket_inventory
+  ใน transaction เดียวกัน แล้วค่อย publish เข้า EventBridge
+  (topic: booking domain events)
+  '''
+}
+
+Table ticket_outbox_events {
+  id bigint [pk, increment]
+  ticket_id uuid [not null, note: 'FK จริงเพราะอยู่ booking_db เดียวกับ tickets']
+  event_type varchar(60) [not null, note: 'TicketIssued / TicketCancelled / TicketCheckedIn']
+  payload jsonb [not null]
+  status outbox_status [not null, default: 'PENDING']
+  retry_count int [not null, default: 0]
+  created_at timestamptz [not null, default: `now()`]
+  published_at timestamptz
+
+  Indexes {
+    (status, created_at) [name: 'idx_ticket_outbox_dispatch']
+    ticket_id
+  }
+  Note: '''
+  Transactional Outbox ของฝั่งตั๋ว ใช้ทริกเกอร์ Mail worker (SQS consumer)
+  ให้ส่งอีเมลยืนยัน UC7 ข้อ 7 และแจ้งเตือนตอนเช็คอิน/ยกเลิก
+  แยกจาก order_outbox_events เพื่อให้ FK ชี้ตรงไปตารางต้นทางได้จริง
+  แทนที่จะใช้ aggregate_type/aggregate_id แบบ polymorphic
+  '''
+}
+
+Ref: order_items.order_id > orders.id [delete: cascade]
+Ref: order_audit_logs.order_id > orders.id [delete: cascade]
+Ref: tickets.order_id > orders.id
+Ref: tickets.order_item_id > order_items.id
+Ref: check_ins.ticket_id > tickets.id
+Ref: order_items.ticket_type_id > ticket_inventory.ticket_type_id
+Ref: waitlists.ticket_type_id > ticket_inventory.ticket_type_id
+Ref: idempotency_keys.order_id > orders.id
+Ref: order_outbox_events.order_id > orders.id [delete: cascade]
+Ref: ticket_outbox_events.ticket_id > tickets.id [delete: cascade]
+
+// =====================================================================
+// 4) PAYMENT DB - RDS PCI-isolated
+// =====================================================================
+
+Table payments {
+  id uuid [pk, default: `gen_random_uuid()`]
+  order_id uuid [not null, unique, note: 'logical ref -> booking_db.orders.id']
+  user_id uuid [not null]
+  amount decimal(12,2) [not null]
+  currency char(3) [not null, default: 'THB']
+  status payment_status [not null, default: 'PENDING']
+  gateway varchar(40) [not null]
+  gateway_charge_id varchar(120) [unique]
+  idempotency_key varchar(100) [not null, unique]
+  attempt_count int [not null, default: 0, note: 'ลองใหม่ได้สูงสุด 3 ครั้ง UC7 Alt Flow 2']
+  card_brand varchar(20) [note: 'VISA / MASTER เก็บได้']
+  card_last4 char(4) [note: 'เก็บได้แค่ 4 ตัวท้าย']
+  last_error varchar(300)
+  created_at timestamptz [not null, default: `now()`]
+  paid_at timestamptz
+  updated_at timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (status, created_at) [name: 'idx_payments_reconcile']
+    order_id [unique]
+  }
+  Note: 'ห้ามเก็บเลขบัตรเต็ม CVV หรือ track data เด็ดขาด ให้เก็บเฉพาะ token จาก gateway'
+}
+
+Table payment_attempts {
+  id bigint [pk, increment]
+  payment_id uuid [not null]
+  attempt_no int [not null]
+  status payment_status [not null]
+  gateway_response_code varchar(40)
+  gateway_message varchar(300)
+  requested_at timestamptz [not null, default: `now()`]
+  responded_at timestamptz
+
+  Indexes {
+    (payment_id, attempt_no) [unique, name: 'uq_payment_attempt']
+  }
+}
+
+Table refunds {
+  id uuid [pk, default: `gen_random_uuid()`]
+  payment_id uuid [not null]
+  order_id uuid [not null]
+  ticket_id uuid [note: 'null = คืนทั้งออเดอร์']
+  amount decimal(12,2) [not null]
+  refund_percent decimal(5,2) [not null, note: 'คำนวณจากนโยบายของอีเวนต์']
+  reason varchar(300)
+  status refund_status [not null, default: 'PENDING']
+  gateway_refund_id varchar(120)
+  retry_count int [not null, default: 0]
+  next_retry_at timestamptz
+  requested_by_user_id uuid [not null]
+  requested_at timestamptz [not null, default: `now()`]
+  completed_at timestamptz
+
+  Indexes {
+    (status, next_retry_at) [name: 'idx_refund_retry_job']
+    payment_id
+  }
+  Note: 'UC6 Exceptional Flow 1 คืนเงินล้มเหลวให้คงสถานะ PENDING และให้ Scheduled Job ลองใหม่'
+}
+
+Table gateway_webhooks {
+  id bigint [pk, increment]
+  gateway varchar(40) [not null]
+  gateway_event_id varchar(120) [not null, unique, note: 'กัน webhook ซ้ำ']
+  event_type varchar(60) [not null, note: 'charge.succeeded / charge.failed / refund.succeeded / refund.failed ฯลฯ']
+  payload jsonb [not null]
+  signature_verified boolean [not null, default: false]
+  resolved_payment_id uuid [note: 'null จนกว่าจะแกะ payload แล้วจับคู่ payment ได้ FK จริง']
+  resolved_refund_id uuid [note: 'null จนกว่าจะแกะ payload แล้วจับคู่ refund ได้ (event_type เป็นกลุ่ม refund.*)']
+  received_at timestamptz [not null, default: `now()`]
+  processed_at timestamptz
+  processing_error varchar(300)
+
+  Indexes {
+    gateway_event_id [unique]
+    processed_at
+    resolved_payment_id
+    resolved_refund_id
+  }
+  Note: '''
+  Inbound webhook log จาก Payment Gateway ใช้เป็นแหล่งข้อมูลของ Reconciliation
+  Job ตอน Gateway หมดเวลาตอบกลับ UC7 Exceptional Flow 1
+
+  ตอนรับเข้ามาครั้งแรกยังไม่มี FK เพราะยังไม่ผ่านการตรวจลายเซ็นและแกะ payload
+  (บาง event เช่น ping/test จาก gateway จะไม่มีวันจับคู่กับอะไรในระบบเราเลย)
+  พอ worker ประมวลผลสำเร็จแล้วจะ backfill resolved_payment_id หรือ
+  resolved_refund_id กลับมา ทำให้ตามรอยผ่าน FK จริงได้แทนที่จะต้อง parse
+  payload ทุกครั้งตอน join
+  '''
+}
+
+Ref: payment_attempts.payment_id > payments.id [delete: cascade]
+Ref: refunds.payment_id > payments.id
+Ref: gateway_webhooks.resolved_payment_id > payments.id
+Ref: gateway_webhooks.resolved_refund_id > refunds.id
+
+// =====================================================================
+// LOGICAL REFERENCES
+// =====================================================================
+
+Ref: events.organizer_user_id > users.id
+Ref: ticket_inventory.event_id > events.id
+Ref: ticket_inventory.ticket_type_id - ticket_types.id
+Ref: orders.user_id > users.id
+Ref: order_audit_logs.actor_user_id > users.id
+Ref: orders.event_id > events.id
+Ref: tickets.owner_user_id > users.id
+Ref: check_ins.scanned_by_user_id > users.id
+Ref: waiting_room_entries.user_id > users.id
+Ref: waiting_room_entries.event_id > events.id
+Ref: waitlists.user_id > users.id
+Ref: payments.order_id - orders.id
+Ref: payments.user_id > users.id
+Ref: refunds.order_id > orders.id
+Ref: refunds.ticket_id > tickets.id
+
+// =====================================================================
+// TABLE GROUPS
+// =====================================================================
+
+TableGroup auth_db [color: #6BAED6, note: 'RDS auth DB - users, credentials'] {
+  users
+  roles
+  user_roles
+  organizer_profiles
+  auth_tokens
+  login_attempts
+  user_audit_logs
+}
+
+TableGroup catalog_db [color: #74C476, note: 'RDS catalog DB + read replica - อ่านหนักช่วง browse'] {
+  categories
+  venues
+  events
+  ticket_types
+  event_images
+  event_change_logs
+}
+
+TableGroup booking_db [color: #FD8D3C, note: 'RDS booking DB Multi-AZ - แหล่งความจริงของโควตาและตั๋ว'] {
+  ticket_inventory
+  orders
+  order_items
+  order_audit_logs
+  tickets
+  check_ins
+  waiting_room_entries
+  waitlists
+  idempotency_keys
+  order_outbox_events
+  ticket_outbox_events
+}
+
+TableGroup payment_db [color: #E6550D, note: 'RDS payment DB - PCI isolated'] {
+  payments
+  payment_attempts
+  refunds
+  gateway_webhooks
+}
