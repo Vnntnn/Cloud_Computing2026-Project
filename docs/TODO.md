@@ -140,10 +140,16 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       `registration_db` plus their three users. *(`infra/k8s/db-bootstrap.job.yaml` +
       `packages/db/Dockerfile` + `scripts/db-bootstrap.sh` (`make db-bootstrap`) written &
       validated. `random_password.svc` ×3 + `MASTER_DATABASE_URL` added to the
-      `eventide/rds-master` secret. ECR repo `eventide/db-bootstrap` in `10-foundation`
-      (`var.tool_images`). **Not yet run against RDS** — next session.)*
+      `eventide/rds-master` secret. **2026-09-07:** `10-foundation` re-applied → ECR repo
+      `eventide/db-bootstrap` now exists. `make up` clean (23 res). Job manifest + secret
+      creation from Secrets Manager both work. **BLOCKED: cannot push the image to ECR from
+      a VPN** — `docker push` and `buildx --push` both stall on the last ~4 layers (~150 MB
+      image; small ECR requests fine, large blob PUTs hang — VPN MSS/MTU). Fixes for next
+      session: (a) push off-VPN, or (b) lower OrbStack MTU, or (c) slim the image
+      (`oven/bun:1` → `oven/bun:1-slim` in `packages/db/Dockerfile`). Then `make db-bootstrap`
+      should run clean.)*
 - [ ] **`GATE`** — full `destroy`, then rebuild from zero, end to end. This is the step
-      everyone skips.
+      everyone skips. *(deferred with db-bootstrap — do both next session.)*
 
 ### Day 5 (Fri) — checkpoint
 

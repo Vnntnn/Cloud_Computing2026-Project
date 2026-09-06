@@ -38,8 +38,16 @@ managed registry `:5111`, host `:8080/:8443` → NodePort `30080/30443`), same
 `infra/helm/ingress-nginx.values.yaml` + 2-line k3d overlay `ingress-nginx.values.local.yaml`
 (`externalTrafficPolicy: Cluster`, `replicaCount: 1`), and **`infra/k8s/event.yaml` applied
 byte-identical**. GATE passed: `curl localhost:8080/{health/live,api/events,swagger}` → same
-as the EKS NLB. **Still no `auth`/`registration` deployed, DB-bootstrap Job not yet run
-against RDS, no Helm chart for our own app, no `apps/web` (week 3), no feature code.**
+as the EKS NLB.
+
+**Week 1 Day 4 — DB-bootstrap attempt (2026-09-07):** `10-foundation` re-applied (+2 res —
+ECR repo `eventide/db-bootstrap` now exists). `make up` clean (23 res), `make down` clean at
+session end. The db-bootstrap Job manifest + the Secrets-Manager→k8s-Secret step both work.
+**Blocked on pushing the ~150 MB `db-bootstrap` image to ECR over a VPN** — `docker push` /
+`buildx --push` stall on the last few blob PUTs (VPN MSS/MTU; small ECR calls fine). Next
+session: push off-VPN / lower OrbStack MTU / slim the image, then `make db-bootstrap`, then
+the destroy→rebuild-from-zero GATE. **Still no `auth`/`registration` deployed, no Helm chart
+for our own app, no `apps/web` (week 3), no feature code.**
 
 ### Read these before doing anything
 
