@@ -11,9 +11,14 @@ is enough.
 
 ## Prerequisites
 
-- `make up` — applies `20-platform` (EKS + RDS + NLB + **ingress-nginx**, all Terraform)
-  and points `kubectl` at the cluster. ingress-nginx is `helm_release` in
+- **EKS:** `make up` — applies `20-platform` (EKS + RDS + NLB + **ingress-nginx**, all
+  Terraform) and points `kubectl` at the cluster. ingress-nginx is `helm_release` in
   `20-platform/addons.tf` now, not a manual `helm install`.
+- **Local (k3d):** `make k3d` — `scripts/k3d-up.sh` creates a k3d cluster, installs
+  ingress-nginx from the *same* `infra/helm/ingress-nginx.values.yaml` (plus the 2-line
+  `ingress-nginx.values.local.yaml` overlay), builds + pushes to the k3d registry, and
+  applies `event.yaml` **unchanged**. Reachable at `http://localhost:8080`. `make k3d-down`
+  deletes it. This is the week-1 Day-4 parity GATE: identical app manifests, both clusters.
 
 ## Build + push an image
 

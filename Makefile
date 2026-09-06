@@ -1,4 +1,4 @@
-.PHONY: dev db bootstrap up deploy down k3d help
+.PHONY: dev db bootstrap up deploy down k3d k3d-down help
 
 TF_PLATFORM := terraform -chdir=infra/terraform/20-platform
 
@@ -34,6 +34,9 @@ db-bootstrap: ## create the 3 RDS databases + roles + run migrations (one-shot J
 down: ## destroy 20-platform and verify nothing survived — run at EVERY session end
 	bash scripts/teardown.sh
 
-# --- not implemented yet — see docs/TODO.md ---------------------------
-k3d: ## (week 1 Day 4) local k3d cluster with the same manifests
-	@echo "'$@' is not implemented yet — see docs/TODO.md" && exit 1
+# --- local parity: k3d running the same infra/k8s manifests -----------
+k3d: ## local k3d cluster + ingress-nginx + the same infra/k8s manifests
+	bash scripts/k3d-up.sh
+
+k3d-down: ## delete the local k3d cluster + its registry
+	bash scripts/k3d-down.sh

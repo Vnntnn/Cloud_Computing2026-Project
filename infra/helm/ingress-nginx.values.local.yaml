@@ -1,0 +1,23 @@
+# k3d overlay for ingress-nginx — layered ON TOP of ingress-nginx.values.yaml:
+#
+#   helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+#     --version 4.15.1 --namespace ingress-nginx --create-namespace \
+#     -f infra/helm/ingress-nginx.values.yaml \
+#     -f infra/helm/ingress-nginx.values.local.yaml
+#
+# Only the two things that differ because there is no NLB locally. The APP
+# manifests (infra/k8s/) are byte-identical between k3d and EKS — that is the
+# Day-4 parity GATE; this file is platform plumbing, the k3d analogue of
+# 20-platform/addons.tf.
+controller:
+  # The k3d serverlb (:8080->:30080) round-robins to ALL three node containers,
+  # but only 2 run a controller pod. externalTrafficPolicy: Local would blackhole
+  # the third node's share of requests. Cluster lets kube-proxy forward. Real
+  # client IP is meaningless on a local bridge network anyway — on EKS the base
+  # file keeps Local + the NLB's preserve_client_ip.
+  service:
+    externalTrafficPolicy: Cluster
+
+  # No cloud LB health-checking the NodePort locally; one replica is enough and
+  # avoids a second pod fighting for CPU on the k3d nodes.
+  replicaCount: 1

@@ -120,10 +120,19 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 
 ### Day 4 (Thu) — local parity + database
 
-- [ ] `k3d cluster create eventide --agents 2 --registry-create eventide-registry:5000
-      --k3s-arg "--disable=traefik@server:*"`
-- [ ] Install ingress-nginx locally. Deploy the **same** manifests.
-- [ ] **`GATE`** — identical manifests work on k3d and EKS.
+- [x] `k3d cluster create eventide --agents 2 --registry-create eventide-registry:5111
+      --k3s-arg "--disable=traefik@server:*"` — `scripts/k3d-up.sh` / `make k3d`
+      (idempotent create + `--port 8080:30080@loadbalancer` / `8443:30443`). k3s v1.35,
+      1 server + 2 agents. `make k3d-down` deletes it (no cost, no verify sweep).
+- [x] Install ingress-nginx locally. Deploy the **same** manifests. *(same
+      `infra/helm/ingress-nginx.values.yaml` + a 2-line k3d overlay
+      `ingress-nginx.values.local.yaml` — `externalTrafficPolicy: Cluster` (k3d serverlb
+      round-robins all 3 nodes) + `replicaCount: 1`. App manifest `infra/k8s/event.yaml`
+      applied byte-identical; image from the k3d registry instead of ECR, native arm64
+      build, no `--platform`.)*
+- [x] **`GATE`** — identical manifests work on k3d and EKS. *(pass 2026-09-06:
+      `curl http://localhost:8080/{health/live,health/ready,api/events,swagger}` → same
+      200s / same JSON as the EKS NLB GATE; both `event` pods spread across the 2 agents.)*
 - [x] Add RDS to `20-platform`: `db.t3.micro`, `skip_final_snapshot = true`,
       `deletion_protection = false`, SG allowing only the node SG. *(done Day 2 —
       `20-platform/rds.tf`, `storage_encrypted = true`, `backup_retention_period = 0`.)*
