@@ -1,0 +1,47 @@
+# One-shot: create auth_db / event_db / registration_db + their owner roles on
+# RDS, then run the drizzle migrations. Idempotent (bootstrap.ts checks pg_roles
+# / pg_database first) — safe to re-run every session after `make up`.
+#
+# Run it with `bash scripts/db-bootstrap.sh` (builds the image, creates the
+# Secret from `terraform output`, applies + waits). A Job's pod template is
+# immutable, so the image is substituted with `sed` before apply — not
+# `kubectl set image`.
+#
+# Reads the `eventide-rds-master` Secret. Pre-ESO that Secret is created by
+# scripts/db-bootstrap.sh from `terraform output`; week 2 an ExternalSecret
+# fills it from Secrets Manager `eventide/rds-master`.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-bootstrap
+  namespace: eventide
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels: { app: db-bootstrap }
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: bootstrap
+          image: PLACEHOLDER_DB_BOOTSTRAP_IMAGE
+          env:
+            - name: MASTER_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: eventide-rds-master, key: MASTER_DATABASE_URL } }
+            - name: AUTH_SVC_PASSWORD
+              valueFrom: { secretKeyRef: { name: eventide-rds-master, key: AUTH_SVC_PASSWORD } }
+            - name: EVENT_SVC_PASSWORD
+              valueFrom: { secretKeyRef: { name: eventide-rds-master, key: EVENT_SVC_PASSWORD } }
+            - name: REGISTRATION_SVC_PASSWORD
+              valueFrom: { secretKeyRef: { name: eventide-rds-master, key: REGISTRATION_SVC_PASSWORD } }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false # drizzle-kit writes a temp dir
+            capabilities: { drop: ["ALL"] }

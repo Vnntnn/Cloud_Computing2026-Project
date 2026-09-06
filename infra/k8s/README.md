@@ -6,7 +6,8 @@ is enough.
 
 | File | What |
 |---|---|
-| `event.yaml` | `eventide` namespace + `event` Deployment / Service / Ingress. No DB yet. |
+| `event.yaml` | `eventide` namespace + `event` Deployment / Service / Ingress. |
+| `db-bootstrap.job.yaml` | one-shot Job — creates `auth_db`/`event_db`/`registration_db` + owner roles on RDS, runs migrations. `bash scripts/db-bootstrap.sh` (or `make db-bootstrap`). |
 
 ## Prerequisites
 

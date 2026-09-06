@@ -28,6 +28,9 @@ up: ## apply 20-platform (EKS + RDS + NLB + ingress-nginx), point kubectl at it
 deploy: ## build+push the app image(s), apply infra/k8s, roll out
 	bash scripts/deploy.sh
 
+db-bootstrap: ## create the 3 RDS databases + roles + run migrations (one-shot Job)
+	bash scripts/db-bootstrap.sh
+
 down: ## destroy 20-platform and verify nothing survived — run at EVERY session end
 	bash scripts/teardown.sh
 

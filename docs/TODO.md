@@ -124,10 +124,15 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       --k3s-arg "--disable=traefik@server:*"`
 - [ ] Install ingress-nginx locally. Deploy the **same** manifests.
 - [ ] **`GATE`** — identical manifests work on k3d and EKS.
-- [ ] Add RDS to `20-platform`: `db.t3.micro`, `skip_final_snapshot = true`,
-      `deletion_protection = false`, SG allowing only the node SG.
-- [ ] Kubernetes `Job` that connects as master and creates `auth_db` / `event_db` /
-      `registration_db` plus their three users.
+- [x] Add RDS to `20-platform`: `db.t3.micro`, `skip_final_snapshot = true`,
+      `deletion_protection = false`, SG allowing only the node SG. *(done Day 2 —
+      `20-platform/rds.tf`, `storage_encrypted = true`, `backup_retention_period = 0`.)*
+- [~] Kubernetes `Job` that connects as master and creates `auth_db` / `event_db` /
+      `registration_db` plus their three users. *(`infra/k8s/db-bootstrap.job.yaml` +
+      `packages/db/Dockerfile` + `scripts/db-bootstrap.sh` (`make db-bootstrap`) written &
+      validated. `random_password.svc` ×3 + `MASTER_DATABASE_URL` added to the
+      `eventide/rds-master` secret. ECR repo `eventide/db-bootstrap` in `10-foundation`
+      (`var.tool_images`). **Not yet run against RDS** — next session.)*
 - [ ] **`GATE`** — full `destroy`, then rebuild from zero, end to end. This is the step
       everyone skips.
 

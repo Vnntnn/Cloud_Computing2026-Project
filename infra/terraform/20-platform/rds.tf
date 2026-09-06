@@ -8,6 +8,15 @@ resource "random_password" "db_master" {
   special = false # keep it URL-safe for DATABASE_URL
 }
 
+# Per-service role passwords. The db-bootstrap Job CREATE ROLEs with these; the
+# services' DATABASE_URLs (assembled by ESO in week 2) use the same values. All
+# regenerated on every rebuild, alongside the master password.
+resource "random_password" "svc" {
+  for_each = toset(["auth_svc", "event_svc", "registration_svc"])
+  length   = 20
+  special  = false
+}
+
 resource "aws_db_subnet_group" "main" {
   name       = "${var.project}-db"
   subnet_ids = data.aws_subnets.abc.ids
@@ -75,11 +84,17 @@ resource "aws_secretsmanager_secret" "db_master" {
 
 resource "aws_secretsmanager_secret_version" "db_master" {
   secret_id = aws_secretsmanager_secret.db_master.id
-  secret_string = jsonencode({
-    username = aws_db_instance.main.username
-    password = random_password.db_master.result
-    host     = aws_db_instance.main.address
-    port     = aws_db_instance.main.port
-    dbname   = "postgres"
-  })
+  secret_string = jsonencode(merge(
+    {
+      username = aws_db_instance.main.username
+      password = random_password.db_master.result
+      host     = aws_db_instance.main.address
+      port     = aws_db_instance.main.port
+      dbname   = "postgres"
+      # Ready-to-use for the db-bootstrap Job's env (scripts/bootstrap.ts).
+      MASTER_DATABASE_URL = "postgres://${aws_db_instance.main.username}:${random_password.db_master.result}@${aws_db_instance.main.endpoint}/postgres"
+    },
+    # AUTH_SVC_PASSWORD / EVENT_SVC_PASSWORD / REGISTRATION_SVC_PASSWORD
+    { for k, v in random_password.svc : "${upper(k)}_PASSWORD" => v.result },
+  ))
 }

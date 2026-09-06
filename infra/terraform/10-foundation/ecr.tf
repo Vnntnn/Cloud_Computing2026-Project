@@ -1,9 +1,10 @@
-# One repo per service. Image path is <account>.dkr.ecr.<region>.amazonaws.com/eventide/<service>.
-# The lab's LabEksNodeRole already carries AmazonEC2ContainerRegistryReadOnly, so
-# nodes can pull without any extra policy here.
+# One repo per service + one per tool image. Path is
+# <account>.dkr.ecr.<region>.amazonaws.com/eventide/<name>. The lab's
+# LabEksNodeRole already carries AmazonEC2ContainerRegistryReadOnly, so nodes
+# can pull without any extra policy here.
 
 resource "aws_ecr_repository" "service" {
-  for_each = toset(var.services)
+  for_each = toset(concat(var.services, var.tool_images))
 
   name                 = "${var.project}/${each.key}"
   image_tag_mutability = "MUTABLE" # deploy.sh overwrites :latest during dev iteration

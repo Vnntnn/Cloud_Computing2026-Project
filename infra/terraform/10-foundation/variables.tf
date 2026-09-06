@@ -22,6 +22,12 @@ variable "services" {
   default     = ["auth", "event", "registration"]
 }
 
+variable "tool_images" {
+  description = "Non-service images that get an ECR repo but no Secrets Manager secret (one-shot Jobs etc.)."
+  type        = list(string)
+  default     = ["db-bootstrap"]
+}
+
 variable "uploads_cors_allowed_origins" {
   description = <<-EOT
     Origins allowed to PUT/GET the uploads bucket directly via presigned URLs.
