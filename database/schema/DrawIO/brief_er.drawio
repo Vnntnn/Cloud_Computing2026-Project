@@ -1,0 +1,89 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram id="db-architecture-1" name="Database Architecture">
+    <mxGraphModel dx="2020" dy="1117" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="authFrame" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DEEBF7;strokeColor=#31688E;strokeWidth=2;arcSize=6;verticalAlign=top;" value="" vertex="1">
+          <mxGeometry height="230" width="260" x="870" y="43" as="geometry" />
+        </mxCell>
+        <mxCell id="authIcon" parent="1" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#C925D1;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.rds;" value="" vertex="1">
+          <mxGeometry height="78" width="78" x="961" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="authLabel" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=13;fontColor=#0B3350;" value="&lt;b&gt;Auth DB&lt;/b&gt; (RDS - auth)" vertex="1">
+          <mxGeometry height="20" width="240" x="880" y="138" as="geometry" />
+        </mxCell>
+        <mxCell id="authList" parent="1" style="text;html=1;align=center;verticalAlign=top;fontSize=11;fontColor=#0B3350;" value="users&lt;br&gt;&lt;div&gt;roles&lt;/div&gt;&lt;div&gt;user_roles&lt;/div&gt;organizer_profiles&lt;br&gt;&lt;div&gt;auth_tokens&lt;/div&gt;&lt;div&gt;login_attempts&lt;/div&gt;user_audit_logs" vertex="1">
+          <mxGeometry height="100" width="240" x="880" y="161" as="geometry" />
+        </mxCell>
+        <mxCell id="catalogFrame" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E5F5E0;strokeColor=#31A354;strokeWidth=2;arcSize=6;verticalAlign=top;" value="" vertex="1">
+          <mxGeometry height="230" width="260" x="250" y="43" as="geometry" />
+        </mxCell>
+        <mxCell id="catalogIcon" parent="1" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#C925D1;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.rds;" value="" vertex="1">
+          <mxGeometry height="78" width="78" x="341" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="catalogLabel" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=13;fontColor=#0B3B1E;" value="&lt;b&gt;Catalog DB&lt;/b&gt; (RDS + read replica)" vertex="1">
+          <mxGeometry height="20" width="240" x="260" y="138" as="geometry" />
+        </mxCell>
+        <mxCell id="catalogList" parent="1" style="text;html=1;align=center;verticalAlign=top;fontSize=11;fontColor=#0B3B1E;" value="&lt;div&gt;categories&lt;/div&gt;&lt;div&gt;venues&lt;/div&gt;events&lt;br&gt;&lt;div&gt;ticket_types&lt;/div&gt;&lt;div&gt;event_images&lt;/div&gt;event_change_logs&lt;br&gt;&lt;i&gt;(organizer + admin actions)&lt;/i&gt;" vertex="1">
+          <mxGeometry height="100" width="240" x="260" y="161" as="geometry" />
+        </mxCell>
+        <mxCell id="bookingFrame" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE6CE;strokeColor=#D94801;strokeWidth=2;arcSize=6;verticalAlign=top;" value="" vertex="1">
+          <mxGeometry height="290" width="300" x="230" y="488" as="geometry" />
+        </mxCell>
+        <mxCell id="bookingIcon" parent="1" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#C925D1;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.rds;" value="" vertex="1">
+          <mxGeometry height="78" width="78" x="341" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="bookingLabel" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=13;fontColor=#5C2600;" value="&lt;b&gt;Booking DB&lt;/b&gt; (RDS Multi-AZ)" vertex="1">
+          <mxGeometry height="20" width="280" x="240" y="583" as="geometry" />
+        </mxCell>
+        <mxCell id="bookingList" parent="1" style="text;html=1;align=center;verticalAlign=top;fontSize=11;fontColor=#5C2600;" value="ticket_inventory&lt;br&gt;&lt;div&gt;orders&lt;/div&gt;&lt;div&gt;order_items&lt;br&gt;order_audit_logs&lt;/div&gt;&lt;div&gt;tickets&lt;/div&gt;&lt;div&gt;check_ins&lt;/div&gt;&lt;div&gt;waiting_room_entries&lt;/div&gt;&lt;div&gt;waitlists&lt;/div&gt;order_outbox_events&lt;br&gt;&lt;div&gt;ticket_outbox_events&lt;/div&gt;&lt;div&gt;idempotency_keys&lt;/div&gt;" vertex="1">
+          <mxGeometry height="160" width="280" x="240" y="606" as="geometry" />
+        </mxCell>
+        <mxCell id="paymentFrame" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDD0A2;strokeColor=#A63603;strokeWidth=2;arcSize=6;verticalAlign=top;" value="" vertex="1">
+          <mxGeometry height="220" width="260" x="870" y="538" as="geometry" />
+        </mxCell>
+        <mxCell id="paymentIcon" parent="1" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#C925D1;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.rds;" value="" vertex="1">
+          <mxGeometry height="78" width="78" x="961" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="paymentLabel" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=13;fontColor=#5C2600;" value="&lt;b&gt;Payment DB&lt;/b&gt; (RDS - PCI isolated)" vertex="1">
+          <mxGeometry height="20" width="240" x="880" y="633" as="geometry" />
+        </mxCell>
+        <mxCell id="paymentList" parent="1" style="text;html=1;align=center;verticalAlign=top;fontSize=11;fontColor=#5C2600;" value="&lt;div&gt;payments&lt;/div&gt;&lt;div&gt;payment_attempts&lt;/div&gt;refunds&lt;br&gt;gateway_webhooks" vertex="1">
+          <mxGeometry height="90" width="240" x="880" y="656" as="geometry" />
+        </mxCell>
+        <mxCell id="mailNote" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=11;fontColor=#666666;fontStyle=2;" value="&lt;b&gt;&lt;u&gt;Notes:&lt;/u&gt;&lt;br&gt;Mail worker&lt;/b&gt; (EKS, SQS consumer)&lt;br&gt;&lt;i&gt;เป็น Stateless ไม่มี Database&lt;/i&gt;" vertex="1">
+          <mxGeometry height="140" width="200" x="1180" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="catalogFrame" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;dashPattern=8 4;strokeColor=#555555;fontColor=#333333;fontSize=11;labelBackgroundColor=#FFFFFF;" target="authFrame" value="organizer_user_id -&gt; users.id">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="bookingFrame" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;dashPattern=8 4;strokeColor=#555555;fontColor=#333333;fontSize=11;labelBackgroundColor=#FFFFFF;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="authFrame" value="user_id / owner_user_id / actor_user_id -&gt; users.id">
+          <mxGeometry relative="1" x="0.6401" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="210" y="633.06" />
+              <mxPoint x="210" y="858" />
+              <mxPoint x="1170" y="858" />
+              <mxPoint x="1170" y="158" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="paymentFrame" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;dashPattern=8 4;strokeColor=#555555;fontColor=#333333;fontSize=11;labelBackgroundColor=#FFFFFF;" target="authFrame" value="user_id -&gt; users.id">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="bookingFrame" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;dashPattern=8 4;strokeColor=#555555;fontColor=#333333;fontSize=11;labelBackgroundColor=#FFFFFF;" target="catalogFrame" value="event_id / ticket_type_id -&gt; events / ticket_types">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="paymentFrame" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;dashPattern=8 4;strokeColor=#555555;fontColor=#333333;fontSize=11;labelBackgroundColor=#FFFFFF;entryX=0.5;entryY=1;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" target="bookingFrame" value="order_id -&gt; orders.id (1-1)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1000" y="828" />
+              <mxPoint x="380" y="828" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
