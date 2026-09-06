@@ -1,0 +1,51 @@
+# ingress-nginx as a NodePort Service — the Terraform NLB (20-platform) forwards
+# :80/:443 to these NodePorts. NOT `type: LoadBalancer` (that ELB would be
+# invisible to Terraform state and orphan on destroy — SYSTEM-DESIGN.md §2.2).
+#
+# Applied by Terraform: `helm_release.ingress_nginx` in
+# infra/terraform/20-platform/addons.tf reads this file. `make up` installs it
+# with the cluster. To iterate on it by hand:
+#
+#   helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+#     --version 4.15.1 --namespace ingress-nginx --create-namespace \
+#     -f infra/helm/ingress-nginx.values.yaml
+
+controller:
+  replicaCount: 2
+
+  service:
+    type: NodePort
+    # Preserve the real client IP (the NLB target groups already have
+    # preserve_client_ip = true). Local means the NLB only routes to nodes that
+    # actually run a controller pod — hence 2 replicas, one per node.
+    externalTrafficPolicy: Local
+    nodePorts:
+      http: 30080
+      https: 30443
+
+  # One controller per node on the 2-node group.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+          app.kubernetes.io/component: controller
+
+  # t3.small is small — keep the footprint modest.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  # Make ingress-nginx the cluster default so Ingress objects need no annotation.
+  ingressClassResource:
+    default: true
+
+  # Fewer moving parts for a lab; re-enable if you want Ingress admission checks.
+  admissionWebhooks:
+    enabled: false

@@ -137,7 +137,7 @@ Every service exposes:
 
 - `GET /health/live` — process is alive. **Must not touch the database.**
 - `GET /health/ready` — checks the DB connection.
-- `GET /swagger` — interactive OpenAPI page (`@elysiajs/swagger`).
+- `GET /swagger` — interactive OpenAPI page (`@elysiajs/openapi`, path pinned to `/swagger`).
 
 > The liveness/readiness distinction is load-bearing. A liveness probe that queries
 > Postgres turns a five-second RDS blip into every pod restarting simultaneously.
@@ -461,10 +461,15 @@ Terraform is split **by lifetime, not by resource type**:
 
 ```
 infra/terraform/
-├── 00-bootstrap/     state bucket — created once, by hand, two aws s3api commands
-├── 10-foundation/    ECR, S3, Secrets Manager        ~$1/month   never destroy
-└── 20-platform/      EKS, node group, RDS, NLB       ~$180/month destroy every session
+├── 00-bootstrap/     state bucket — created once, by hand, a few aws s3api commands
+├── 10-foundation/    ECR, S3, Secrets Manager                 ~$1/month   never destroy
+└── 20-platform/      EKS, node group, RDS, NLB, ingress-nginx  ~$180/month destroy every session
 ```
+
+`make up` applies `20-platform` and points `kubectl` at it; `make down` runs
+`scripts/teardown.sh`; `make deploy` (`scripts/deploy.sh`) builds/pushes images and
+applies `infra/k8s/`. ingress-nginx is a `helm_release` inside `20-platform`
+(`addons.tf`) — see §7.2.
 
 State lives in S3 with native locking (`use_lockfile = true`); no DynamoDB table is needed.
 Create the bucket once, by hand — do not build a module for it:
@@ -488,40 +493,74 @@ terraform {
 
 ### 7.1 Learner Lab adaptations
 
+**The community EKS module cannot be used.** `terraform-aws-modules/eks` (every
+version) reads `data "aws_iam_session_context" "current"` against the caller ARN
+unconditionally, which calls `iam:GetRole` on the `voclabs` role — explicitly
+denied by the lab policy `Pvoclabs2`, so `terraform plan` fails before creating
+anything. No module input disables that data source (verified v19–v21.25).
+
+The cluster is therefore **raw `aws_eks_*` resources** (`20-platform/eks.tf`):
+
 ```hcl
 # iam:CreateRole is DENIED — reuse the lab's pre-created roles.
 # Never hardcode the ARNs: the c219141a… prefix changes on lab reset
-# and differs in each teammate's account.
+# and differs in each teammate's account. one() fails loudly if the regex
+# stops matching exactly one role (→ re-run scripts/check-lab.sh).
 data "aws_iam_roles" "eks_cluster" { name_regex = ".*LabEksClusterRole.*" }
 data "aws_iam_roles" "eks_node"    { name_regex = ".*LabEksNodeRole.*" }
 
-module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "~> 21.0"   # v20 names these cluster_name / cluster_version
+resource "aws_eks_cluster" "this" {
+  name     = "eventide"
+  version  = "1.33"
+  role_arn = one(data.aws_iam_roles.eks_cluster.arns)
 
-  name               = "eventide"
-  kubernetes_version = "1.33"
+  bootstrap_self_managed_addons = false   # managed vpc-cni/kube-proxy/coredns instead
 
-  create_iam_role = false
-  iam_role_arn    = tolist(data.aws_iam_roles.eks_cluster.arns)[0]
+  access_config {
+    authentication_mode                         = "API_AND_CONFIG_MAP"
+    bootstrap_cluster_creator_admin_permissions = true   # EKS resolves the creator
+  }                                                      # server-side — no IAM read
 
-  vpc_id     = data.aws_vpc.default.id
-  subnet_ids = data.aws_subnets.abc.ids   # us-east-1a/b/c ONLY — 1e lacks capacity
-
-  endpoint_public_access = true           # no bastion, no VPN, no NAT
-
-  eks_managed_node_groups = {
-    default = {
-      instance_types  = ["t3.medium"]
-      min_size        = 2
-      max_size        = 3
-      desired_size    = 2
-      create_iam_role = false
-      iam_role_arn    = tolist(data.aws_iam_roles.eks_node.arns)[0]
-    }
+  vpc_config {
+    subnet_ids              = data.aws_subnets.abc.ids   # us-east-1a/b/c ONLY
+    endpoint_public_access  = true                       # no bastion / VPN / NAT
+    endpoint_private_access = true
   }
 }
+
+resource "aws_eks_node_group" "default" {
+  cluster_name  = aws_eks_cluster.this.name
+  node_role_arn = one(data.aws_iam_roles.eks_node.arns)
+  subnet_ids    = data.aws_subnets.abc.ids
+  ami_type      = "AL2023_x86_64_STANDARD"
+  instance_types = ["t3.small"]   # was t3.medium — cost. Week-4 HPA demo:
+  scaling_config { min_size = 2, max_size = 4, desired_size = 2 }   # -var node_instance_type=t3.medium
+  depends_on = [aws_eks_addon.vpc_cni, aws_eks_addon.kube_proxy]
+}
 ```
+
+### 7.2 ingress-nginx via `helm_release`
+
+Cluster add-ons that change rarely and die with the cluster are Terraform's
+(`20-platform/addons.tf`), so `make up` yields a cluster ready for the app. The
+`helm` provider (v3 — `kubernetes = { … }` is an *attribute*, not a block)
+authenticates with a `data "aws_eks_cluster_auth"` token (STS, no extra IAM):
+
+```hcl
+resource "helm_release" "ingress_nginx" {
+  name       = "ingress-nginx"
+  repository = "https://kubernetes.github.io/ingress-nginx"
+  chart      = "ingress-nginx"
+  version    = "4.15.1"
+  namespace  = "ingress-nginx"
+  create_namespace = true
+  values     = [file("${path.module}/../../helm/ingress-nginx.values.yaml")]
+  depends_on = [aws_eks_node_group.default, aws_eks_addon.coredns]
+}
+```
+
+The **app itself** (image tag changes every commit) stays in `scripts/deploy.sh`
++ raw manifests in `infra/k8s/`, not Terraform.
 
 **No VPC is built.** The lab account already has a default VPC with six public subnets and
 an internet gateway. Reusing it removes the NAT gateway ($1.08/day and the most common
@@ -670,7 +709,7 @@ demo day the infrastructure will have been rebuilt from zero twenty times.
 | Layer | Choice | Rationale |
 |---|---|---|
 | Language | TypeScript | Existing fluency. Go would give ~15 MB images instead of ~90 MB and cost a week; no rubric awards marks for Go. |
-| Runtime / framework | Bun + **ElysiaJS** | Familiar; `@elysiajs/swagger` generates an interactive API page from route types for free. |
+| Runtime / framework | Bun + **ElysiaJS** | Familiar; `@elysiajs/openapi` generates an interactive API page from route types for free. |
 | ORM | Drizzle | TypeScript-native, emits real SQL migration files to show in the report. Also the better-auth adapter. |
 | Request validation | **Elysia `t` (TypeBox)** | Elysia best practice: models are `t.Object` schemas registered via `.model()`, the single source of truth for validation *and* types. **Not** Zod — a parallel schema system would break Eden's inference. |
 | Env validation | Zod | Boot-time only, outside the request path. A missing injected secret fails loudly instead of crashing mysteriously. |
@@ -680,7 +719,7 @@ demo day the infrastructure will have been rebuilt from zero twenty times.
 | Repo | Turborepo monorepo | Shared types prevent JWT-shape drift. Services remain independently deployed containers — a delivery choice, not an architectural one. |
 | Local cluster | k3d | Real Kubernetes in ~20 s; same manifests as EKS. |
 | Packaging | Helm, one chart, three releases | `values-local.yaml` / `values-aws.yaml`. |
-| IaC | Terraform + community modules | Hand-writing EKS from raw resources is a week of work. |
+| IaC | Terraform (raw `aws_eks_*`, not the community module) | The `terraform-aws-modules/eks` module `iam:GetRole`s the `voclabs` session role, which `Pvoclabs2` denies (§7.1). Raw resources for a lab cluster are ~50 lines, not the "week" a production cluster would take. |
 | Secrets | External Secrets Operator | App only ever reads `process.env`. |
 | Monitoring | CloudWatch Container Insights | Terraform add-on vs. two days of Helm. |
 | Load testing | k6 | Drives the autoscaling demo. |
@@ -766,16 +805,21 @@ cloud-project/
 │   ├── SYSTEM-DESIGN.md           this file
 │   └── PROJECT-KNOWLEDGE-BASE.md  decisions, constraints, rationale
 ├── infra/
-│   ├── terraform/{00-bootstrap,10-foundation,20-platform}/
-│   ├── helm/eventide/     one chart · values-local.yaml · values-aws.yaml
-│   └── k8s/               ESO ClusterSecretStore, migration Job, ingress
+│   ├── terraform/
+│   │   ├── 00-bootstrap/   README only — state bucket by hand
+│   │   ├── 10-foundation/  ECR ×3, uploads S3, Secrets Manager ×3
+│   │   └── 20-platform/    raw aws_eks_* + node group, RDS, NLB, addons.tf (ingress-nginx helm_release)
+│   ├── helm/
+│   │   ├── ingress-nginx.values.yaml   NodePort 30080/30443, read by 20-platform/addons.tf
+│   │   └── eventide/       (week 2) one chart · values-local.yaml · values-aws.yaml
+│   └── k8s/               event.yaml (ns/Deploy/Svc/Ingress); (week 2) ESO, migration Job
 ├── scripts/
 │   ├── check-lab.sh       probe Learner Lab capabilities
-│   ├── lab-creds.sh       pull session credentials into the cluster Secret
-│   ├── deploy.sh          build → ECR → helm upgrade
+│   ├── lab-creds.sh       (week 2) pull session credentials into the cluster Secret
+│   ├── deploy.sh          build → ECR → kubectl apply infra/k8s → set image → rollout
 │   └── teardown.sh        the one that protects the $50
 ├── .github/workflows/     build · test · lint only
-└── Makefile               dev · k3d · deploy · teardown
+└── Makefile               dev · up · deploy · down · k3d
 ```
 
 ---

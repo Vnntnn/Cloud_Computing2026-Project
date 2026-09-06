@@ -18,7 +18,11 @@ S3 + CloudFront, one RDS Postgres with a database per service.
 ## Status
 
 Monorepo scaffolded; the three services answer HTTP and compile to container images.
-**Not yet:** `apps/web`, `infra/` (Terraform/Helm/k8s), and all feature code.
+**Infra (week 1 done):** Terraform `10-foundation` (ECR/S3/Secrets) applied; `20-platform`
+(raw `aws_eks_*` + node group, RDS, NLB, ingress-nginx via `helm_release`) applies and tears
+down cleanly; `event` deployed to real EKS and reachable through the NLB. `make up` /
+`make deploy` / `make down`.
+**Not yet:** `apps/web`, `auth`/`registration` deployed, DB-bootstrap Job, feature code.
 
 ## Repository layout
 
@@ -31,7 +35,11 @@ packages/
   shared/         @eventide/shared — defineEnv (Zod), shared TypeBox models
   db/             @eventide/db — Drizzle schemas + migrations, bootstrap script
 docs/             design, knowledge base, TODO
-infra/            (not created yet) terraform / helm / k8s
+infra/
+  terraform/      00-bootstrap (README) · 10-foundation · 20-platform (+ addons.tf)
+  helm/           ingress-nginx.values.yaml
+  k8s/            event.yaml (ns / Deployment / Service / Ingress)
+scripts/          check-lab.sh · deploy.sh · teardown.sh
 ```
 
 Each service follows the Elysia feature-module shape (`src/index.ts` root + a
@@ -50,8 +58,9 @@ Each service follows the Elysia feature-module shape (`src/index.ts` root + a
 | Docker | any recent | local Postgres for `make dev` |
 | GNU Make | any | task shortcuts (optional — commands work without it) |
 
-AWS-side tools (`awscli`, `terraform`, `helm`, `k3d`, `k6`) are **not** needed yet —
-they come with the `infra/` work in weeks 1–2 (see `docs/TODO.md`).
+For the AWS/infra work you also need `awscli`, `terraform` (via `brew tap hashicorp/tap`
+— not in homebrew-core), `helm`, and `kubectl`. `k3d` / `k6` come in weeks 1 Day 4 / week 4.
+See [`infra/terraform/README.md`](infra/terraform/README.md) and `docs/TODO.md`.
 
 ### First run
 

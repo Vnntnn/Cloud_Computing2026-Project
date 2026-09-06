@@ -8,13 +8,31 @@ The **Cloud Computing 2026 term project** for IT KMITL (repo `Cloud_Computing202
 working name "Eventide"): an event-listing / ticket-registration platform, graded on **both
 the application and the cloud infrastructure**, with a written report and a live demo.
 
-**Current state: monorepo scaffolded, infra not started.** The Bun/Turborepo workspace
+**Current state: monorepo scaffolded, `10-foundation` applied.** The Bun/Turborepo workspace
 exists — `apps/{auth,event,registration}` (hello-world Elysia services: `/`, `/health/live`,
 `/health/ready`, `/swagger`, `SIGTERM`), `packages/{shared,db}` (`defineEnv`, real Drizzle
 schemas + `0000` migrations for event/registration, `scripts/bootstrap.ts`). `make dev`
 runs all three against a local Postgres. Services compile to a Bun binary on distroless
-(§12.1) — verified: `apps/event` image is 45.8 MB and serves all routes. **Still no
-`apps/web` (week 3), no `infra/` (Terraform/Helm/k8s — weeks 1–2), no feature code.**
+(§12.1) — verified: `apps/event` image is 45.8 MB and serves all routes.
+
+**Infra:** `infra/terraform/00-bootstrap` (tfstate bucket, by hand) + `10-foundation`
+(3 ECR repos + lifecycle, 3 Secrets Manager secrets, uploads S3 bucket + CORS/PAB/SSE/
+ownership/lifecycle) applied 2026-09-07 against account 735838417080. The uploads bucket is
+a `terraform_data`+`local-exec` CLI create consumed as `data "aws_s3_bucket"` — the org SCP
+denies `s3:GetBucketObjectLockConfiguration`, which a managed `aws_s3_bucket` reads on every
+refresh. `20-platform` applied clean 2026-09-07 (19 resources): **raw `aws_eks_cluster` +
+`aws_eks_node_group`** (NOT `terraform-aws-modules/eks` — it `iam:GetRole`s `voclabs`, denied
+by `Pvoclabs2`; native `bootstrap_cluster_creator_admin_permissions` instead), 2 × `t3.small`
+nodes on k8s 1.33, `db.t3.micro` RDS, Terraform NLB, `eventide/rds-master` secret. `kubectl
+get nodes` → 2 Ready. `scripts/teardown.sh` exists — **`20-platform` must be destroyed at
+session end.**
+
+**Week 1 Day 3 done (2026-09-07):** ingress-nginx via Helm as NodePort 30080/30443
+(`infra/helm/ingress-nginx.values.yaml`); `event` built (`eventide/event:v1`, 43.7 MB) +
+deployed (`infra/k8s/event.yaml`, raw manifests) + reachable through the NLB (`/health/live`,
+`/api/events`, `/swagger` all 200); pod egress to the internet confirmed (no NAT). **Still no
+`auth`/`registration` deployed, no DB-bootstrap Job, no Helm chart for our own app, no
+`apps/web` (week 3), no feature code.**
 
 ### Read these before doing anything
 
@@ -52,6 +70,13 @@ These are hard and load-bearing — most odd design choices trace back to one of
   `LabEksNodeRole`, looked up with `data "aws_iam_roles"` + `name_regex`. Never hardcode the
   ARNs; the prefix changes on every lab reset and differs per teammate account.
 - **Default VPC only, no NAT gateway.** Pin subnets to **us-east-1a/b/c** (1e lacks capacity).
+- **An org SCP denies `s3:GetBucketObjectLockConfiguration`** — a managed `aws_s3_bucket`
+  resource fails every plan (the provider reads that API on refresh). Every S3 bucket must be
+  CLI-created and consumed via `data "aws_s3_bucket"`; config goes in granular
+  `aws_s3_bucket_*` resources. See `infra/terraform/10-foundation/s3.tf` for the pattern.
+- **`iam:GetRole` on `voclabs` is denied** (`Pvoclabs2`) — rules out `terraform-aws-modules/eks`
+  (any version): it reads `aws_iam_session_context` against the caller unconditionally. Use
+  raw `aws_eks_*` resources. `get-role` on other roles (e.g. `LabRole`) still works.
 - Session credentials (`ASIA…`) expire with the 4-hour session. **Never start an EKS apply
   after hour 3.**
 - Re-run `bash scripts/check-lab.sh` after any lab reset — role suffixes and permissions change.
@@ -91,14 +116,17 @@ Cross-cutting:
   (`turbo run lint check-types test build`). Lint/format: **Biome** (`biome.json` at root).
 - `make db` (compose Postgres) · `make bootstrap` (create 3 DBs+roles, run migrations via
   `packages/db/scripts/bootstrap.ts`) · `make dev` (bootstrap + `bun --watch` ×3).
-- `make k3d` / `make deploy` / `make teardown` — **stubs** that exit non-zero pointing at
-  `docs/TODO.md`; real targets land with `infra/` in weeks 1–2.
+- `make up` (terraform apply `20-platform` = EKS+RDS+NLB+ingress-nginx, then kubeconfig) ·
+  `make deploy` (`scripts/deploy.sh`: build→ECR→`kubectl apply infra/k8s`→set image→rollout) ·
+  `make down` (`scripts/teardown.sh`). `make k3d` still a stub (week 1 Day 4).
 - Drizzle: `bun run --filter @eventide/db generate:event` / `generate:registration` after a
   schema change. `auth_db` schema is better-auth's CLI, not drizzle-kit.
 - `scripts/check-lab.sh` — probes lab capabilities, prints no secrets.
-- Still planned (not created): `apps/web` (week 3),
-  `infra/terraform/{00-bootstrap,10-foundation,20-platform}`, `infra/helm/eventide`,
-  `infra/k8s`, `scripts/{deploy,teardown,lab-creds}.sh`.
+- `infra/terraform/00-bootstrap` (README only — tfstate bucket is by hand) and
+  `10-foundation` (ECR/S3/Secrets) exist and are applied. `terraform` installed via
+  `brew tap hashicorp/tap` (not homebrew-core since the BSL relicense).
+- Still planned (not created): `apps/web` (week 3), `infra/terraform/20-platform`,
+  `infra/helm/eventide`, `infra/k8s`, `scripts/{deploy,teardown,lab-creds}.sh`.
 
 ## Rules that cause slow, confusing bugs if broken
 

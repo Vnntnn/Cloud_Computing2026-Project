@@ -16,3 +16,14 @@ dist/
 .claude/settings.local.json
 .claude/skills/
 
+# terraform (commit .terraform.lock.hcl — it pins provider versions)
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars.local
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+

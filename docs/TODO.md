@@ -64,24 +64,37 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
   - [ ] **Record whether `iam:AttachRolePolicy` succeeded.** If yes, pods get S3 and Secrets
         Manager access from the node role via IMDS, and the per-session credential refresh
         script is never needed.
-- [ ] Create the Terraform state bucket by hand (two `aws s3api` commands); document them in
-      `infra/terraform/00-bootstrap/README.md`.
-- [ ] Write `10-foundation`: ECR repos ×3, S3 bucket (uploads), 3 Secrets Manager secrets.
-- [ ] `terraform apply` on `10-foundation`.
-- [ ] **`GATE`** — `aws ecr describe-repositories` and `aws secretsmanager list-secrets`
-      both return your resources.
+- [x] Create the Terraform state bucket by hand (`aws s3api` commands); documented in
+      `infra/terraform/00-bootstrap/README.md`. *(bucket `eventide-tfstate-735838417080`,
+      versioned + PAB + AES256; S3 native locking, no DynamoDB.)*
+- [x] Write `10-foundation`: ECR repos ×3, S3 bucket (uploads), 3 Secrets Manager secrets.
+- [x] `terraform apply` on `10-foundation`. *(18 resources, 2026-09-07. The uploads bucket is
+      a `terraform_data`+`local-exec` CLI create consumed as `data "aws_s3_bucket"` — the org
+      SCP denies `s3:GetBucketObjectLockConfiguration`, which `aws_s3_bucket` reads. All bucket
+      config stays in TF. See `docs/lab-probe-2026-09-06.txt`.)*
+- [x] **`GATE`** — `aws ecr describe-repositories` and `aws secretsmanager list-secrets`
+      both return your resources. *(pass: `eventide/{auth,event,registration}` in both.)*
 
 ### Day 2 (Tue) — the cluster
 
-- [ ] Write `20-platform`: `data "aws_iam_roles"` lookups, default-VPC data sources
-      (**us-east-1a/b/c only**), EKS module, managed node group, `create_iam_role = false`
-      on both.
-- [ ] `terraform apply`. **Expect the first two attempts to fail.** Read the errors; they
-      are almost always the role ARNs or a subnet AZ.
-- [ ] **`GATE`** — `kubectl get nodes` shows 2 nodes `Ready`.
-- [ ] Write `scripts/teardown.sh` **now**, before there is much to tear down.
-- [ ] Run a full `destroy`, confirm clean, then `apply` again. Time both.
-- [ ] **`GATE`** — teardown verification output is empty on every check.
+- [x] Write `20-platform`: `data "aws_iam_roles"` lookups (`one()`), default-VPC data
+      sources (**us-east-1a/b/c, default-for-az only**), **raw `aws_eks_cluster` +
+      `aws_eks_node_group`** (NOT the module — it `GetRole`s `voclabs`, denied by
+      `Pvoclabs2`; native `bootstrap_cluster_creator_admin_permissions` instead), vpc-cni/
+      kube-proxy/coredns addons, `t3.small` node group. Plus RDS, the Terraform-managed NLB
+      (2 TG + ASG attachments), and the `eventide/rds-master` secret.
+- [x] `terraform apply`. *(2026-09-07, 19 resources, clean on the first real attempt after
+      the module→raw rewrite. Cluster 10m, node group 3m, RDS 5m.)*
+- [x] **`GATE`** — `kubectl get nodes` shows 2 nodes `Ready`. *(pass: 2 × Ready on v1.33,
+      aws-node/coredns/kube-proxy all Running, creator has cluster admin.)*
+- [x] Write `scripts/teardown.sh` **now**, before there is much to tear down.
+      *(kubectl LB sweep → `destroy` → verify EKS/RDS/ELB/EC2/TG all empty.)*
+- [x] Run a full `destroy`, confirm clean, then `apply` again. Time both. *(2026-09-07:
+      destroy ~10 min; rebuild from zero ~20 min — cluster 10m27s, node group 1m53s, RDS
+      5m27s, NLB 2m38s. Both nodes Ready, system pods Running.)*
+- [x] **`GATE`** — teardown verification output is empty on every check. *(pass:
+      `scripts/teardown.sh` — EKS/RDS/ELBv2/classic-ELB/EC2/target-groups all empty.
+      `10-foundation` intact.)*
 
 ### Day 3 (Wed) — first service reachable
 
@@ -89,13 +102,21 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       *(all three services — `apps/{auth,event,registration}`, done in monorepo init.)*
 - [x] Multi-stage Dockerfile — compiled Bun binary on `distroless/base-debian12` (§12.1
       updated from `oven/bun:1-alpine`). `apps/event` image verified at 45.8 MB.
-- [ ] Build → push to ECR → Deployment + Service manifests → `kubectl apply`.
-- [ ] Install **ingress-nginx** as a `NodePort` Service.
-- [ ] Add the **NLB to Terraform**, targeting the node group. (Not a
-      `Service type=LoadBalancer` — see the knowledge base trap table.)
-- [ ] **`GATE`** — the NLB hostname returns your service in a browser.
-- [ ] From inside a pod: `curl https://accounts.google.com`. Confirms outbound egress works
-      without a NAT gateway — needed later for OAuth.
+- [x] Build → push to ECR → Deployment + Service manifests → `kubectl apply`.
+      *(`infra/k8s/event.yaml` — ns/Deployment(2)/Service/Ingress. Image `eventide/event:v1`
+      built `--platform linux/amd64`, 43.7 MB, pushed. Fix: distroless `:nonroot` needs
+      `runAsUser: 65532` numerically + a `/tmp` emptyDir with `readOnlyRootFilesystem`.)*
+- [x] Install **ingress-nginx** as a `NodePort` Service. *(Helm `ingress-nginx` 4.15.1,
+      `infra/helm/ingress-nginx.values.yaml` — NodePort 30080/30443, 2 replicas
+      `externalTrafficPolicy: Local`, default IngressClass. Now a `helm_release` in
+      `20-platform/addons.tf` — `make up` installs it with the cluster.)*
+- [x] Add the **NLB to Terraform**, targeting the node group. *(done in `20-platform/nlb.tf`
+      — `aws_lb` network + 2 target groups + listeners + `aws_autoscaling_attachment`.)*
+- [x] **`GATE`** — the NLB hostname returns your service in a browser. *(pass:
+      `http://eventide-ingress-*.elb.amazonaws.com/health/live` → `{"status":"ok",
+      "service":"event"}`; `/api/events` → `[]`; `/swagger` → 200.)*
+- [x] From inside a pod: `curl https://accounts.google.com`. *(pass: `302` — egress via IGW,
+      no NAT gateway. OAuth path is clear.)*
 
 ### Day 4 (Thu) — local parity + database
 
@@ -143,7 +164,7 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       `openid`/`email`/`profile`. Register both redirect URIs:
       `http://localhost:3000/...` and `https://api.<domain>/...`.
 - [ ] **`GATE`** — `GET /api/auth/jwks` returns public keys.
-- [ ] `@elysiajs/swagger` mounted.
+- [ ] `@elysiajs/openapi` mounted (already in all 3 services at `/swagger`).
 
 ### DNS and TLS — start early, it propagates slowly
 
