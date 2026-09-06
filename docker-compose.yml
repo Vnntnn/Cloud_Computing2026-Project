@@ -1,0 +1,22 @@
+# Local Postgres for `make dev`. A single instance; the three per-service
+# databases + roles are created by `packages/db/scripts/bootstrap.ts` (the same
+# script the in-cluster migration Job runs against RDS — SYSTEM-DESIGN §7.1).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - '5432:5432'
+    volumes:
+      - eventide-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  eventide-pgdata:

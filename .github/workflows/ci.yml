@@ -1,0 +1,32 @@
+name: ci
+
+# Checks only — lint, typecheck, test, verify the build compiles.
+# NO AWS / EKS interaction. Deploy to EKS is a local script (scripts/deploy.sh),
+# because GitHub Actions cannot assume a role in the Learner Lab account
+# (no OIDC provider, static creds expire in 4h — SYSTEM-DESIGN §9).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.0'
+      - run: bun install --frozen-lockfile
+      - run: bunx turbo run lint check-types test build
+
+  # TODO(week1): image build + push to ECR once infra/terraform/10-foundation
+  # exists. Deploy stays local — see the header comment.

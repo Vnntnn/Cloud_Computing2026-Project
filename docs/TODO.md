@@ -85,8 +85,10 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 
 ### Day 3 (Wed) — first service reachable
 
-- [ ] Minimal Elysia service: `GET /`, `/health/live`, `/health/ready`, `SIGTERM` handler.
-- [ ] Multi-stage Dockerfile on `oven/bun:1-alpine`, `bun --smol`.
+- [x] Minimal Elysia service: `GET /`, `/health/live`, `/health/ready`, `SIGTERM` handler.
+      *(all three services — `apps/{auth,event,registration}`, done in monorepo init.)*
+- [x] Multi-stage Dockerfile — compiled Bun binary on `distroless/base-debian12` (§12.1
+      updated from `oven/bun:1-alpine`). `apps/event` image verified at 45.8 MB.
 - [ ] Build → push to ECR → Deployment + Service manifests → `kubectl apply`.
 - [ ] Install **ingress-nginx** as a `NodePort` Service.
 - [ ] Add the **NLB to Terraform**, targeting the node group. (Not a
@@ -122,11 +124,13 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 
 ### Monorepo and data
 
-- [ ] Turborepo skeleton: `apps/{auth,event,registration,web}`, `packages/{shared,db}`.
-- [ ] Drizzle schemas. **`user_id` and `owner_id` are `text`, not `uuid`** — better-auth
-      generates text ids.
-- [ ] Migration + **seed** Job. Seed must produce demo-quality data: ~15 events with
-      images, a few users. It runs every single morning, so it must be genuinely automated.
+- [x] Turborepo skeleton: `apps/{auth,event,registration}`, `packages/{shared,db}`.
+      *(`apps/web` deferred to week 3. Bun workspaces + Turborepo + Biome.)*
+- [x] Drizzle schemas for `event_db` / `registration_db` — `owner_id` / `user_id` are
+      `text`. `0000` migrations generated. `auth_db` stays better-auth's CLI.
+- [~] Migration path: `packages/db/scripts/bootstrap.ts` creates the DBs + roles and runs
+      `drizzle-kit migrate` (local + the future in-cluster Job, §7.1). **Seed** (~15 events,
+      users) still TODO — needs the `auth` service and better-auth wired first.
 - [ ] **`GATE`** — teardown, rebuild, and the seeded app looks demo-ready with no manual
       steps.
 

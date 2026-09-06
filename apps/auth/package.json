@@ -1,0 +1,23 @@
+{
+  "name": "@eventide/auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./app": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "PORT=3000 bun --watch src/index.ts",
+    "build": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile dist/server src/index.ts",
+    "start": "./dist/server",
+    "lint": "biome check .",
+    "check-types": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@elysiajs/openapi": "^1.4.11",
+    "@eventide/shared": "workspace:*",
+    "elysia": "^1.4.9",
+    "zod": "^4.1.11"
+  }
+}

@@ -687,12 +687,26 @@ demo day the infrastructure will have been rebuilt from zero twenty times.
 
 ### 12.1 Bun in Kubernetes — four required details
 
-1. Base image `oven/bun:1-alpine`, multi-stage build (~90 MB).
+1. **Compiled to a single binary** with `bun build --compile --minify-whitespace
+   --minify-syntax` (Elysia's recommended production path). Multi-stage: build on
+   `oven/bun:1` (glibc), copy the binary onto `gcr.io/distroless/base-debian12:nonroot`.
+   Runtime memory is 2–3× lower than running the source — which is what lets more pods
+   fit on a `t3.medium` (§10 pod-IP ceiling). Image ends up ~80–110 MB (distroless base
+   + the embedded Bun runtime), similar to the old `oven/bun:1-alpine` plan; the win is
+   memory and startup, not disk.
+   - libc must match: glibc build image → glibc distroless runtime, **not** alpine/musl.
+   - Arch must match the target: build the image `--platform linux/amd64` for EKS.
+   - Compiled Bun binaries require **AVX2** — `t3.medium` has it; CI only builds (never
+     runs) the binary, so GitHub runners are fine.
+   - `--minify-whitespace --minify-syntax` only — full `--minify` mangles names.
+   - *(History: the original plan was `oven/bun:1-alpine` running the source at ~90 MB;
+     changed to the compiled binary for the runtime-memory reduction.)*
 2. **Handle `SIGTERM`**: `process.on("SIGTERM", () => server.stop())`. If Bun is PID 1 and
    ignores it, every rolling update drops in-flight requests and waits out the full grace
    period — visibly, during a scaling demo.
 3. **Separate liveness and readiness probes** (see §3.1).
-4. `bun --smol` to keep the heap tight, so more pods fit on two `t3.medium` nodes.
+4. The binary already keeps the heap tight; there is no `bun --smol` process to pass flags
+   to. Set container memory `requests`/`limits` so the HPA works and pods pack predictably.
 
 ### 12.2 Elysia structure — per the official best-practice guide
 

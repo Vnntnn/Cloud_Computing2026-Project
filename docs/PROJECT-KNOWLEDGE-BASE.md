@@ -133,6 +133,8 @@ computing rubric actually measures.
 | **Eden Treaty** | End-to-end types from each Elysia server to the SPA with no codegen step. | OpenAPI codegen; hand-written fetch wrappers |
 | **better-auth** | Sessions, password hashing and account tables solved in an afternoon rather than a week, and more credible than a hand-rolled JWT flow. | Hand-rolled auth (the original plan) |
 | **Elysia `t` / TypeBox for request models** | Best-practice guidance: models are `t.Object` registered via `.model()`, one definition serving validation *and* types. | **Zod for request bodies** — a parallel schema system would break Eden's inference. Zod is retained for boot-time env validation only, outside the request path. |
+| **Compiled Bun binary on distroless** (`bun build --compile`, `gcr.io/distroless/base-debian12`) | 2–3× lower runtime memory than running the source → more pods per `t3.medium` (the §10 pod-IP ceiling is the real constraint). Verified: `apps/event` image = 45.8 MB, all routes served. See SYSTEM-DESIGN §12.1 for the libc/arch/AVX2 caveats. | **`oven/bun:1-alpine` running the source** (the original §12.1 plan, ~90 MB) — changed 2026-09-06 during monorepo init for the memory reduction, not image size (roughly the same). |
+| **`@elysiajs/openapi` mounted at `/swagger`** | `@elysiajs/swagger` (named in §3.1) is superseded by `@elysiajs/openapi`; same interactive demo surface, maintained package. | — |
 
 ### Architecture
 
@@ -186,6 +188,7 @@ Each of these has ended a student project or a demo.
 | **A broken Elysia method chain silently degrades Eden types to `any`** — no error anywhere, and the frontend loses all type safety | Keep every route definition in one unbroken chain; treat a sudden `any` in the SPA as a chain break, not a client bug |
 | **better-auth ids are `text`, not `uuid`** | `event_db.owner_id` and `registration_db.user_id` must be `text`. Mismatched id types across services is a slow, confusing bug |
 | **Zod and TypeBox both used for request bodies** | Request models are Elysia `t.Object` only. Zod is confined to boot-time env validation |
+| **Zod 4 deprecated the string-format *methods*** — `z.string().url()` / `.email()` / `.uuid()` / `.datetime()` are deprecated and the editor flags them | Use the top-level format schemas: `z.url()`, `z.email()`, `z.uuid()`. `z.coerce.number()` is still current. For a `postgres://` DSN use plain `z.string()` — a URL check there gives false negatives across environments |
 | **Google rejects the NLB as a redirect URI** — non-HTTPS URIs outside `localhost` cannot even be saved in the console | Custom domain + TLS (§5.5). Never attempt OAuth against the bare NLB |
 | **Consent screen left in Testing mode** — anyone not on the test-user list is flatly refused mid-demo | Publish to Production; non-sensitive scopes need no verification |
 | **Delegating the domain apex to Route 53** — breaks any existing production use of the domain, and reverting means re-delegating a live zone | Delegate a **subdomain** only; the fallback is then deleting four NS records |
