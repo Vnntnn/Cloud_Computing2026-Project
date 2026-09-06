@@ -467,6 +467,24 @@ infra/terraform/
 ```
 
 State lives in S3 with native locking (`use_lockfile = true`); no DynamoDB table is needed.
+Create the bucket once, by hand — do not build a module for it:
+
+```bash
+aws s3api create-bucket --bucket eventide-tfstate-735838417080 --region us-east-1
+aws s3api put-bucket-versioning --bucket eventide-tfstate-735838417080 \
+  --versioning-configuration Status=Enabled
+```
+
+```hcl
+terraform {
+  backend "s3" {
+    bucket       = "eventide-tfstate-735838417080"
+    key          = "20-platform/terraform.tfstate"
+    region       = "us-east-1"
+    use_lockfile = true
+  }
+}
+```
 
 ### 7.1 Learner Lab adaptations
 
