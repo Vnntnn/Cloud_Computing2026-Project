@@ -192,8 +192,10 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       against the live services (local after `make dev`, in-cluster as a Job). Verified
       locally: 15 events / 4 owners. *(Registrations not seeded — needs the registration
       service, week 3.)*
-- [ ] **`GATE`** — teardown, rebuild, and the seeded app looks demo-ready with no manual
-      steps.
+- [x] **`GATE`** — teardown, rebuild, and the seeded app looks demo-ready with no manual
+      steps. **PASSED 2026-09-07** as part of the Week-1 rebuild-from-zero: `make down` →
+      `make up` → `db-bootstrap.sh` → `deploy.sh` → `seed.sh` → 15 events + the full app
+      flow, no manual steps.
 
 ### auth service
 
@@ -272,9 +274,10 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       GETs `event`'s `/:id/summary` for `{title, capacity}`, both denormalised onto the
       ticket (§4.3). `/me` then needs no join and no second hop. event down → 502,
       event 404 → 404.)*
-- [ ] **`GATE`** — connect as `event_svc`, attempt to read `registration_db`, Postgres
-      refuses. This is a demo moment; verify it works. *(needs the deployed RDS / all three
-      roles — app code is done.)*
+- [x] **`GATE`** — connect as `event_svc`, attempt to read `registration_db`, Postgres
+      refuses. **PASSED 2026-09-07 on RDS** — a one-off pod as `event_svc`:
+      `event_db` → `OK (15 events)`, `registration_db` →
+      `permission denied for database "registration_db"`.
 
 ### S3 uploads
 
