@@ -1,0 +1,761 @@
+<title>Eventide Checkpoint</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+/>
+
+<style>
+  /* Eventide — Week 1 checkpoint deck.
+     Deliberately single-look: a deck projected in a dim room. Every colour and
+     the background are painted explicitly so it holds on any host ground. */
+  :root {
+    --ground: #0e1621;
+    --ground-2: #0b1119;
+    --surface: #16212e;
+    --surface-2: #1c2a39;
+    --ink: #e9eef3;
+    --muted: #8ea0b4;
+    --faint: #5f7183;
+    --line: #263441;
+    --amber: #f0b429;
+    --amber-dim: #b9861d;
+    --go: #57bd7c;
+    --stop: #e5734f;
+
+    --f-display: 'Archivo', system-ui, sans-serif;
+    --f-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+    color-scheme: dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--f-display);
+    font-weight: 400;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* --- deck mechanics --------------------------------------------------- */
+  .deck {
+    scroll-snap-type: y mandatory;
+    overflow-y: scroll;
+    height: 100vh;
+  }
+
+  .slide {
+    scroll-snap-align: start;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: clamp(2.5rem, 6vw, 6rem) clamp(1.5rem, 7vw, 7rem);
+    position: relative;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .slide__inner {
+    width: 100%;
+    max-width: 68rem;
+    margin: 0 auto;
+  }
+
+  /* progress rail + counter */
+  .rail {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 3px;
+    background: var(--amber);
+    width: 0;
+    z-index: 20;
+    transition: width 0.25s ease;
+  }
+  .counter {
+    position: fixed;
+    right: clamp(1rem, 4vw, 2.5rem);
+    bottom: clamp(1rem, 4vw, 2.5rem);
+    font-family: var(--f-mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    color: var(--faint);
+    z-index: 20;
+  }
+  .counter b {
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .hint {
+    position: fixed;
+    left: clamp(1rem, 4vw, 2.5rem);
+    bottom: clamp(1rem, 4vw, 2.5rem);
+    font-family: var(--f-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    color: var(--faint);
+    z-index: 20;
+  }
+  kbd {
+    font-family: var(--f-mono);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0.05em 0.4em;
+    font-size: 0.9em;
+    color: var(--muted);
+  }
+
+  /* --- type ----------------------------------------------------------- */
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: 0.8rem;
+    font-weight: 500;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin: 0 0 1.5rem;
+  }
+  .eyebrow--muted {
+    color: var(--faint);
+  }
+
+  h1 {
+    font-size: clamp(2.6rem, 7vw, 5rem);
+    font-weight: 800;
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    margin: 0;
+  }
+  h2 {
+    font-size: clamp(1.8rem, 4.4vw, 3.1rem);
+    font-weight: 800;
+    line-height: 1.08;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 1.6rem;
+  }
+  .lede {
+    font-size: clamp(1.05rem, 2vw, 1.4rem);
+    color: var(--muted);
+    max-width: 42ch;
+    margin: 1.6rem 0 0;
+  }
+  p {
+    margin: 0 0 1rem;
+  }
+  strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .amber {
+    color: var(--amber);
+  }
+  .mono {
+    font-family: var(--f-mono);
+  }
+
+  /* --- reusable blocks ---------------------------------------------- */
+  .grid {
+    display: grid;
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .grid > div {
+    background: var(--surface);
+    padding: 1.15rem 1.3rem;
+  }
+  .grid--2 {
+    grid-template-columns: 1fr 1fr;
+  }
+  .grid--3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  @media (max-width: 720px) {
+    .grid--2,
+    .grid--3 {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .k {
+    font-family: var(--f-mono);
+    font-size: 0.82rem;
+    letter-spacing: 0.02em;
+    color: var(--amber);
+    display: block;
+    margin-bottom: 0.35rem;
+  }
+  .v {
+    font-size: 1rem;
+    color: var(--ink);
+  }
+  .v--sm {
+    font-size: 0.92rem;
+    color: var(--muted);
+  }
+
+  ul.rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  ul.rows > li {
+    background: var(--surface);
+    padding: 1rem 1.3rem;
+    display: grid;
+    grid-template-columns: 15rem 1fr;
+    gap: 1.5rem;
+    align-items: baseline;
+  }
+  @media (max-width: 720px) {
+    ul.rows > li {
+      grid-template-columns: 1fr;
+      gap: 0.3rem;
+    }
+  }
+  ul.rows .term {
+    font-family: var(--f-mono);
+    font-size: 0.85rem;
+    color: var(--ink);
+  }
+  ul.rows .def {
+    color: var(--muted);
+    font-size: 0.98rem;
+  }
+
+  .tag {
+    font-family: var(--f-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.15em 0.55em;
+    border-radius: 5px;
+    white-space: nowrap;
+  }
+  .tag--go {
+    color: var(--go);
+    background: color-mix(in oklch, var(--go) 15%, transparent);
+  }
+  .tag--stop {
+    color: var(--stop);
+    background: color-mix(in oklch, var(--stop) 16%, transparent);
+  }
+  .tag--wait {
+    color: var(--amber);
+    background: color-mix(in oklch, var(--amber) 14%, transparent);
+  }
+
+  .bignum {
+    font-size: clamp(3.5rem, 12vw, 8rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .bignum small {
+    font-size: 0.28em;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0;
+  }
+
+  /* architecture diagram */
+  .arch {
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--ground-2);
+  }
+  .arch text {
+    font-family: var(--f-mono);
+    fill: var(--ink);
+  }
+  .arch .lbl {
+    fill: var(--muted);
+    font-size: 12px;
+  }
+  .arch .box {
+    fill: var(--surface);
+    stroke: var(--line);
+  }
+  .arch .box--svc {
+    fill: var(--surface-2);
+    stroke: var(--amber-dim);
+  }
+  .arch .flow {
+    stroke: var(--faint);
+    stroke-width: 1.5;
+    fill: none;
+    marker-end: url(#ah);
+  }
+  .arch .band {
+    fill: none;
+    stroke: var(--line);
+    stroke-dasharray: 4 4;
+  }
+
+  .foot {
+    margin-top: 2rem;
+    font-family: var(--f-mono);
+    font-size: 0.8rem;
+    color: var(--faint);
+    letter-spacing: 0.02em;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+      scroll-behavior: auto !important;
+    }
+  }
+</style>
+
+<div class="rail" id="rail"></div>
+<div class="counter"><b id="cur">01</b> / <span id="tot">12</span></div>
+<div class="hint">Advance: <kbd>&rarr;</kbd> <kbd>Space</kbd> &nbsp;·&nbsp; Back: <kbd>&larr;</kbd></div>
+
+<div class="deck" id="deck">
+  <!-- 1 — TITLE -->
+  <section class="slide">
+    <div class="slide__inner">
+      <p class="eyebrow">Cloud Computing 2026 &nbsp;·&nbsp; IT KMITL &nbsp;·&nbsp; Week 1 checkpoint</p>
+      <h1>Eventide</h1>
+      <p class="lede">
+        An event-registration platform built as an excuse for the infrastructure.
+        <strong class="amber">Feature-poor and infrastructure-heavy by design</strong> —
+        the smallest application that still justifies a real microservice topology
+        on AWS.
+      </p>
+      <p class="foot">Suwijak Promsatid &nbsp;·&nbsp; account 735838417080 &nbsp;·&nbsp; us-east-1</p>
+    </div>
+  </section>
+
+  <!-- 2 — THE CONSTRAINT -->
+  <section class="slide">
+    <div class="slide__inner">
+      <p class="eyebrow">The constraint that shapes everything</p>
+      <h2>A $50 hard cap and 4-hour credentials.</h2>
+      <div class="grid grid--3">
+        <div>
+          <span class="k">budget</span>
+          <span class="v">$50, hard-capped. Exceed it and the account locks and
+          wipes.</span>
+        </div>
+        <div>
+          <span class="k">sessions</span>
+          <span class="v"><code class="mono">ASIA…</code> credentials expire after
+          4 hours. EKS &amp; RDS keep billing when the lab &ldquo;stops&rdquo;.</span>
+        </div>
+        <div>
+          <span class="k">the answer</span>
+          <span class="v"><strong>Terraform&nbsp;destroy the platform layer every
+          session.</strong> Rebuilt from zero, every time.</span>
+        </div>
+      </div>
+      <p class="lede">
+        ≈ <strong class="amber">$0.27/hr</strong> up, <strong class="amber">$3.40/day</strong>
+        idle. Left running, $50 is gone in 15 days — before the demo.
+      </p>
+    </div>
+  </section>
+
+  <!-- 3 — WHAT IT IS -->
+  <section class="slide">
+    <div class="slide__inner">
+      <p class="eyebrow">What is deployed</p>
+      <h2>Three services, one SPA, one database instance.</h2>
+      <div class="grid grid--2">
+        <div>
+          <span class="k">auth</span>
+          <span class="v">better-auth · Drizzle · JWT + bearer plugins · email/password
+          + Google OAuth · owns <code class="mono">auth_db</code> · publishes
+          <code class="mono">/api/auth/jwks</code></span>
+        </div>
+        <div>
+          <span class="k">event</span>
+          <span class="v">event metadata · S3 presigned cover images · verifies
+          callers' JWTs locally against JWKS · owns <code class="mono">event_db</code></span>
+        </div>
+        <div>
+          <span class="k">registration</span>
+          <span class="v"><strong>owns &amp; enforces capacity</strong> by counting
+          its own rows in one local transaction · owns
+          <code class="mono">registration_db</code></span>
+        </div>
+        <div>
+          <span class="k">web</span>
+          <span class="v">React SPA on nginx <em>inside the cluster</em> — one
+          origin, no CORS, no CloudFront</span>
+        </div>
+      </div>
+      <p class="foot">
+        Elysia + Bun, compiled to a single binary on distroless — 44&nbsp;MB per
+        service image.
+      </p>
+    </div>
+  </section>
+
+  <!-- 4 — ARCHITECTURE -->
+  <section class="slide">
+    <div class="slide__inner">
+      <p class="eyebrow">Request path</p>
+      <h2>One NLB, one ingress, four services.</h2>
+      <svg class="arch" viewBox="0 0 900 420" role="img" aria-label="Architecture diagram">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#5f7183" />
+          </marker>
+        </defs>
+
+        <text x="450" y="34" text-anchor="middle" font-size="14">Browser — React SPA</text>
+        <path class="flow" d="M450,44 L450,74" />
+
+        <rect class="box" x="330" y="74" width="240" height="40" rx="7" />
+        <text x="450" y="99" text-anchor="middle" font-size="13">Network Load Balancer · Terraform</text>
+        <path class="flow" d="M450,114 L450,150" />
+        <text x="462" y="136" class="lbl">:80/:443 → NodePort 30080/30443</text>
+
+        <rect class="band" x="40" y="150" width="820" height="240" rx="10" />
+        <text x="52" y="170" class="lbl">EKS 1.33 · 2 × t3.small · default-VPC public subnets</text>
+
+        <rect class="box" x="330" y="182" width="240" height="36" rx="7" />
+        <text x="450" y="205" text-anchor="middle" font-size="13">ingress-nginx (NodePort)</text>
+
+        <g>
+          <rect class="box box--svc" x="60" y="260" width="170" height="46" rx="7" />
+          <text x="145" y="281" text-anchor="middle" font-size="13">web</text>
+          <text x="145" y="297" text-anchor="middle" class="lbl">/</text>
+
+          <rect class="box box--svc" x="250" y="260" width="170" height="46" rx="7" />
+          <text x="335" y="281" text-anchor="middle" font-size="13">auth</text>
+          <text x="335" y="297" text-anchor="middle" class="lbl">/api/auth/*</text>
+
+          <rect class="box box--svc" x="440" y="260" width="170" height="46" rx="7" />
+          <text x="525" y="281" text-anchor="middle" font-size="13">event</text>
+          <text x="525" y="297" text-anchor="middle" class="lbl">/api/events/*</text>
+
+          <rect class="box box--svc" x="630" y="260" width="200" height="46" rx="7" />
+          <text x="730" y="281" text-anchor="middle" font-size="13">registration</text>
+          <text x="730" y="297" text-anchor="middle" class="lbl">/api/registrations/*</text>
+        </g>
+
+        <path class="flow" d="M450,218 L145,258" />
+        <path class="flow" d="M450,218 L335,258" />
+        <path class="flow" d="M450,218 L525,258" />
+        <path class="flow" d="M450,218 L730,258" />
+
+        <path class="flow" d="M690,306 C640,335 590,335 545,308" />
+        <text x="600" y="345" class="lbl" text-anchor="middle">in-cluster HTTP at booking time</text>
+
+        <rect class="box" x="250" y="352" width="400" height="34" rx="7" />
+        <text x="450" y="374" text-anchor="middle" font-size="12">
+          one RDS db.t3.micro — auth_db · event_db · registration_db
+        </text>
+        <path class="flow" d="M335,306 L400,350" />
+        <path class="flow" d="M525,306 L470,350" />
+        <path class="flow" d="M730,306 L540,350" />
+      </svg>
+    </div>
+  </section>
+
+  <!-- 5 — THE LAB FIGHTS BACK -->
+  <section class="slide">
+    <div class="slide__inner">
+      <p class="eyebrow eyebrow--muted">Probed live against the account</p>
+      <h2>The lab denies things. Each denial forced a decision.</h2>
+      <ul class="rows">
+        <li>
+          <span class="term">iam:GetRole on voclabs</span>
+          <span class="def">rules out <code class="mono">terraform-aws-modules/eks</code>
+          → raw <code class="mono">aws_eks_cluster</code> + native creator-admin bootstrap</span>
+        </li>
+        <li>
+          <span class="term">iam:CreateRole</span>
+          <span class="def">reuse the lab's pre-made <code class="mono">LabEksClusterRole</code> /
+          <code class="mono">LabEksNodeRole</code>, looked up by regex</span>
+        </li>
+        <li>
+          <span class="term">CreateOpenIDConnectProvider</span>
+          <span class="def">no IRSA, and no GitHub-Actions OIDC → CI builds the
+          image, deploy is a local script</span>
+        </li>
+        <li>
+          <span class="term">iam:AttachRolePolicy</span>
+          <span class="def">pods can't get node credentials either → the app is
+          built to need <em>no</em> AWS SDK, ever</span>
+        </li>
+        <li>
+          <span class="term">SCP: GetBucketObjectLockConfiguration</span>
+          <span class="def">every S3 bucket is CLI-created, consumed as
+          <code class="mono">data "aws_s3_bucket"</code></span>
+        </li>
+        <li>
+          <span class="term">cloudfront:*</span>
+          <span class="def">the SPA is served from inside the cluster instead;
+          TLS will be Cloudflare-proxied</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 6 — IAC -->
+  <section class="slide">
+    <div class="slide__inner">
+      <p class="eyebrow">Infrastructure as code</p>
+      <h2>Terraform, split by lifetime.</h2>
+      <div class="grid grid--3">
+        <div>
+          <span class="k">00-bootstrap</span>
+          <span class="v">state bucket. By hand, once — the chicken-and-egg layer.</span>
+        </div>
+        <div>
+          <span class="k">10-foundation</span>
+          <span class="v">ECR ×5, Secrets Manager ×3, uploads bucket.
+          <strong>Never destroyed.</strong></span>
+        </div>
+        <div>
+          <span class="k">20-platform</span>
+          <span class="v">EKS, RDS, NLB, ingress-nginx, metrics-server.
+          <strong class="amber">Destroyed &amp; rebuilt every session.</strong></span>
+        </div>
+      </div>
+      <p class="lede">
+        The app is one Helm chart, one release, ranging over the four services —
+        <code class="mono">values-local.yaml</code> for k3d,
+        <code class="mono">values-aws.yaml</code> for EKS.
+      </p>
+    </div>
+  </section>
+
+  <!-- 7 — VERIFIED -->
+  <section class="slide">
+    <div class="slide__inner">
+      <p class="eyebrow">Verified this week — on real EKS</p>
+      <h2>Every Week&nbsp;1 gate passed.</h2>
+      <ul class="rows">
+        <li>
+          <span class="term">nodes ready</span>
+          <span class="def">2 × Ready on k8s 1.33 &nbsp;<span class="tag tag--go">pass</span></span>
+        </li>
+        <li>
+          <span class="term">k3d = EKS parity</span>
+          <span class="def">same manifests, same responses &nbsp;<span class="tag tag--go">pass</span></span>
+        </li>
+        <li>
+          <span class="term">db-bootstrap → RDS</span>
+          <span class="def">3 roles + 3 databases + migrations, 11&nbsp;s &nbsp;<span class="tag tag--go">pass</span></span>
+        </li>
+        <li>
+          <span class="term">DB boundary</span>
+          <span class="def"><code class="mono">event_svc</code> → <code class="mono">registration_db</code>
+          = <em>permission denied</em> &nbsp;<span class="tag tag--go">pass</span></span>
+        </li>
+        <li>
+          <span class="term">capacity race</span>
+          <span class="def">3 concurrent bookings, 1 seat → 200 / 409 / 409, no oversell &nbsp;<span class="tag tag--go">pass</span></span>
+        </li>
+        <li>
+          <span class="term">frontend E2E</span>
+          <span class="def">headless Chrome, 9/9 — list → book → tickets &nbsp;<span class="tag tag--go">pass</span></span>
+        </li>
+        <li>
+          <span class="term">rebuild from zero</span>
+          <span class="def">destroy <strong class="amber">8m56s</strong> → up
+          <strong class="amber">16m37s</strong> → deploy → seed → all green &nbsp;<span class="tag tag--go">pass</span></span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 8 — TRADE-OFFS -->
+  <section class="slide">
+    <div class="slide__inner">
+      <p class="eyebrow">The decisions worth defending</p>
+      <h2>Constraints that improved the design.</h2>
+      <div class="grid grid--2">
+        <div>
+          <span class="k">boundary, not saga</span>
+          <span class="v">Capacity lives with the ticket rows, so booking is one
+          local transaction — the service split was placed to avoid a distributed
+          transaction.</span>
+        </div>
+        <div>
+          <span class="k">engine-enforced isolation</span>
+          <span class="v">One instance, one database per service. PostgreSQL
+          <em>cannot</em> join across databases — the boundary is not a
+          convention.</span>
+        </div>
+        <div>
+          <span class="k">asymmetric JWT</span>
+          <span class="v"><code class="mono">event</code> / <code class="mono">registration</code>
+          hold only a public key. They verify locally against JWKS and are
+          cryptographically unable to mint a token.</span>
+        </div>
+        <div>
+          <span class="k">bearer, not cookies</span>
+          <span class="v">Identical in dev and deployed — no two SameSite configs.
+          The <code class="mono">localStorage</code> / XSS exposure is stated, not
+          hidden.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 — COST -->
+  <section class="slide">
+    <div class="slide__inner">
+      <p class="eyebrow">Cost, actual</p>
+      <p class="bignum">
+        ~$25<small>&nbsp;&nbsp;across the whole term</small>
+      </p>
+      <p class="lede">
+        vs <strong>~$180</strong> if the platform layer were left running.
+        A four-hour working session is <strong class="amber">≈ $1.10</strong>.
+      </p>
+      <div class="grid grid--3" style="margin-top: 2rem">
+        <div><span class="k">EKS control plane</span><span class="v--sm">$0.10/hr · delete-only, cannot stop</span></div>
+        <div><span class="k">RDS db.t3.micro</span><span class="v--sm">$0.018/hr · the lab doesn't stop it</span></div>
+        <div><span class="k">NAT gateway</span><span class="v--sm">$0.00 · avoided by design</span></div>
+      </div>
+      <p class="foot">
+        And the real dividend: by demo day the whole stack has been rebuilt from
+        nothing ~20 times.
+      </p>
+    </div>
+  </section>
+
+  <!-- 10 — WEEKS 2-4 -->
+  <section class="slide">
+    <div class="slide__inner">
+      <p class="eyebrow">What ships</p>
+      <h2>Weeks 2 – 4.</h2>
+      <ul class="rows">
+        <li>
+          <span class="term">week 2 — done early</span>
+          <span class="def">auth, event, registration, the SPA — all built and
+          E2E-verified on EKS this week. <span class="tag tag--go">ahead</span></span>
+        </li>
+        <li>
+          <span class="term">week 2 — remaining</span>
+          <span class="def">Google OAuth console · Cloudflare DNS + TLS on a
+          delegated subdomain <span class="tag tag--wait">next</span></span>
+        </li>
+        <li>
+          <span class="term">week 3</span>
+          <span class="def">S3 presigned cover-upload — bytes never touch a pod
+          <span class="tag tag--wait">next</span></span>
+        </li>
+        <li>
+          <span class="term">week 4 — autoscaling</span>
+          <span class="def">HPA on <code class="mono">event</code>, k6 load,
+          replicas 2 → 8 → 2 under load; CloudWatch Container Insights
+          <span class="tag tag--wait">planned</span></span>
+        </li>
+        <li>
+          <span class="term">week 4 — report</span>
+          <span class="def">the trade-offs above, with the real cost table and
+          rebuild timings <span class="tag tag--wait">drafted</span></span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 11 — DEMO -->
+  <section class="slide">
+    <div class="slide__inner">
+      <p class="eyebrow">The live demo</p>
+      <h2>Six moves.</h2>
+      <ul class="rows">
+        <li><span class="term">01 · apply</span><span class="def">start <code class="mono">terraform apply</code> and talk over it — the cluster is 100% code</span></li>
+        <li><span class="term">02 · boundary</span><span class="def">connect as <code class="mono">event_svc</code>, try to read <code class="mono">registration_db</code> — Postgres refuses</span></li>
+        <li><span class="term">03 · use it</span><span class="def">log in, create an event, upload a cover image straight to S3, book a ticket</span></li>
+        <li><span class="term">04 · rotate</span><span class="def">change one secret in Secrets Manager, let ESO sync, restart the pod, keep working</span></li>
+        <li><span class="term">05 · scale</span><span class="def">k6 on one screen, <code class="mono">kubectl get hpa -w</code> on the other — 2 → 8 → 2</span></li>
+        <li><span class="term">06 · destroy</span><span class="def">tear it down, on purpose, in front of the room</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 12 — CLOSE -->
+  <section class="slide">
+    <div class="slide__inner">
+      <p class="eyebrow">Where it stands</p>
+      <h2>Infrastructure is done. Features compress; infrastructure doesn't.</h2>
+      <p class="lede">
+        The governing principle held: a hello-world pod answered HTTP on real EKS,
+        deployed by Terraform, before a single feature was written. Everything
+        since has been additive — and the rebuild-from-zero gate, the one most
+        teams skip, passed end to end.
+      </p>
+      <p class="foot">
+        Open: the assignment brief has never been seen as text — every scope call
+        is inference. Checkpoint date and demo date still to confirm.
+      </p>
+    </div>
+  </section>
+</div>
+
+<script>
+  (function () {
+    var deck = document.getElementById('deck');
+    var slides = Array.prototype.slice.call(deck.querySelectorAll('.slide'));
+    var rail = document.getElementById('rail');
+    var cur = document.getElementById('cur');
+    document.getElementById('tot').textContent = String(slides.length).padStart(2, '0');
+
+    function pad(n) {
+      return String(n).padStart(2, '0');
+    }
+    function update() {
+      var i = Math.round(deck.scrollTop / window.innerHeight);
+      i = Math.max(0, Math.min(slides.length - 1, i));
+      cur.textContent = pad(i + 1);
+      rail.style.width = ((i / (slides.length - 1)) * 100).toFixed(2) + '%';
+    }
+    function go(dir) {
+      var i = Math.round(deck.scrollTop / window.innerHeight) + dir;
+      i = Math.max(0, Math.min(slides.length - 1, i));
+      slides[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    deck.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+        e.preventDefault();
+        go(1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+        e.preventDefault();
+        go(-1);
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        slides[0].scrollIntoView({ behavior: 'smooth' });
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        slides[slides.length - 1].scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+    update();
+  })();
+</script>
