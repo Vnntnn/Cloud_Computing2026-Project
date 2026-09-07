@@ -158,10 +158,12 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 
 ### Day 5 (Fri) — checkpoint
 
-- [ ] Slides: architecture diagram, the probed lab constraints, what ships in weeks 2–4.
-- [ ] Rehearse the live bit: browser hits the URL → `kubectl scale deployment api
-      --replicas=5` → `kubectl get pods -w`.
-- [ ] **Present.**
+- [x] Slides — `docs/checkpoint.html` (12 slides, keyboard-nav). Architecture SVG,
+      the lab-denial table + what each forced, IaC split, the verified Week-1 gates
+      (rebuild 8:56→16:37), trade-offs, cost, weeks 2–4, the 6-move demo. Published:
+      `https://claude.ai/code/artifact/73239e17-1c72-43f2-9741-ce31432e05c9`
+- [ ] Rehearse the live bit (needs a lab session).
+- [ ] **Present.** *(date unconfirmed — blocker §0)*
 - [ ] `./scripts/teardown.sh` and verify.
 
 ---
