@@ -15,7 +15,8 @@
     "generate:auth": "drizzle-kit generate --config drizzle.auth.config.ts",
     "generate:event": "drizzle-kit generate --config drizzle.event.config.ts",
     "generate:registration": "drizzle-kit generate --config drizzle.registration.config.ts",
-    "db:bootstrap": "bun scripts/bootstrap.ts"
+    "db:bootstrap": "bun scripts/bootstrap.ts",
+    "db:seed": "bun scripts/seed.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",

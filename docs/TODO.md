@@ -176,9 +176,15 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       ignores the generated file. *(Deviation from the old bootstrap comment: the better-auth
       CLI can't migrate a Drizzle setup — it emits the schema, drizzle-kit runs it, same as
       the other two services.)*
-- [~] Migration path: `packages/db/scripts/bootstrap.ts` now creates **all three** roles +
-      DBs and runs `drizzle-kit migrate` for all three (auth_db included). Verified locally:
-      `make bootstrap` → 3 DBs migrated clean. **Seed** (~15 events, users) still TODO.
+- [x] Migration path: `packages/db/scripts/bootstrap.ts` creates **all three** roles + DBs
+      and runs `drizzle-kit migrate` for all three (auth_db included). `make bootstrap` → 3
+      DBs migrated clean.
+- [x] Seed: `packages/db/scripts/seed.ts` (`make seed` / `db:seed`) — idempotent, creates 4
+      organiser accounts **through the auth service** (better-auth owns password hashing,
+      §5.1.1) and 15 events into `event_db` owned by them. `SEED_FORCE=1` re-seeds. Runs
+      against the live services (local after `make dev`, in-cluster as a Job). Verified
+      locally: 15 events / 4 owners. *(Registrations not seeded — needs the registration
+      service, week 3.)*
 - [ ] **`GATE`** — teardown, rebuild, and the seeded app looks demo-ready with no manual
       steps.
 
