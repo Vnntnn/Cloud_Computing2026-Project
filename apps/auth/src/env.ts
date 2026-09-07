@@ -24,6 +24,11 @@ export const env = defineEnv(
     // Public base URL — the JWT issuer/audience and the OAuth redirect origin.
     BETTER_AUTH_URL: z.url().default('http://localhost:3000'),
 
+    // Extra origins allowed to call /api/auth (CSRF check), comma-separated.
+    // Deployed, the SPA is same-origin so BETTER_AUTH_URL covers it and this stays
+    // empty; the auth `dev` script sets it to the Vite origin (localhost:5173).
+    TRUSTED_ORIGINS: z.string().default(''),
+
     // Google OAuth — optional. Email/password works without it, which is what
     // lets the seed create users and keeps the demo resilient (SYSTEM-DESIGN §5.1.1).
     GOOGLE_CLIENT_ID: z.string().optional(),

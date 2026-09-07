@@ -24,6 +24,15 @@ export const auth = betterAuth({
   baseURL: env.BETTER_AUTH_URL,
   secret: env.BETTER_AUTH_SECRET,
 
+  // CSRF origin allow-list. Deployed, the SPA is same-origin as auth; in dev the
+  // Vite proxy makes the browser origin localhost:5173 (SYSTEM-DESIGN §5.5).
+  trustedOrigins: [
+    env.BETTER_AUTH_URL,
+    ...env.TRUSTED_ORIGINS.split(',')
+      .map((o) => o.trim())
+      .filter(Boolean),
+  ],
+
   // Drizzle adapter (CLAUDE.md). Table names match better-auth's model names
   // (user/session/account/verification/jwks), so no schema mapping is needed —
   // the adapter reads them off the `db` instance's registered schema.
