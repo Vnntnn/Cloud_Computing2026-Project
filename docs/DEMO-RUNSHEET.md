@@ -32,18 +32,19 @@ Live-demo script for the final presentation (Week 4, ~2 Oct 2026). Companion to
       hour 3.
 - [ ] `aws eks update-kubeconfig --region us-east-1 --name eventide`
 - [ ] `kubectl get nodes` → 2 Ready.
-- [ ] `make db-bootstrap` — 3 databases + roles + migrations.
-- [ ] Refresh in-cluster credentials Secret if the `AttachRolePolicy` route
-      wasn't taken (`scripts/lab-creds.sh`).
-- [ ] `make deploy` (all 3 services) → `kubectl -n eventide get pods` all Ready,
-      HPA shows `cpu: N%/60%` (not `<unknown>` — means metrics-server is live).
-- [ ] Run the seed. Confirm the SPA loads events and login works, end to end,
-      **once**, before the room is watching.
+- [ ] `make db-bootstrap` — 4 databases + roles + migrations.
+- [ ] `make deploy` → `kubectl -n eventide get pods` all Ready (5 Deployments +
+      the expiry CronJob), HPA shows `cpu: N%/60%` (not `<unknown>` — metrics-server
+      is live).
+- [ ] `make seed-eks`. Then `make smoke` (or a manual walk) — confirm publish →
+      buy → pay → check-in works end to end, **once**, before the room is watching.
+- [ ] Note the seed personas: `admin@eventide.test`, `somchai@eventide.test`
+      (approved organizer), attendees — password `seed-password-123`.
 - [ ] Leave `kubectl -n eventide get hpa event -w` running in a pane.
 
 ---
 
-## Live sequence (~12–15 min)
+## Live sequence (~15–18 min)
 
 ### 1. Apply from nothing — *if* time and budget allow a fresh apply
 
@@ -64,15 +65,29 @@ psql "${DATABASE_URL/event_db/registration_db}" -c 'select 1'
 
 Say: *no cross-service foreign keys are possible — the engine refuses.*
 
-### 3. Use the app
+### 3. Buy a ticket, end to end
 
-- Log in with Google.
-- Create an event.
-- Upload a cover image — **note the network tab: the PUT goes to
-  `s3.amazonaws.com`, not to our API.** Bytes never enter the cluster.
-- Register a ticket. Show capacity decrementing.
-- (Optional) open a second browser, book until capacity hits zero, show the
-  rejection — capacity enforced by `registration` counting its own rows.
+- As an **organizer** (`somchai@eventide.test`): create an event, add a ticket
+  type with a small quota, **publish** it — it appears in the public list.
+- (If showing S3: add an event image — **note the network tab, the PUT goes to
+  `s3.amazonaws.com`, not our API.** Bytes never enter the cluster.)
+- As an **attendee** (second browser / incognito): open the event, choose a
+  quantity, **Reserve** — the 8-minute countdown starts. Click **Pay now** — the
+  mock gateway confirms, the order flips to `CONFIRMED`, the ticket appears with
+  a **QR code**. Say: *the payment pod pulled the amount from `registration`, not
+  from the browser; if confirmation had failed it would be `PENDING_VERIFICATION`
+  with an idempotent reconcile, never a double charge.*
+- Sell it out: a **third** attendee tries the last ticket → `409 capacity_full`,
+  "Sold out", no queue. Optionally show `ticket_inventory` and the
+  `reserved + sold <= quota` CHECK.
+
+### 3b. Check in, then moderate
+
+- As the organizer, open **Check-in**, scan the attendee's QR → **SUCCESS**; scan
+  again → **DUPLICATE**.
+- As **admin** (`admin@eventide.test`): suspend the event (drops from the public
+  list), open the **audit log** (`user_audit_logs`) and the **payment
+  reconciliation** view.
 
 ### 4. Secrets are external, not baked in
 
@@ -86,8 +101,8 @@ aws secretsmanager get-secret-value --secret-id eventide/rds-master --query Secr
 
 Optional live rotation: change one value in `eventide/rds-master`, re-run
 `SERVICES=<svc> bash scripts/deploy.sh` — the new pod picks up the new k8s Secret,
-the other two services are untouched. (No ESO — SYSTEM-DESIGN §5.2.1. Rehearse
-which value actually round-trips cleanly before doing this live.)
+the other services are untouched. (No ESO — SYSTEM-DESIGN §5.2.1. Rehearse which
+value actually round-trips cleanly before doing this live.)
 
 ### 5. Scale under load
 
