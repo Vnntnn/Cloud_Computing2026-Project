@@ -54,7 +54,7 @@ make deploy                          # build+push 3 images -> helm upgrade -f va
 NLB=$(terraform -chdir=infra/terraform/20-platform output -raw nlb_dns_name)
 curl -s "http://$NLB/health/live"     # {"status":"ok","service":"event"}
 curl -s "http://$NLB/api/auth/jwks"   # EdDSA key
-make seed AUTH_URL="http://$NLB"      # 4 organisers + 15 events
+bash scripts/seed.sh                  # in-cluster (RDS is private): 4 organisers + 15 events
 curl -s "http://$NLB/api/events" | jq length   # 15
 ```
 
@@ -73,9 +73,14 @@ curl -s -X POST "http://$NLB/api/registrations" -H "Authorization: Bearer $JWT" 
 ### The cross-DB boundary GATE (§4, a demo moment)
 
 ```sh
-kubectl -n eventide exec -it deploy/event -- sh -lc '
-  psql "${DATABASE_URL/event_db/registration_db}" -c "select 1"
-'   # → FATAL: permission denied for database "registration_db"
+# distroless has no shell — run a one-off pod with the db-bootstrap image:
+kubectl -n eventide run boundary --restart=Never --rm --attach \
+  --image="$REG/eventide/db-bootstrap:$TAG" \
+  --overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":1000}}}' \
+  --env="RG=$(aws secretsmanager get-secret-value --secret-id eventide/rds-master --query SecretString --output text \
+        | jq -r '"postgres://event_svc:\(.EVENT_SVC_PASSWORD)@\(.host):\(.port)/registration_db?sslmode=require"')" \
+  --command -- bun -e 'import p from "postgres"; try{await p(process.env.RG,{max:1})`select 1`;console.log("REACHABLE (BAD)")}catch(e){console.log(e.message)}'
+#   → permission denied for database "registration_db"
 ```
 
 ## 5. **The GATE — rebuild from zero**
@@ -87,7 +92,7 @@ time make down                       # teardown.sh: destroy + verify EKS/RDS/ELB
 time make up                         # from nothing
 bash scripts/db-bootstrap.sh
 make deploy
-make seed AUTH_URL="http://$(terraform -chdir=infra/terraform/20-platform output -raw nlb_dns_name)"
+bash scripts/seed.sh
 # re-run the quick app check above — same results
 ```
 

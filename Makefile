@@ -1,4 +1,4 @@
-.PHONY: dev db bootstrap seed up deploy down k3d k3d-down load help
+.PHONY: dev db bootstrap seed seed-eks up deploy down k3d k3d-down load help
 
 TF_PLATFORM := terraform -chdir=infra/terraform/20-platform
 
@@ -18,8 +18,11 @@ bootstrap: db ## create the 3 service DBs + roles, run drizzle migrations
 dev: bootstrap ## postgres + the 3 services in watch mode
 	bun run dev
 
-seed: ## demo seed (organisers via auth + ~15 events) — needs the services running
+seed: ## demo seed LOCAL (organisers via auth + ~15 events) — needs `make dev` up
 	bun run --filter @eventide/db db:seed
+
+seed-eks: ## demo seed the DEPLOYED cluster (in-cluster one-off pod — RDS is private)
+	bash scripts/seed.sh
 
 # --- AWS: session lifecycle --------------------------------------------
 up: ## apply 20-platform (EKS + RDS + NLB + ingress-nginx), point kubectl at it
