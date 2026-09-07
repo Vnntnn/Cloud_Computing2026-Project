@@ -243,11 +243,21 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 
 ### registration service
 
-- [ ] Create ticket, list mine, capacity enforced by **counting its own rows** in one local
-      transaction.
-- [ ] Server-side enrichment: `registration` calls `event` in-cluster for titles.
+- [x] Create ticket, list mine, capacity enforced by **counting its own rows** in one local
+      transaction. *(done local 2026-09-07: `POST /api/registrations` (auth),
+      `GET /api/registrations/me` (auth), `GET /api/registrations/event/:id/count`. Capacity
+      transaction serialised per-event with `pg_advisory_xact_lock(hashtextextended(eventId))`
+      — verified: 3 concurrent bookings on a cap-1 event → `200 409 409`, final count 1, no
+      oversell. Dup booking → 409 `already_registered` (checked before capacity); unique
+      `(event_id,user_id)` is the backstop. Reuses the shared `bearerAuth` macro.)*
+- [x] Server-side enrichment: `registration` calls `event` in-cluster for titles.
+      *(the one hop is at **booking time** — `apps/registration/src/lib/event-client.ts`
+      GETs `event`'s `/:id/summary` for `{title, capacity}`, both denormalised onto the
+      ticket (§4.3). `/me` then needs no join and no second hop. event down → 502,
+      event 404 → 404.)*
 - [ ] **`GATE`** — connect as `event_svc`, attempt to read `registration_db`, Postgres
-      refuses. This is a demo moment; verify it works.
+      refuses. This is a demo moment; verify it works. *(needs the deployed RDS / all three
+      roles — app code is done.)*
 
 ### S3 uploads
 
