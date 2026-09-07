@@ -5,11 +5,14 @@
     "ignoreUnknown": true,
     "includes": [
       "**",
-      "!**/migrations/**",
-      "!**/dist/**",
-      "!**/.turbo/**",
+      "!.agents",
+      "!**/migrations",
+      "!**/dist",
+      "!**/.turbo",
+      "!**/*.gen.ts",
       "!packages/db/src/auth/schema.ts",
-      "!apps/web/src/index.css"
+      "!apps/web/src/index.css",
+      "!apps/web/src/routeTree.gen.ts"
     ]
   },
   "formatter": {
