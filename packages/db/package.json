@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./auth": "./src/auth/schema.ts",
     "./event": "./src/event/schema.ts",
     "./registration": "./src/registration/schema.ts"
   },
@@ -11,12 +12,13 @@
     "lint": "biome check .",
     "check-types": "tsc --noEmit",
     "test": "bun test",
+    "generate:auth": "drizzle-kit generate --config drizzle.auth.config.ts",
     "generate:event": "drizzle-kit generate --config drizzle.event.config.ts",
     "generate:registration": "drizzle-kit generate --config drizzle.registration.config.ts",
     "db:bootstrap": "bun scripts/bootstrap.ts"
   },
   "dependencies": {
-    "drizzle-orm": "^0.44.5",
+    "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.7"
   },
   "devDependencies": {

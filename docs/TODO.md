@@ -169,22 +169,42 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       *(`apps/web` deferred to week 3. Bun workspaces + Turborepo + Biome.)*
 - [x] Drizzle schemas for `event_db` / `registration_db` — `owner_id` / `user_id` are
       `text`. `0000` migrations generated. `auth_db` stays better-auth's CLI.
-- [~] Migration path: `packages/db/scripts/bootstrap.ts` creates the DBs + roles and runs
-      `drizzle-kit migrate` (local + the future in-cluster Job, §7.1). **Seed** (~15 events,
-      users) still TODO — needs the `auth` service and better-auth wired first.
+- [x] `auth_db` schema — **generated** by the better-auth CLI to
+      `packages/db/src/auth/schema.ts` (`bun run --filter @eventide/auth generate:auth-schema`),
+      then diffed to SQL by drizzle-kit (`generate:auth`, config `drizzle.auth.config.ts`).
+      `user`/`session`/`account`/`verification`/`jwks`. `0000` migration committed. Biome
+      ignores the generated file. *(Deviation from the old bootstrap comment: the better-auth
+      CLI can't migrate a Drizzle setup — it emits the schema, drizzle-kit runs it, same as
+      the other two services.)*
+- [~] Migration path: `packages/db/scripts/bootstrap.ts` now creates **all three** roles +
+      DBs and runs `drizzle-kit migrate` for all three (auth_db included). Verified locally:
+      `make bootstrap` → 3 DBs migrated clean. **Seed** (~15 events, users) still TODO.
 - [ ] **`GATE`** — teardown, rebuild, and the seeded app looks demo-ready with no manual
       steps.
 
 ### auth service
 
-- [ ] better-auth + Drizzle adapter + **JWT plugin** + **bearer plugin**.
-- [ ] Enable **both** Google OAuth *and* email/password. (Email/password is what lets the
-      seed create users — see the knowledge base.)
+- [x] better-auth + Drizzle adapter + **JWT plugin** + **bearer plugin**.
+      *(`apps/auth/src/lib/{auth,db}.ts`; `.all('/api/auth/*', → auth.handler)` in
+      `index.ts`, not `.mount`, to keep the method chain unambiguous. `/health/ready` now
+      does a real `select 1`. better-auth 1.7.3, drizzle-orm bumped repo-wide to ^0.45.2 for
+      its peer range.)*
+- [x] Enable **both** Google OAuth *and* email/password. *(email/password always on; Google
+      wired but only registered when `GOOGLE_CLIENT_ID`/`_SECRET` are present — `env.ts`
+      defaults everything for `make dev`, prod guard throws on missing injected secrets.)*
 - [ ] Google Cloud Console: OAuth client, consent screen → **Production**, scopes limited to
       `openid`/`email`/`profile`. Register both redirect URIs:
-      `http://localhost:3000/...` and `https://api.<domain>/...`.
-- [ ] **`GATE`** — `GET /api/auth/jwks` returns public keys.
-- [ ] `@elysiajs/openapi` mounted (already in all 3 services at `/swagger`).
+      `http://localhost:3000/...` and `https://api.<domain>/...`. *(deferred — needs the
+      Google project + the deployed hostname; email/password unblocks everything else.)*
+- [x] **`GATE`** — `GET /api/auth/jwks` returns public keys. *(pass, local 2026-09-07:
+      `{"keys":[{"alg":"EdDSA","crv":"Ed25519",...}]}`. sign-up/sign-in return
+      `set-auth-token`; `GET /api/auth/token` with the bearer returns a valid EdDSA JWT
+      whose `kid` matches JWKS, claims `sub`/`email`/`iss`/`aud`.)*
+- [x] `@elysiajs/openapi` mounted (already in all 3 services at `/swagger`).
+- [ ] **Deploy blocker (pre-existing, not auth-specific):** `bun build --compile` binaries
+      don't serve on the installed Bun 1.4.0 (Aug build) — `event`'s binary fails the same
+      way. `bun src/index.ts` works fine. Fix the Bun toolchain before the distroless
+      image path (§12.1) can ship.
 
 ### DNS and TLS — start early, it propagates slowly
 

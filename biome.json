@@ -3,7 +3,13 @@
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/migrations/**", "!**/dist/**", "!**/.turbo/**"]
+    "includes": [
+      "**",
+      "!**/migrations/**",
+      "!**/dist/**",
+      "!**/.turbo/**",
+      "!packages/db/src/auth/schema.ts"
+    ]
   },
   "formatter": {
     "enabled": true,

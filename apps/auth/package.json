@@ -12,12 +12,21 @@
     "start": "./dist/server",
     "lint": "biome check .",
     "check-types": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "generate:auth-schema": "better-auth generate --config src/lib/auth.ts --output ../../packages/db/src/auth/schema.ts -y"
   },
   "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.7.3",
     "@elysiajs/openapi": "^1.4.11",
+    "@eventide/db": "workspace:*",
     "@eventide/shared": "workspace:*",
+    "better-auth": "^1.7.3",
+    "drizzle-orm": "^0.45.2",
     "elysia": "^1.4.9",
+    "postgres": "^3.4.9",
     "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@better-auth/cli": "^1.4.21"
   }
 }
