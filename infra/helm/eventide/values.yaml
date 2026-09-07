@@ -56,6 +56,7 @@ defaults:
     limits: { cpu: 300m, memory: 256Mi }
   # distroless :nonroot is uid/gid 65532 — must be numeric (SYSTEM-DESIGN §12.1).
   runAsUser: 65532
+  readOnlyRootFs: true
 
 services:
   auth:
@@ -90,3 +91,17 @@ services:
       AUTH_JWKS_URL: "http://auth.{{ .Values.namespace }}.svc.cluster.local/api/auth/jwks"
       AUTH_BASE_URL: "{{ .Values.publicUrl }}"
       EVENT_SERVICE_URL: "http://event.{{ .Values.namespace }}.svc.cluster.local"
+
+  # Static React SPA on nginx-unprivileged (uid 101, :8080). Catches every path
+  # the API rules don't — one origin, no CORS, no CloudFront (denied in the lab).
+  web:
+    port: 8080
+    runAsUser: 101
+    readOnlyRootFs: false # nginx writes /var/cache/nginx, /var/run
+    ingressPaths: ["/"]
+    image: { repository: eventide/web, tag: latest }
+    livePath: /
+    readyPath: /
+    resources:
+      requests: { cpu: 10m, memory: 24Mi }
+      limits: { cpu: 100m, memory: 64Mi }

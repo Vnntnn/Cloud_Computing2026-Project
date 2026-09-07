@@ -1,5 +1,9 @@
 {{- $root := . -}}
 {{- range $name, $svc := .Values.services }}
+{{- $uid := $svc.runAsUser | default $root.Values.defaults.runAsUser }}
+{{/* `| default` treats false as empty — pick the bool explicitly. */}}
+{{- $roRootFs := $root.Values.defaults.readOnlyRootFs }}
+{{- if hasKey $svc "readOnlyRootFs" }}{{ $roRootFs = $svc.readOnlyRootFs }}{{ end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -28,9 +32,9 @@ spec:
               app.kubernetes.io/name: {{ $name }}
       securityContext:
         runAsNonRoot: true
-        runAsUser: {{ $root.Values.defaults.runAsUser }}
-        runAsGroup: {{ $root.Values.defaults.runAsUser }}
-        fsGroup: {{ $root.Values.defaults.runAsUser }}
+        runAsUser: {{ $uid }}
+        runAsGroup: {{ $uid }}
+        fsGroup: {{ $uid }}
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: {{ $name }}
@@ -54,19 +58,20 @@ spec:
                 name: {{ $svc.secretName }}
           {{- end }}
           # Liveness never touches the DB (CLAUDE.md hard rule); readiness does.
+          # `web` (static nginx) overrides both to `/`.
           livenessProbe:
-            httpGet: { path: /health/live, port: http }
+            httpGet: { path: {{ $svc.livePath | default "/health/live" }}, port: http }
             initialDelaySeconds: 3
             periodSeconds: 10
           readinessProbe:
-            httpGet: { path: /health/ready, port: http }
+            httpGet: { path: {{ $svc.readyPath | default "/health/ready" }}, port: http }
             initialDelaySeconds: 3
             periodSeconds: 5
           resources:
             {{- toYaml ($svc.resources | default $root.Values.defaults.resources) | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
+            readOnlyRootFilesystem: {{ $roRootFs }}
             capabilities: { drop: ["ALL"] }
           volumeMounts:
             - { name: tmp, mountPath: /tmp }

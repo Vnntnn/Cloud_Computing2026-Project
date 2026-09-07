@@ -23,7 +23,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 REGION=us-east-1
-SERVICES="${SERVICES:-auth event registration}"
+SERVICES="${SERVICES:-auth event registration web}"
 TAG="${1:-$(git rev-parse --short HEAD)}"
 
 REG="$(terraform -chdir=infra/terraform/10-foundation output -raw ecr_registry)"

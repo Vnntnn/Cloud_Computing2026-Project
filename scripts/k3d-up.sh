@@ -28,7 +28,7 @@ REG_PORT=5111                              # host -> k3d registry (container :50
 REG_INCLUSTER="eventide-registry:${REG_PORT}"
 INGRESS_VERSION=4.15.1
 INGRESS_IMAGE="registry.k8s.io/ingress-nginx/controller:v1.15.1"  # chart 4.15.1's appVersion
-SERVICES="auth event registration"
+SERVICES="auth event registration web"
 TAG="${1:-$(git rev-parse --short HEAD)}"
 
 # Must match apps/auth/src/env.ts's dev default so the auth_db.jwks row created
