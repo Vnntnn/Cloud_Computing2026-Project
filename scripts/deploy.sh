@@ -14,9 +14,10 @@
 # Secrets: this script assembles the eventide-{auth,event,registration} k8s
 # Secrets from `eventide/rds-master` (the same source the db-bootstrap Job uses)
 # and deploys with eso.enabled=false.
-#   TODO: the ESO path wants 20-platform to write a real DATABASE_URL (+ auth's
-#   BETTER_AUTH_SECRET) into the per-service Secrets Manager secrets on every
-#   rebuild; then deploy with `--set eso.enabled=true` and drop the block below.
+#   TODO: the ESO path wants 20-platform to also write the assembled DATABASE_URLs
+#   into the per-service `eventide/<svc>` Secrets Manager secrets on every rebuild
+#   (BETTER_AUTH_SECRET is already in rds-master); then `--set eso.enabled=true`
+#   and drop the mksecret block below.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -76,7 +77,7 @@ helm upgrade --install eventide infra/helm/eventide \
   --set publicUrl="$PUBLIC_URL" \
   --set eso.enabled=false \
   $(for s in $SERVICES; do echo --set services.$s.image.tag=$TAG; done) \
-  --wait --timeout 300s
+  --wait --timeout 420s
 
 for svc in $SERVICES; do
   kubectl -n eventide rollout status "deployment/$svc" --timeout=180s
@@ -87,4 +88,4 @@ echo "deployed. smoke test:"
 echo "  curl http://$NLB/health/live       # {\"status\":\"ok\",\"service\":\"event\"}"
 echo "  curl http://$NLB/api/events"
 echo "  curl http://$NLB/api/auth/jwks"
-echo "  # then: bash scripts/db-bootstrap.sh  (migrations)  &&  make seed AUTH_URL=http://$NLB"
+echo "  # migrations: bash scripts/db-bootstrap.sh   ·   seed: bash scripts/seed.sh"
