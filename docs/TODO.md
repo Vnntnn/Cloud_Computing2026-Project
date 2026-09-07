@@ -298,8 +298,12 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       registration as `Authorization: Bearer` (`lib/eden.ts` `onRequest`).
 - [x] Dev parity: Vite proxies `/api/{auth,events,registrations}` → :3000/:3001/:3002, so
       the SPA always talks to its own origin — identical to prod behind one ingress.
-- [x] `bun run build` / `check-types` / `lint` green. **Not yet run in a real browser**
-      (Chrome extension not connected this session) — the APIs it calls are all E2E-verified.
+- [x] `bun run build` / `check-types` / `lint` green. **Browser E2E verified 2026-09-07**
+      (headless Chrome via puppeteer-core, 9/9): list → detail → sign-up → auto sign-in →
+      book a seeded event → my tickets → log out, no API 4xx. `apps/web/test/e2e.md`.
+      One fix needed: `auth` must `trustedOrigins` the Vite dev origin (`localhost:5173`)
+      or better-auth's CSRF check rejects login — set in the auth `dev` script; deployed is
+      same-origin so no config.
 - [ ] Build → S3 → CloudFront (or Cloudflare, per the Week 2 decision). *(needs lab)*
 - [ ] **`GATE`** — deployed SPA completes Google login and books a ticket. *(needs Google
       OAuth client + deploy)*
