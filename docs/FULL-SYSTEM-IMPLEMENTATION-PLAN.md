@@ -170,17 +170,19 @@
 
   All Elysia request and response schemas use t/TypeBox, remain in unbroken method chains, and continue exporting Eden Treaty application types.
 
-  ## Implementation Status — 2026-09-07
+  ## Implementation Status — 2026-09-08
 
   Legend: `[x]` done · `[~]` partial (note explains the gap) · `[ ]` not started.
 
-  Milestones 0–5 are substantially complete. `bun run lint / check-types / test /
-  build` all pass. The backend purchase path is verified end-to-end locally
-  (sign-in → order → idempotent replay → mock payment → order CONFIRMED → tickets
-  issued → reservation-expiry releases inventory). **All work is uncommitted**
-  (~122 files on `main`). Not yet done: doc updates (M0/M7), most of the test
-  matrix, k3d/EKS rehearsals, and frontend polish (QR rendering, camera scanner,
-  admin audit/moderation/reconcile screens).
+  Milestones 0–5 are substantially complete and committed on branch
+  `feat/full-system-v2`. `bun run lint / check-types / test / build` all pass;
+  the backend transaction & authorization matrix is now automated (oversell,
+  idempotency, hold expiry, payment reconciliation, QR scans, membership/ban)
+  and CI runs it against a real Postgres plus a `scripts/smoke.ts` persona
+  `e2e` job. Not yet done: doc updates (M0/M7 — SYSTEM-DESIGN, decision log,
+  TODO, REPORT, DEMO-RUNSHEET still describe the 3-service MVP), k3d/EKS
+  rehearsals, and the Phase 4 frontend screens (QR rendering, camera scanner,
+  organizer image manager + sales summary, admin moderation/audit/reconcile).
 
   ## Staged Implementation Checklist
 
@@ -255,17 +257,23 @@
 
   ## Test and Acceptance Plan
 
-  - [~] Schema tests verify ID types, foreign keys inside each database, absence of cross-database FKs, checks, indexes, and unique constraints. `packages/db/src/schema.test.ts` exists; coverage vs the full list not audited.
-  - [ ] Better Auth tests cover email/password, Google OAuth configuration, role claims, organizer approval, ban enforcement, session revocation, and audit logs. Only health/guard tests exist.
-  - [ ] Parallel order tests prove the final ticket cannot be oversold.
-  - [~] Repeated requests with one idempotency key produce one order, one payment, and one set of tickets. Verified manually via a smoke script; no automated test.
-  - [~] Expired holds release inventory; paid holds cannot expire. Expiry-releases-inventory verified manually; no automated test.
-  - [ ] Payment confirmation failure produces PENDING_VERIFICATION and reconciliation completes without double payment.
-  - [ ] Refunds cancel the correct tickets and restore inventory once.
-  - [ ] QR tests cover valid, tampered, duplicate, cancelled, and wrong-event scans.
-  - [ ] Frontend tests cover route guards, validated search parameters, loading/error/empty states, form errors, query invalidation, and retry behavior.
-  - [ ] E2E personas cover attendee purchase, organizer approval/event publication/check-in, and admin moderation.
-  - [ ] A sold-out event displays “Sold out,” checkout returns 409, and no waiting-room or waitlist control appears.
+  CI (`.github/workflows/ci.yml`) now runs the `check` job against a real
+  Postgres and a second `e2e` job that boots the four services and runs
+  `scripts/smoke.ts` (`make smoke`). Component tests use `@eventide/shared/testing`
+  (a `test.preload` JWKS fixture so the real `bearerAuth` guard runs, plus HTTP
+  stubs for in-cluster peers).
+
+  - [x] Schema tests verify ID types, foreign keys inside each database, absence of cross-database FKs, checks, indexes, and unique constraints. `packages/db/src/schema.test.ts` — text ids across boundaries, zero cross-DB FKs, every named CHECK + unique.
+  - [~] Better Auth tests cover email/password, Google OAuth configuration, role claims, organizer approval, ban enforcement, session revocation, and audit logs. `apps/auth/test/membership.test.ts` covers all of these **except Google OAuth config** (no creds in CI).
+  - [x] Parallel order tests prove the final ticket cannot be oversold. `orders.oversell.test.ts` — `QUOTA+6` concurrent orders, exactly `QUOTA` succeed.
+  - [~] Repeated requests with one idempotency key produce one order, one payment, and one set of tickets. Order side: `orders.idempotency.test.ts` (3 concurrent → one order/one item set). Payment side: `checkout.test.ts` (one payment/one attempt). Not asserted as a single cross-service chain outside the smoke.
+  - [x] Expired holds release inventory; paid holds cannot expire. `orders.idempotency.test.ts` › "hold expiry".
+  - [x] Payment confirmation failure produces PENDING_VERIFICATION and reconciliation completes without double payment. `checkout.test.ts` › "goes PENDING_VERIFICATION … then reconciles once".
+  - [~] Refunds cancel the correct tickets and restore inventory once. Payment-side refund (one refund row, idempotent) is tested; the registration-side inventory/ticket restore has no dedicated test yet (exercised only via `/internal`).
+  - [x] QR tests cover valid, tampered, duplicate, cancelled, and wrong-event scans. `checkin.test.ts` (5 outcomes + payload hash + one row per scan).
+  - [ ] Frontend tests cover route guards, validated search parameters, loading/error/empty states, form errors, query invalidation, and retry behavior. **Phase 4.**
+  - [x] E2E personas cover attendee purchase, organizer approval/event publication/check-in, and admin moderation. `scripts/smoke.ts` (CI `e2e` job) — 27 assertions.
+  - [x] A sold-out event returns 409 and exposes no queue action. `scripts/smoke.ts` + `orders.oversell.test.ts`. (The "Sold out" label is Phase 4 frontend.)
   - [x] bun run lint, bun run check-types, bun run test, and bun run build pass.
   - [x] Liveness endpoints remain database-free; readiness checks only the service’s own database. `/health/live` returns a static payload; `/health/ready` checks the service DB.
 
