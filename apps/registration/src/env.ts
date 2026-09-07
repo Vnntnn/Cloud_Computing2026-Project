@@ -4,10 +4,10 @@ import { z } from 'zod'
 /**
  * Boot-time env validation (Zod is confined to this path — CLAUDE.md).
  *
- * On EKS `DATABASE_URL` is injected by External Secrets Operator from Secrets
- * Manager `eventide/registration` (SYSTEM-DESIGN §5.2). The URLs are plain
- * config — in-cluster they are Service DNS names. Locally the defaults match
- * `make dev` (auth :3000, event :3001, registration :3002).
+ * On EKS `DATABASE_URL` arrives in the `eventide-registration` k8s Secret, built
+ * by `scripts/deploy.sh` from Secrets Manager (SYSTEM-DESIGN §5.2). The URLs are
+ * plain config — in-cluster they are Service DNS names. Locally the defaults
+ * match `make dev` (auth :3000, event :3001, registration :3002).
  */
 export const env = defineEnv(
   z.object({

@@ -25,9 +25,11 @@ seed-eks: ## demo seed the DEPLOYED cluster (in-cluster one-off pod — RDS is p
 	bash scripts/seed.sh
 
 # --- AWS: session lifecycle --------------------------------------------
+# NODE_INSTANCE_TYPE=t3.medium for the week-4 HPA-to-8 load test (t3.small's
+# ~11-pod ceiling is too tight); default t3.small keeps EC2 cost down otherwise.
 up: ## apply 20-platform (EKS + RDS + NLB + ingress-nginx), point kubectl at it
 	$(TF_PLATFORM) init -input=false
-	$(TF_PLATFORM) apply -auto-approve
+	$(TF_PLATFORM) apply -auto-approve $(if $(NODE_INSTANCE_TYPE),-var node_instance_type=$(NODE_INSTANCE_TYPE))
 	aws eks update-kubeconfig --region us-east-1 --name eventide
 	kubectl get nodes
 

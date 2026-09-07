@@ -5,21 +5,23 @@ Terraform is split **by lifetime, not by resource type** (SYSTEM-DESIGN.md §7).
 | Layer | Contents | Lifetime | Cost |
 |---|---|---|---|
 | [`00-bootstrap/`](./00-bootstrap/) | State bucket | Once, by hand — not Terraform | ~$0 |
-| [`10-foundation/`](./10-foundation/) | ECR ×3, S3 uploads bucket, Secrets Manager ×3 | **Permanent** — never destroyed | ~$1/mo |
-| [`20-platform/`](./20-platform/) | EKS, managed node group, RDS, NLB, `rds-master` secret | **Destroyed every session** | ~$180/mo if left up |
+| [`10-foundation/`](./10-foundation/) | ECR ×5, S3 uploads bucket, Secrets Manager ×3, **optional** Route 53 zone + ACM cert (`dns.tf`) and Google OAuth secret (`oauth.tf`) | **Permanent** — never destroyed | ~$1–1.5/mo |
+| [`20-platform/`](./20-platform/) | EKS, managed node group, RDS, NLB (+ TLS listener + Route 53 ALIAS when DNS is on), ingress-nginx / metrics-server via `helm_release`, `rds-master` secret | **Destroyed every session** | ~$180/mo if left up |
 
-`20-platform/` is scaffolded and `terraform validate`-clean but **not yet applied**.
-Expect its first one or two applies to fail on the lab role ARNs or a subnet AZ;
-that is the plan working (PROJECT-KNOWLEDGE-BASE.md §7). See its own README.
+Expect `20-platform`'s first one or two applies on a fresh lab to fail on the lab
+role ARNs or a subnet AZ; that is the plan working (PROJECT-KNOWLEDGE-BASE.md §7).
 
 ## Order of operations, first time on a fresh account
 
 ```bash
-#   1. create the state bucket        → 00-bootstrap/README.md
-#   2. terraform -chdir=10-foundation init && apply
-#   3. enter real secret values       → 10-foundation/README.md
-#   4. (Day 2) terraform -chdir=20-platform init && apply
+#   1. create the state bucket           → 00-bootstrap/README.md
+#   2. terraform -chdir=infra/terraform/10-foundation init && apply
+#   3. (optional) dns.auto.tfvars + re-apply → paste NS records at your DNS host
+#      (optional) google.auto.tfvars + re-apply  → 10-foundation/README.md
+#   4. terraform -chdir=infra/terraform/20-platform init && apply   (== `make up`)
 ```
+
+Per session it is just step 4 — see **Session ritual** below.
 
 ## AWS credentials
 
