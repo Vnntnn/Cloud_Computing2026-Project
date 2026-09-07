@@ -139,23 +139,22 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 - [x] Add RDS to `20-platform`: `db.t3.micro`, `skip_final_snapshot = true`,
       `deletion_protection = false`, SG allowing only the node SG. *(done Day 2 —
       `20-platform/rds.tf`, `storage_encrypted = true`, `backup_retention_period = 0`.)*
-- [~] Kubernetes `Job` that connects as master and creates `auth_db` / `event_db` /
-      `registration_db` plus their three users. *(`infra/k8s/db-bootstrap.job.yaml` +
-      `packages/db/Dockerfile` + `scripts/db-bootstrap.sh` (`make db-bootstrap`) written &
-      validated. `random_password.svc` ×3 + `MASTER_DATABASE_URL` added to the
-      `eventide/rds-master` secret. **2026-09-07:** `10-foundation` re-applied → ECR repo
-      `eventide/db-bootstrap` now exists. `make up` clean (23 res). Job manifest + secret
-      creation from Secrets Manager both work. **BLOCKED: cannot push the image to ECR from
-      a VPN** — `docker push` and `buildx --push` both stall on the last ~4 layers (~150 MB
-      image; small ECR requests fine, large blob PUTs hang — VPN MSS/MTU). Fixes for next
-      session: (a) push off-VPN, or (b) lower OrbStack MTU, or (c) slim the image
-      (`oven/bun:1` → `oven/bun:1-slim` in `packages/db/Dockerfile`). Then `make db-bootstrap`
-      should run clean.)*
-- [ ] **`GATE`** — full `destroy`, then rebuild from zero, end to end. This is the step
-      everyone skips. *(runbook: `docs/week1-closeout.md`. db-bootstrap image slimmed
-      185 MB → 89 MB (`oven/bun:1-slim` + focused deps, no monorepo lockfile) — verified
-      local. Everything else scripted: `make up` / `db-bootstrap.sh` / `make deploy` (Helm)
-      / `make seed` / `make down`. **Needs a lab session.**)*
+- [x] Kubernetes `Job` — creates `auth_db`/`event_db`/`registration_db` + owner roles,
+      runs the drizzle migrations. **DONE against RDS 2026-09-07.** Image slimmed
+      185 MB → 89 MB (`oven/bun:1-slim` + focused `bun add`, not the monorepo lockfile) —
+      the ECR push that stalled on the VPN now goes through. Job completes in ~11 s.
+      Fixes found on the first real run: `USER bun` → `USER 1000` (k8s `runAsNonRoot`
+      needs a numeric uid), and `?sslmode=require` on `MASTER_DATABASE_URL` (RDS PG16's
+      default parameter group sets `rds.force_ssl=1`).
+- [x] **`GATE`** — full `destroy`, then rebuild from zero, end to end. **PASSED 2026-09-07.**
+      `make down` (25 res, verify sweep empty everywhere) — **8m56s**. `make up` from
+      nothing — **16m37s**. Then `db-bootstrap.sh` → `deploy.sh` (helm, 4 services all
+      rolled out) → `seed.sh` (in-cluster; RDS is private) → 15 events, and the full app
+      flow (sign-in → JWT → book → my tickets) + the cross-DB boundary
+      (`event_svc` → `registration_db` = `permission denied`) all green through the fresh
+      NLB. 5 automation bugs found + fixed during the rebuild (numeric USER, sslmode,
+      web ECR repo, `BETTER_AUTH_SECRET` length, in-cluster seed) — all committed.
+      Runbook: `docs/week1-closeout.md`.
 
 ### Day 5 (Fri) — checkpoint
 
