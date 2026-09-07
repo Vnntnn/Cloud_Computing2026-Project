@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { getTableConfig } from 'drizzle-orm/pg-core'
 import { events } from './event/schema.ts'
-import { tickets } from './registration/schema.ts'
+import { orders, ticketInventory, tickets } from './registration/schema.ts'
 
 describe('event_db schema', () => {
   it('events.owner_id is text, not uuid (better-auth ids are text — CLAUDE.md)', () => {
@@ -12,14 +12,24 @@ describe('event_db schema', () => {
 })
 
 describe('registration_db schema', () => {
-  it('tickets has a unique (event_id, user_id) constraint', () => {
-    const { uniqueConstraints } = getTableConfig(tickets)
-    const cols = uniqueConstraints.flatMap((u) => u.columns.map((c) => c.name))
-    expect(cols).toEqual(expect.arrayContaining(['event_id', 'user_id']))
+  it('cross-database identifiers do not have foreign keys', () => {
+    expect(getTableConfig(orders).foreignKeys).toHaveLength(0)
+    expect(getTableConfig(ticketInventory).foreignKeys).toHaveLength(0)
   })
 
   it('tickets.user_id is text, not uuid', () => {
     const { columns } = getTableConfig(tickets)
     expect(columns.find((c) => c.name === 'user_id')?.getSQLType()).toBe('text')
+  })
+
+  it('inventory has database checks protecting quota counters', () => {
+    const names = getTableConfig(ticketInventory).checks.map((check) => check.name)
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'inventory_within_quota',
+        'inventory_reserved_nonnegative',
+        'inventory_sold_nonnegative',
+      ]),
+    )
   })
 })

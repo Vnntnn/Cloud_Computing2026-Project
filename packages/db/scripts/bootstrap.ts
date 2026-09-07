@@ -26,6 +26,7 @@ const SERVICES = [
   { role: 'auth_svc', db: 'auth_db', config: 'drizzle.auth.config.ts' },
   { role: 'event_svc', db: 'event_db', config: 'drizzle.event.config.ts' },
   { role: 'registration_svc', db: 'registration_db', config: 'drizzle.registration.config.ts' },
+  { role: 'payment_svc', db: 'payment_db', config: 'drizzle.payment.config.ts' },
 ] as const
 
 const pkgRoot = fileURLToPath(new URL('..', import.meta.url))

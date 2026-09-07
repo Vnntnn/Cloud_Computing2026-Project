@@ -13,7 +13,7 @@ import { defineConfig } from 'drizzle-kit'
 // reachable from outside the VPC.
 export default defineConfig({
   dialect: 'postgresql',
-  schema: './src/auth/schema.ts',
+  schema: ['./src/auth/schema.ts', './src/auth/app-schema.ts'],
   out: './migrations/auth',
   dbCredentials: { url: process.env.DATABASE_URL! },
 })
