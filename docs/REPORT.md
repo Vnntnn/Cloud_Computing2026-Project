@@ -1,8 +1,12 @@
 # Eventide — Cloud Computing 2026 Project Report
 
-> **Draft — near complete.** Every section has real prose and real numbers; the
-> only `⟨…⟩` left is the final Learner-Lab credit figure (§8), read from the meter
-> at the end of the term. Companions:
+> **Draft.** Written for the three-service MVP, then updated for the Full-System
+> V2 scope (payment service, orders/inventory/refunds/check-in, TanStack + shadcn
+> SPA — `docs/FULL-SYSTEM-IMPLEMENTATION-PLAN.md`). The autoscaling / rebuild /
+> cost numbers are from real runs on the three-service stack; the V2 chart adds
+> one 1-replica pod and needs one k3d + one EKS rehearsal to re-confirm them. The
+> `⟨…⟩` in §8 is the final Learner-Lab credit figure, read at the end of the
+> term. Companions:
 > [`SYSTEM-DESIGN.md`](./SYSTEM-DESIGN.md) (what), [`PROJECT-KNOWLEDGE-BASE.md`](./PROJECT-KNOWLEDGE-BASE.md)
 > (why + decision log), [`TODO.md`](./TODO.md) (build state).
 >
@@ -417,10 +421,20 @@ running-instance query, target groups — every check must return empty.
   autoscaling demo, but it was a third new thing (alongside Kubernetes and
   Terraform) in a four-week solo timeline, and no rubric awards marks for the
   language. Delivery risk, not ignorance.
+- **A real payment provider + signed webhook ingestion** — the mock demonstrates
+  the boundary and the compensating transaction; a real integration is the next
+  step, behind a formal PCI scope review.
+- **Order/ticket transactional outbox → EventBridge/SQS** so confirmation,
+  refund and ticket-email side-effects are retried asynchronously instead of
+  inline.
+- **A waiting room + waitlists + Redis seat locks** for events that would sell
+  out in seconds — the current design returns `409` immediately with no queue.
 
 ## 10. Appendices
 
 - `docs/lab-probe-2026-09-07.txt` — raw capability probe (what the lab denies).
+- `docs/FULL-SYSTEM-IMPLEMENTATION-PLAN.md` — the V2 milestone checklist + the
+  Test & Acceptance matrix (each item mapped to a test file).
 - `docs/week1-closeout.md` — the rebuild-from-zero runbook.
 - `docs/DEMO-RUNSHEET.md` — the live-demo script.
 - `docs/checkpoint.html` — the Week-1 checkpoint deck (architecture SVG is here).
