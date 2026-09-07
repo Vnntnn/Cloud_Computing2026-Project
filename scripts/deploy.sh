@@ -56,13 +56,16 @@ BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-$(rds password)}"
 
 mksecret() { kubectl -n eventide create secret generic "$1" "${@:2}" \
   --dry-run=client -o yaml | kubectl apply -f -; }
+# ?sslmode=require — RDS PG16 forces SSL (rds.force_ssl=1); `require` encrypts
+# without verifying the cert, which is fine inside the VPC.
+SSL="?sslmode=require"
 mksecret eventide-auth \
-  --from-literal=DATABASE_URL="postgres://auth_svc:$(rds AUTH_SVC_PASSWORD)@${HOST}:${PORT}/auth_db" \
+  --from-literal=DATABASE_URL="postgres://auth_svc:$(rds AUTH_SVC_PASSWORD)@${HOST}:${PORT}/auth_db${SSL}" \
   --from-literal=BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET}"
 mksecret eventide-event \
-  --from-literal=DATABASE_URL="postgres://event_svc:$(rds EVENT_SVC_PASSWORD)@${HOST}:${PORT}/event_db"
+  --from-literal=DATABASE_URL="postgres://event_svc:$(rds EVENT_SVC_PASSWORD)@${HOST}:${PORT}/event_db${SSL}"
 mksecret eventide-registration \
-  --from-literal=DATABASE_URL="postgres://registration_svc:$(rds REGISTRATION_SVC_PASSWORD)@${HOST}:${PORT}/registration_db"
+  --from-literal=DATABASE_URL="postgres://registration_svc:$(rds REGISTRATION_SVC_PASSWORD)@${HOST}:${PORT}/registration_db${SSL}"
 
 # --- deploy the chart -------------------------------------------------
 echo "== helm upgrade --install eventide =="

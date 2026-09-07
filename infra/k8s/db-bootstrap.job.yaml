@@ -25,6 +25,7 @@ spec:
       restartPolicy: Never
       securityContext:
         runAsNonRoot: true
+        runAsUser: 1000 # oven/bun images' `bun` user — must be numeric for runAsNonRoot
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: bootstrap

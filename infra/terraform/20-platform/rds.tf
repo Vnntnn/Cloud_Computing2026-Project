@@ -92,7 +92,10 @@ resource "aws_secretsmanager_secret_version" "db_master" {
       port     = aws_db_instance.main.port
       dbname   = "postgres"
       # Ready-to-use for the db-bootstrap Job's env (scripts/bootstrap.ts).
-      MASTER_DATABASE_URL = "postgres://${aws_db_instance.main.username}:${random_password.db_master.result}@${aws_db_instance.main.endpoint}/postgres"
+      # `?sslmode=require` — RDS PG16's default parameter group sets rds.force_ssl=1,
+      # so a plain connection is rejected ("no pg_hba.conf entry ... no encryption").
+      # `require` = encrypt, don't verify the cert (fine inside the VPC).
+      MASTER_DATABASE_URL = "postgres://${aws_db_instance.main.username}:${random_password.db_master.result}@${aws_db_instance.main.endpoint}/postgres?sslmode=require"
     },
     # AUTH_SVC_PASSWORD / EVENT_SVC_PASSWORD / REGISTRATION_SVC_PASSWORD
     { for k, v in random_password.svc : "${upper(k)}_PASSWORD" => v.result },
