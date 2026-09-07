@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "PORT=3002 bun --watch src/index.ts",
     "build": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile dist/server src/index.ts",
+    "build:expire": "bun build --compile --minify-whitespace --minify-syntax --target bun --outfile dist/expire src/expire.ts",
     "start": "./dist/server",
     "lint": "biome check .",
     "check-types": "tsc --noEmit",
@@ -20,6 +21,7 @@
     "@eventide/shared": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "elysia": "^1.4.9",
+    "jose": "^6.2.12",
     "postgres": "^3.4.9",
     "zod": "^4.1.11"
   }

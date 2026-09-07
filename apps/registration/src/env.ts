@@ -27,6 +27,9 @@ export const env = defineEnv(
     // auth's JWKS endpoint + expected iss/aud — local JWT verification (§5.1).
     AUTH_JWKS_URL: z.url().default('http://localhost:3000/api/auth/jwks'),
     AUTH_BASE_URL: z.url().default('http://localhost:3000'),
+    INTERNAL_SERVICE_TOKEN: z.string().min(32).default('dev-only-internal-service-token-000000'),
+    TICKET_SIGNING_SECRET: z.string().min(32).default('dev-only-ticket-signing-secret-0000000'),
+    TICKET_SIGNING_KEY_ID: z.string().default('eventide-dev-v1'),
   }),
 )
 
@@ -34,7 +37,14 @@ export const env = defineEnv(
 // silently use a localhost default.
 if (env.NODE_ENV === 'production') {
   const missing = (
-    ['DATABASE_URL', 'EVENT_SERVICE_URL', 'AUTH_JWKS_URL', 'AUTH_BASE_URL'] as const
+    [
+      'DATABASE_URL',
+      'EVENT_SERVICE_URL',
+      'AUTH_JWKS_URL',
+      'AUTH_BASE_URL',
+      'INTERNAL_SERVICE_TOKEN',
+      'TICKET_SIGNING_SECRET',
+    ] as const
   ).filter((k) => !process.env[k])
   if (missing.length > 0) {
     throw new Error(`registration: missing required env in production: ${missing.join(', ')}`)

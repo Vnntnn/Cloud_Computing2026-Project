@@ -20,19 +20,22 @@ describe('registration health', () => {
 })
 
 describe('registration auth guard', () => {
-  it('POST /api/registrations without a bearer token is 401', async () => {
+  it('POST /api/orders without a bearer token is 401', async () => {
     const res = await app.handle(
-      new Request('http://localhost/api/registrations', {
+      new Request('http://localhost/api/orders', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ eventId: '00000000-0000-4000-8000-000000000000' }),
+        body: JSON.stringify({
+          eventId: '00000000-0000-4000-8000-000000000000',
+          items: [{ ticketTypeId: '00000000-0000-4000-8000-000000000001', quantity: 1 }],
+        }),
       }),
     )
     expect(res.status).toBe(401)
   })
 
-  it('GET /api/registrations/me without a bearer token is 401', async () => {
-    const res = await app.handle(new Request('http://localhost/api/registrations/me'))
+  it('GET /api/orders/me without a bearer token is 401', async () => {
+    const res = await app.handle(new Request('http://localhost/api/orders/me'))
     expect(res.status).toBe(401)
   })
 })

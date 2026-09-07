@@ -23,10 +23,14 @@ RUN cd apps/registration && bun build \
       --target bun \
       --outfile /app/server \
       src/index.ts
+RUN cd apps/registration && bun build \
+      --compile --minify-whitespace --minify-syntax --target bun \
+      --outfile /app/expire src/expire.ts
 
 FROM gcr.io/distroless/base-debian12:nonroot
 WORKDIR /app
 COPY --from=build /app/server ./server
+COPY --from=build /app/expire ./expire
 ENV NODE_ENV=production
 USER nonroot
 EXPOSE 3000

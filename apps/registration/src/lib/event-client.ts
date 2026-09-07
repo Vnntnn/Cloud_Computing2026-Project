@@ -1,33 +1,41 @@
 import { env } from '../env.ts'
 
-/** The trimmed shape `event` exposes at `GET /api/events/:id/summary` (§4.4). */
-export interface EventSummary {
+export interface TicketTypeSummary {
   id: string
+  eventId: string
+  name: string
+  description: string
+  price: string
+  quota: number
+  maxPerOrder: number
+  salesStartAt: string | null
+  salesEndAt: string | null
+}
+
+export interface CheckoutSummary {
+  id: string
+  ownerId: string
   title: string
-  capacity: number
+  status: string
+  refundPercent: number
+  salesStartAt: string
+  salesEndAt: string
+  ticketTypes: TicketTypeSummary[]
 }
 
-export class EventNotFound extends Error {
-  constructor(eventId: string) {
-    super(`event ${eventId} not found`)
-  }
-}
-
+export class EventNotFound extends Error {}
 export class EventServiceUnavailable extends Error {}
 
-/**
- * The one in-cluster hop: `registration` asks `event` for a booking's title +
- * capacity, then stores both alongside the ticket so capacity enforcement is a
- * single local transaction (SYSTEM-DESIGN §4.3).
- */
-export async function fetchEventSummary(eventId: string): Promise<EventSummary> {
-  let res: Response
+export async function fetchCheckoutSummary(eventId: string): Promise<CheckoutSummary> {
+  let response: Response
   try {
-    res = await fetch(`${env.EVENT_SERVICE_URL}/api/events/${eventId}/summary`)
+    response = await fetch(`${env.EVENT_SERVICE_URL}/internal/events/${eventId}/checkout-summary`, {
+      headers: { 'x-eventide-internal-token': env.INTERNAL_SERVICE_TOKEN },
+    })
   } catch (cause) {
     throw new EventServiceUnavailable('event service unreachable', { cause })
   }
-  if (res.status === 404) throw new EventNotFound(eventId)
-  if (!res.ok) throw new EventServiceUnavailable(`event service returned ${res.status}`)
-  return (await res.json()) as EventSummary
+  if (response.status === 404) throw new EventNotFound(`event ${eventId} not found`)
+  if (!response.ok) throw new EventServiceUnavailable(`event service returned ${response.status}`)
+  return response.json() as Promise<CheckoutSummary>
 }

@@ -1,32 +1,85 @@
 import { t } from 'elysia'
 
-/**
- * Request/response models for the registration module — Elysia `t` only,
- * registered via `.model()`. Single source of truth for validation and types;
- * no parallel Zod schema (CLAUDE.md).
- */
+const money = t.String({ pattern: '^\\d+(\\.\\d{2})$' })
+const orderStatus = t.Union([
+  t.Literal('PENDING'),
+  t.Literal('CONFIRMED'),
+  t.Literal('CANCELLED'),
+  t.Literal('EXPIRED'),
+  t.Literal('PENDING_VERIFICATION'),
+  t.Literal('REFUNDED'),
+])
 
-const createTicket = t.Object({
-  eventId: t.String({ format: 'uuid' }),
-})
-
-// `event_title` / `event_capacity` are denormalised onto the ticket at booking
-// time (§4.3), so "my tickets" needs no join and no second hop to `event`.
-const ticket = t.Object({
+const orderItem = t.Object({
   id: t.String({ format: 'uuid' }),
+  ticketTypeId: t.String({ format: 'uuid' }),
+  ticketTypeName: t.String(),
+  unitPrice: money,
+  quantity: t.Integer(),
+  lineTotal: money,
+})
+const order = t.Object({
+  id: t.String({ format: 'uuid' }),
+  userId: t.String(),
   eventId: t.String({ format: 'uuid' }),
   eventTitle: t.String(),
-  eventCapacity: t.Integer({ minimum: 1 }),
+  status: orderStatus,
+  currency: t.Literal('THB'),
+  refundPercent: t.Integer(),
+  subtotal: money,
+  total: money,
+  expiresAt: t.String({ format: 'date-time' }),
+  confirmedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+  cancelledAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
   createdAt: t.String({ format: 'date-time' }),
+  items: t.Array(orderItem),
 })
-
-const count = t.Object({
+const ticket = t.Object({
+  id: t.String({ format: 'uuid' }),
+  orderId: t.String({ format: 'uuid' }),
   eventId: t.String({ format: 'uuid' }),
-  count: t.Integer({ minimum: 0 }),
+  ticketTypeId: t.String({ format: 'uuid' }),
+  eventTitle: t.String(),
+  ticketTypeName: t.String(),
+  status: t.Union([
+    t.Literal('VALID'),
+    t.Literal('USED'),
+    t.Literal('CANCELLED'),
+    t.Literal('REFUNDED'),
+  ]),
+  issuedAt: t.String({ format: 'date-time' }),
+  qrToken: t.String(),
 })
 
-export const RegistrationModel = { createTicket, ticket, count }
+export const RegistrationModel = {
+  createOrder: t.Object({
+    eventId: t.String({ format: 'uuid' }),
+    items: t.Array(
+      t.Object({
+        ticketTypeId: t.String({ format: 'uuid' }),
+        quantity: t.Integer({ minimum: 1, maximum: 20 }),
+      }),
+      { minItems: 1, maxItems: 10 },
+    ),
+  }),
+  order,
+  orderList: t.Array(order),
+  ticket,
+  ticketList: t.Array(ticket),
+  confirm: t.Object({ paymentId: t.String({ format: 'uuid' }) }),
+  paymentOrder: t.Object({
+    id: t.String({ format: 'uuid' }),
+    userId: t.String(),
+    status: orderStatus,
+    total: money,
+    currency: t.Literal('THB'),
+    refundPercent: t.Integer(),
+    expiresAt: t.String({ format: 'date-time' }),
+  }),
+  checkIn: t.Object({
+    eventId: t.String({ format: 'uuid' }),
+    qrToken: t.String({ minLength: 20 }),
+  }),
+}
 
-export type CreateTicket = typeof createTicket.static
-export type Ticket = typeof ticket.static
-export type TicketCount = typeof count.static
+export type CreateOrder = typeof RegistrationModel.createOrder.static

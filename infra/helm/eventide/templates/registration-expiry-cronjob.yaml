@@ -1,0 +1,37 @@
+{{- if .Values.services.registration.expiry.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: registration-expiry
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: eventide
+spec:
+  schedule: {{ .Values.services.registration.expiry.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ .Values.defaults.runAsUser }}
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: expire
+              image: {{ include "eventide.image" (dict "svc" .Values.services.registration "root" .) }}
+              command: ["/app/expire"]
+              envFrom:
+                - secretRef:
+                    name: {{ .Values.services.registration.secretName }}
+              resources:
+                requests: { cpu: 20m, memory: 64Mi }
+                limits: { cpu: 100m, memory: 128Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+{{- end }}
