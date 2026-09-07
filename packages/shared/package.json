@@ -8,7 +8,8 @@
     "./env": "./src/env.ts",
     "./models": "./src/models/index.ts",
     "./auth": "./src/auth/bearer.ts",
-    "./internal": "./src/auth/internal.ts"
+    "./internal": "./src/auth/internal.ts",
+    "./testing": "./src/testing/index.ts"
   },
   "scripts": {
     "lint": "biome check .",
