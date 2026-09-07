@@ -295,8 +295,12 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 - [x] `deploy.sh` injects `S3_BUCKET_NAME` + the session's AWS creds
       (`aws configure export-credentials`) into `eventide-event` — expires each session,
       re-`make deploy` (§5.3).
-- [ ] **`GATE`** — upload an image from the browser on the deployed system; bytes never
-      touch a pod. *(needs a lab session — presign against the real bucket.)*
+- [x] **`GATE`** — upload an image from the browser on the deployed system; bytes never
+      touch a pod. **PASSED 2026-09-07** — headless Chrome against `http://<nlb>/`:
+      create event + PNG → `POST /:id/cover-upload` (presigned PUT) → browser
+      `PUT` straight to `eventide-uploads-*.s3.amazonaws.com` → object lands
+      (`events/<id>/cover.png`, `image/png`) → presigned `GET` renders on the detail page.
+      `event` only ever generated URLs.
 
 ### Frontend — **hard cap: 2 days**
 
@@ -348,11 +352,17 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       Its CloudWatch agent needs `CloudWatchAgentServerPolicy` on the node role via
       `iam:AttachRolePolicy` — still unprobed. Probe commands in `addons.tf`. Fallback:
       `kubectl top pods` + HPA event log.)*
-- [~] k6 script against `/api/events`; tune load until replicas visibly climb and settle.
-      *(`load/k6/events.js` — ramping-vus 0→50→120→0 over 12 min; `make load BASE_URL=…`;
-      `load/README.md` has the watch-pane commands + tuning notes. Not yet run.)*
-- [ ] **`GATE`** — replicas go 2 → 8 under load and scale back down afterwards.
-- [ ] Screenshot `kubectl get hpa -w`, pod counts, and Container Insights graphs.
+- [x] k6 script against `/api/events` — `load/k6/events.js`, tuned to 0→80→200→0 over
+      ~10 min. Run 2026-09-07: 98,500 req @ 226 req/s, p95 431 ms, 0.10 % fail (thresholds
+      green).
+- [x] **`GATE`** — replicas go 2 → 8 under load and scale back down afterwards.
+      **PASSED 2026-09-07 on the deployed system** (t3.medium nodes): **2 → 8 in ~70 s**
+      (`New size: 3→5→7→8, cpu above target`), held through the load, **8 → 2 over ~60 s**
+      (`New size: 6→4→2, All metrics below target`). No pod `Pending`, node CPU peaked ~12 %.
+- [x] Evidence captured — `docs/autoscaling-evidence.txt` (HPA event history + k6 summary),
+      the CPU/replica timeline in `docs/REPORT.md` §7. Container Insights left off
+      (`iam:AttachRolePolicy` denied again this session); `kubectl top pods` at peak showed
+      ~40 m/pod.
 
 > **Do not scale past 8.** A `t3.medium` allows 17 pods (3 ENIs × 6 IPv4); two nodes minus
 > system pods leaves ~28. Beyond that, pods sit `Pending` and it looks like a bug.

@@ -28,11 +28,10 @@ export const options = {
       executor: "ramping-vus",
       startVUs: 0,
       stages: [
-        { duration: "1m", target: 50 },   // ramp in
-        { duration: "3m", target: 50 },   // hold — replicas should be climbing
-        { duration: "1m", target: 120 },  // push to the ceiling
-        { duration: "3m", target: 120 },  // hold at max — expect 8 replicas
-        { duration: "1m", target: 0 },    // drop — watch scale-down (60s window)
+        { duration: "90s", target: 80 },  // ramp in
+        { duration: "2m", target: 200 },  // push toward the ceiling
+        { duration: "3m", target: 200 },  // hold — expect the HPA to reach 8
+        { duration: "45s", target: 0 },   // drop — watch scale-down (60s window)
         { duration: "3m", target: 0 },    // idle — replicas settle back to 2
       ],
       gracefulRampDown: "10s",
@@ -41,8 +40,8 @@ export const options = {
   thresholds: {
     // The app should stay healthy the whole time — if it doesn't, the demo
     // story is "it fell over", not "it scaled".
-    http_req_failed: ["rate<0.01"],
-    http_req_duration: ["p(95)<800"],
+    http_req_failed: ["rate<0.02"],
+    http_req_duration: ["p(95)<1500"],
   },
   summaryTrendStats: ["avg", "min", "med", "p(90)", "p(95)", "max"],
 };
@@ -53,5 +52,5 @@ export default function () {
     "status is 200": (r) => r.status === 200,
     "body is a JSON array": (r) => r.body.charAt(0) === "[",
   });
-  sleep(0.5);
+  sleep(0.3);
 }

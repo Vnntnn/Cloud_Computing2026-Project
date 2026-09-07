@@ -1,8 +1,8 @@
 # Eventide — Cloud Computing 2026 Project Report
 
-> **Draft — near complete.** Every section has real prose; the only `⟨…⟩` left
-> are the week-4 autoscaling numbers (§7) and the final credit figure (§8), both
-> from the last lab run. Companions:
+> **Draft — near complete.** Every section has real prose and real numbers; the
+> only `⟨…⟩` left is the final Learner-Lab credit figure (§8), read from the meter
+> at the end of the term. Companions:
 > [`SYSTEM-DESIGN.md`](./SYSTEM-DESIGN.md) (what), [`PROJECT-KNOWLEDGE-BASE.md`](./PROJECT-KNOWLEDGE-BASE.md)
 > (why + decision log), [`TODO.md`](./TODO.md) (build state).
 >
@@ -271,11 +271,12 @@ matters more than the one-time exposure.
 feeds a **HorizontalPodAutoscaler on `event`**: CPU target 60 %, min 2,
 **max 8**.
 
-**The ceiling is 8 for a reason.** The VPC CNI turns a `t3.small`'s ENI/IP
-budget into ~11 pods per node; two nodes minus the system and ingress pods leave
-just enough for 8 `event` replicas. Scaling past that leaves pods `Pending` with
-an IP-exhaustion error that reads like a bug, not a limit — so the HPA `maxReplicas`
-encodes the infrastructure constraint.
+**The ceiling is 8 for a reason.** The VPC CNI turns a node's ENI/IP budget into
+a per-node pod limit — ~11 on a `t3.small`, ~17 on a `t3.medium`. The load test
+was run on **`t3.medium`** (`-var node_instance_type=t3.medium`) so all 8 `event`
+replicas plus the other services fit; on `t3.small` the last few would sit
+`Pending` with an IP-exhaustion error that reads like a bug, not a limit. Either
+way the HPA `maxReplicas` encodes the infrastructure constraint.
 
 **CloudWatch Container Insights** is a Terraform add-on
 (`amazon-cloudwatch-observability`), **gated off by default**: its agent needs
@@ -284,12 +285,33 @@ denied (§6). Fallback evidence for the report is `kubectl top pods` plus the HP
 event log — which is sufficient to show the scale-up/down.
 
 **Load test.** `load/k6/events.js` — a ramping-VU profile against
-`GET /api/events` (0 → 50 → 120 → 0 over 12 minutes) with thresholds on error
+`GET /api/events` (0 → 80 → 200 → 0 over ~10 minutes) with thresholds on error
 rate and p95 latency.
 
-**Evidence to capture:** `kubectl get hpa -w` showing replicas ⟨2 → 8 → 2⟩,
-`kubectl get pods -w` showing pods created then terminated, the k6 end-of-run
-summary, and Container Insights graphs (or `top` snapshots) for the window.
+**Result (2026-09-07, on the deployed system).** k6 drove **98,500 requests at
+226 req/s**; p95 latency **431 ms**, **0.10 %** failed (a few timeouts at peak) —
+both thresholds green, so the story is "it scaled", not "it fell over".
+
+The HPA followed:
+
+| time | CPU vs 60 % | replicas | HPA event |
+|---|---:|---:|---|
+| 12:38:53 | 13 % | 2 | — |
+| 12:39:05 | 69 % | 3 | `New size: 3; cpu above target` |
+| 12:39:16 | 69 % | 5 | `New size: 5` |
+| 12:39:40 | 122 % | 7 | `New size: 7` |
+| 12:40:03 | 88 % | **8** | `New size: 8` |
+| 12:40–12:45 | 86–146 % | 8 | held at max |
+| 12:46:04 | 11 % | 8 | load gone |
+| 12:46:51 | 4 % | 6 | `New size: 6; All metrics below target` |
+| 12:47:25 | 4 % | 4 | `New size: 4` |
+| 12:47:48 | 5 % | **2** | `New size: 2` |
+
+**2 → 8 in ~70 s** (0 s scale-up stabilisation), held for the load, **8 → 2 over
+~60 s** starting one stabilisation window after the load stopped. Node CPU peaked
+at ~12 % — the `t3.medium` had headroom to spare, and no pod went `Pending`.
+`kubectl top pods` at peak showed ~40 m CPU per `event` pod (target is 30 m =
+60 % of the 50 m request).
 
 ## 8. Cost
 
@@ -338,5 +360,6 @@ running-instance query, target groups — every check must return empty.
 - `docs/week1-closeout.md` — the rebuild-from-zero runbook.
 - `docs/DEMO-RUNSHEET.md` — the live-demo script.
 - `docs/checkpoint.html` — the Week-1 checkpoint deck (architecture SVG is here).
+- `docs/autoscaling-evidence.txt` — HPA event history + k6 summary from the §7 run.
 - Terraform module tree + key `.tf` excerpts.
 - `scripts/teardown.sh` verification transcript.
