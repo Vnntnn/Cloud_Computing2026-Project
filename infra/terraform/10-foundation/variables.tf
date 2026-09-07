@@ -23,9 +23,9 @@ variable "services" {
 }
 
 variable "tool_images" {
-  description = "Non-service images that get an ECR repo but no Secrets Manager secret (one-shot Jobs etc.)."
+  description = "Non-service images that get an ECR repo but no Secrets Manager secret (one-shot Jobs, the static SPA)."
   type        = list(string)
-  default     = ["db-bootstrap"]
+  default     = ["db-bootstrap", "web"]
 }
 
 variable "uploads_cors_allowed_origins" {
