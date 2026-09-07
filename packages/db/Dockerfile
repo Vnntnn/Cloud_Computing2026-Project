@@ -32,5 +32,7 @@ COPY packages/db/drizzle.auth.config.ts packages/db/drizzle.event.config.ts pack
 COPY packages/db/scripts ./scripts
 
 ENV NODE_ENV=production
-USER 1000 # oven/bun images' `bun` user — numeric so k8s runAsNonRoot can verify it
+# uid 1000 = the `bun` user in oven/bun images. Numeric so k8s runAsNonRoot can
+# verify it (a named user fails that check — hit on the first EKS run).
+USER 1000
 ENTRYPOINT ["bun", "scripts/bootstrap.ts"]
