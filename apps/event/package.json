@@ -15,6 +15,8 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1127.0",
+    "@aws-sdk/s3-request-presigner": "^3.1127.0",
     "@elysiajs/openapi": "^1.4.11",
     "@eventide/db": "workspace:*",
     "@eventide/shared": "workspace:*",

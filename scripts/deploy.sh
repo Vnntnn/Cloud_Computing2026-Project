@@ -63,8 +63,20 @@ SSL="?sslmode=require"
 mksecret eventide-auth \
   --from-literal=DATABASE_URL="postgres://auth_svc:$(rds AUTH_SVC_PASSWORD)@${HOST}:${PORT}/auth_db${SSL}" \
   --from-literal=BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET}"
+# event also gets S3: the uploads bucket name + the current session's AWS
+# credentials (the app's one AWS touch-point — presigning cover-image URLs;
+# IRSA and node-role access are both denied, §5.3). These expire with the
+# session — re-run `make deploy` (or just this block) each session.
+UPLOADS_BUCKET="$(terraform -chdir=infra/terraform/10-foundation output -raw uploads_bucket)"
+CREDS="$(aws configure export-credentials --format process 2>/dev/null || true)"
+cred() { echo "$CREDS" | jq -r ".$1 // empty"; }
 mksecret eventide-event \
-  --from-literal=DATABASE_URL="postgres://event_svc:$(rds EVENT_SVC_PASSWORD)@${HOST}:${PORT}/event_db${SSL}"
+  --from-literal=DATABASE_URL="postgres://event_svc:$(rds EVENT_SVC_PASSWORD)@${HOST}:${PORT}/event_db${SSL}" \
+  --from-literal=S3_BUCKET_NAME="$UPLOADS_BUCKET" \
+  --from-literal=S3_REGION="$REGION" \
+  --from-literal=AWS_ACCESS_KEY_ID="$(cred AccessKeyId)" \
+  --from-literal=AWS_SECRET_ACCESS_KEY="$(cred SecretAccessKey)" \
+  --from-literal=AWS_SESSION_TOKEN="$(cred SessionToken)"
 mksecret eventide-registration \
   --from-literal=DATABASE_URL="postgres://registration_svc:$(rds REGISTRATION_SVC_PASSWORD)@${HOST}:${PORT}/registration_db${SSL}"
 

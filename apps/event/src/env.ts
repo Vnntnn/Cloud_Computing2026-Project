@@ -22,6 +22,14 @@ export const env = defineEnv(
     AUTH_JWKS_URL: z.url().default('http://localhost:3000/api/auth/jwks'),
     // Expected `iss` / `aud` on the JWT — auth's BETTER_AUTH_URL.
     AUTH_BASE_URL: z.url().default('http://localhost:3000'),
+
+    // S3 cover-image uploads (§4.2, §12). Unset → the cover-upload route is
+    // disabled and events simply have no image. AWS credentials come from the
+    // standard env chain (AWS_ACCESS_KEY_ID / _SECRET / _SESSION_TOKEN) — the
+    // one place the app touches AWS, injected into the Secret by deploy.sh
+    // because IRSA is unavailable (§5.3).
+    S3_BUCKET_NAME: z.string().optional(),
+    S3_REGION: z.string().default('us-east-1'),
   }),
 )
 

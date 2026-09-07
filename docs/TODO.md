@@ -278,9 +278,22 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 
 ### S3 uploads
 
-- [ ] Presigned `PUT` endpoint on `event`; presigned `GET` for display.
-- [ ] **Bucket CORS policy.** Budget most of a day — this defeats nearly everyone.
-- [ ] **`GATE`** — upload an image from the browser; bytes never touch a pod.
+- [x] Presigned `PUT` endpoint on `event` (`POST /api/events/:id/cover-upload`, auth +
+      owner-only) + presigned `GET` in `GET /api/events/:id` (`coverUrl`, 1 h). Key is
+      `events/<id>/cover.<ext>`. `apps/event/src/lib/s3.ts` (`@aws-sdk/s3-request-presigner`);
+      `s3Enabled` gates the route (501 when no bucket → events just have no image). Unit
+      tests verify the sigv4 URL shape + expiry (4 tests). **The app's one AWS touch-point.**
+- [x] **Bucket CORS policy.** Already in `10-foundation/s3.tf` — `PUT/GET/HEAD`, `*` headers,
+      `ETag` exposed, origins from `uploads_cors_allowed_origins` (`*` for now).
+- [x] Frontend: `apps/web/src/pages/CreateEvent.tsx` (`/events/new`, auth) — form + file
+      input → create event → presigned PUT → `fetch(uploadUrl, PUT, file)`. Detail page
+      shows `coverUrl`. "New event" in the nav. Browser-tested (create flow 3/3; the S3 PUT
+      itself needs a live bucket).
+- [x] `deploy.sh` injects `S3_BUCKET_NAME` + the session's AWS creds
+      (`aws configure export-credentials`) into `eventide-event` — expires each session,
+      re-`make deploy` (§5.3).
+- [ ] **`GATE`** — upload an image from the browser on the deployed system; bytes never
+      touch a pod. *(needs a lab session — presign against the real bucket.)*
 
 ### Frontend — **hard cap: 2 days**
 

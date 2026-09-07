@@ -12,6 +12,7 @@ type EventRow = {
   venue: string
   startsAt: string
   capacity: number
+  coverUrl: string | null
 }
 
 export function EventDetail() {
@@ -55,6 +56,13 @@ export function EventDetail() {
 
   return (
     <Card className="max-w-xl">
+      {event.coverUrl && (
+        <img
+          src={event.coverUrl}
+          alt=""
+          className="mb-4 aspect-[16/9] w-full rounded-md object-cover"
+        />
+      )}
       <h1 className="text-lg font-semibold">{event.title}</h1>
       <p className="mt-1 text-sm text-muted">
         {event.venue} · {new Date(event.startsAt).toLocaleString()}

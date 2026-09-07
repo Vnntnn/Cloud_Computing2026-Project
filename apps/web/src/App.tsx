@@ -1,6 +1,7 @@
 import { BrowserRouter, Link, Route, Routes, useNavigate } from 'react-router-dom'
 import { Button } from './components/ui/button'
 import { authClient, signOut } from './lib/auth'
+import { CreateEvent } from './pages/CreateEvent'
 import { EventDetail } from './pages/EventDetail'
 import { EventList } from './pages/EventList'
 import { Login } from './pages/Login'
@@ -20,6 +21,9 @@ function Nav() {
         </Link>
         {session ? (
           <>
+            <Link to="/events/new" className="px-2 py-1 hover:underline">
+              New event
+            </Link>
             <Link to="/tickets" className="px-2 py-1 hover:underline">
               My tickets
             </Link>
@@ -51,6 +55,7 @@ export function App() {
       <main className="mx-auto max-w-3xl p-4">
         <Routes>
           <Route path="/" element={<EventList />} />
+          <Route path="/events/new" element={<CreateEvent />} />
           <Route path="/events/:id" element={<EventDetail />} />
           <Route path="/login" element={<Login />} />
           <Route path="/tickets" element={<MyTickets />} />

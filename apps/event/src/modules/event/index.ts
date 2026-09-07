@@ -3,7 +3,7 @@ import { ErrorResponse } from '@eventide/shared/models'
 import { Elysia, t } from 'elysia'
 import { env } from '../../env.ts'
 import { EventModel } from './model.ts'
-import { EventService } from './service.ts'
+import { EventService, NotOwner, S3Disabled } from './service.ts'
 
 /**
  * Controller = one Elysia instance, unbroken method chain (Eden depends on it).
@@ -53,3 +53,35 @@ export const event = new Elysia({ prefix: '/api/events', tags: ['events'] })
     response: { 200: EventModel.event, 401: ErrorResponse },
     detail: { summary: 'Create an event' },
   })
+  .post(
+    '/:id/cover-upload',
+    async ({ params, body, user, status }) => {
+      try {
+        return await EventService.coverUpload(params.id, user.id, body.contentType)
+      } catch (err) {
+        if (err instanceof S3Disabled) {
+          return status(501, { error: 's3_disabled', message: 'uploads are not configured' })
+        }
+        if (err instanceof NotOwner) {
+          return status(403, { error: 'not_owner', message: 'not your event' })
+        }
+        if (err instanceof Error && err.message === 'not found') {
+          return status(404, { error: 'not_found', message: 'event not found' })
+        }
+        throw err
+      }
+    },
+    {
+      auth: true,
+      params: t.Object({ id: t.String({ format: 'uuid' }) }),
+      body: EventModel.coverUploadBody,
+      response: {
+        200: EventModel.coverUpload,
+        401: ErrorResponse,
+        403: ErrorResponse,
+        404: ErrorResponse,
+        501: ErrorResponse,
+      },
+      detail: { summary: 'Presigned PUT for the cover image — bytes go straight to S3' },
+    },
+  )
