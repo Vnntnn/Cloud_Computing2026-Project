@@ -18,7 +18,7 @@ those belong to `20-platform` (EKS) / `scripts/k3d-up.sh` (k3d).
 |---|---|
 | `values.yaml` | defaults — the three `services`, resources, probes, security context |
 | `values.local.yaml` | k3d overlay — in-cluster registry, `publicUrl` = the k3d LB, no ESO, 1 replica |
-| `values.aws.yaml` | EKS overlay — ESO on, HPA on `event`, 2 replicas |
+| `values.aws.yaml` | EKS overlay — HPA on `event`, 2 replicas, `eso.enabled: false` (deploy.sh creates the Secrets — §5.2.1) |
 | `templates/deployment.yaml` | ranges over `.Values.services`; per-service env via `tpl` |
 | `templates/service.yaml` / `ingress.yaml` | ClusterIP + one shared Ingress (paths per service) |
 | `templates/hpa.yaml` | rendered per service where `hpa.enabled` |
@@ -33,8 +33,10 @@ those belong to `20-platform` (EKS) / `scripts/k3d-up.sh` (k3d).
 - `registration.EVENT_SERVICE_URL` = `http://event.<ns>.svc.cluster.local`
 
 `DATABASE_URL` (+ `BETTER_AUTH_SECRET`, `GOOGLE_*`) come from the
-`eventide-<svc>` Secret via `envFrom` — ESO fills it on EKS, `kubectl create
-secret` from a local file on k3d.
+`eventide-<svc>` Secret via `envFrom` — `scripts/deploy.sh` creates it from
+Secrets Manager `eventide/rds-master` on EKS, `scripts/k3d-up.sh` from a local
+file on k3d. The `eso.enabled` templates are an alternative for a non-lab env
+(§5.2.1).
 
 ## Deploy
 

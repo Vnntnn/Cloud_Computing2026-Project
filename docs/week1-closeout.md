@@ -112,17 +112,16 @@ make down
 
 ## Notes
 
-- **Deploy path (ESO, as of 2026-09-07 — first EKS run pending):** `deploy.sh`
-  `put-secret-value`s the real env into `eventide/{auth,event,registration}`,
-  creates `eventide-aws-creds` (session creds for ESO itself), deploys
-  `eso.enabled=true`, `kubectl wait`s the ExternalSecrets, `rollout restart`s.
-  The ESO operator comes from `make up` (`20-platform/addons.tf`). If an
-  ExternalSecret is stuck: `kubectl -n eventide describe externalsecret <name>` —
-  almost always expired creds in `eventide-aws-creds` (re-run `make deploy`) or
-  the operator pod not ready yet.
+- **Deploy path:** `deploy.sh` reads `eventide/rds-master` with the lab session
+  creds and `kubectl create secret`s `eventide-{auth,event,registration}`, then
+  `helm upgrade` (`eso.enabled=false`). If a pod is `CreateContainerConfigError`
+  on a Secret key: `deploy.sh` didn't run this session, or the creds it used are
+  stale — re-run `bash scripts/deploy.sh`.
+- **ESO is not used on EKS** (SYSTEM-DESIGN §5.2.1) — it would need a static-cred
+  `secretRef` that expires per session, no gain over `deploy.sh`. The chart
+  templates stay behind `eso.enabled` for a non-lab env.
 - `scripts/lab-creds.sh` is **not needed** — `deploy.sh` handles every credential
-  the cluster needs (`eventide-aws-creds` for ESO, the `AWS_*` keys in
-  `eventide/event` for S3 presigning).
+  the cluster needs (the `AWS_*` keys in `eventide-event` for S3 presigning).
 - `iam:AttachRolePolicy` is **denied** (confirmed 2026-09-07). If a future lab
-  reset changes that, ESO and `event` could drop the static creds for node-role
-  IMDS — a nice-to-have, not required.
+  reset changes that, `event` could drop the static S3 creds for node-role IMDS —
+  a nice-to-have, not required.

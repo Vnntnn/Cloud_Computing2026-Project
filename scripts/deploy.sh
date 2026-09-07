@@ -11,14 +11,12 @@
 #   bash scripts/deploy.sh v1         # explicit tag
 #   SERVICES="event auth" bash scripts/deploy.sh
 #
-# Secrets (ESO path): this script writes the real per-rebuild runtime env (fresh
-# RDS host + passwords, better-auth key, S3 creds) into the
-# eventide/{auth,event,registration} Secrets Manager secrets, then deploys with
-# eso.enabled=true. The External Secrets Operator (installed by `make up`,
-# 20-platform/addons.tf) syncs those into the eventide-<svc> k8s Secrets the pods
-# read via envFrom. ESO authenticates with the session credentials in
-# `eventide-aws-creds` — the node role has no secretsmanager access and
-# iam:AttachRolePolicy is denied (§5.3), so this Secret is refreshed each run.
+# Secrets: this script assembles the eventide-{auth,event,registration} k8s
+# Secrets directly from `eventide/rds-master` (the same source the db-bootstrap
+# Job uses) and deploys with eso.enabled=false. The chart keeps the ESO
+# templates behind that toggle — see infra/helm/eventide/templates/
+# externalsecrets.yaml and SYSTEM-DESIGN §5.2 for why they stay disabled in the
+# lab (IRSA is unavailable and the node role can't read Secrets Manager).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -48,10 +46,9 @@ for svc in $SERVICES; do
   docker push "$REG/eventide/$svc:$TAG"
 done
 
-# --- namespace -------------------------------------------------------
+# --- namespace + app Secrets from eventide/rds-master ------------------
 kubectl create namespace eventide --dry-run=client -o yaml | kubectl apply -f -
 
-# --- assemble the real values from eventide/rds-master ---------------
 RDS_JSON="$(aws secretsmanager get-secret-value --secret-id "$MASTER_SECRET_ARN" \
   --query SecretString --output text)"
 rds() { echo "$RDS_JSON" | jq -r ".$1"; }
@@ -59,67 +56,42 @@ HOST="$(rds host)"; PORT="$(rds port)"
 # 48-char key-encryption key for better-auth's JWKS — from the rds-master secret
 # (20-platform/rds.tf), regenerated on every rebuild alongside auth_db.
 BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-$(rds BETTER_AUTH_SECRET)}"
-UPLOADS_BUCKET="$(terraform -chdir=infra/terraform/10-foundation output -raw uploads_bucket)"
-CREDS="$(aws configure export-credentials --format process 2>/dev/null || true)"
-cred() { echo "$CREDS" | jq -r ".$1 // empty"; }
 
+mksecret() { kubectl -n eventide create secret generic "$1" "${@:2}" \
+  --dry-run=client -o yaml | kubectl apply -f -; }
 # ?sslmode=require — RDS PG16 forces SSL (rds.force_ssl=1); `require` encrypts
 # without verifying the cert, which is fine inside the VPC.
 SSL="?sslmode=require"
-dsn() { # dsn <svc>  ->  postgres://<svc>_svc:<pw>@host:port/<svc>_db?sslmode=require
-  local svc="$1" pw
-  pw="$(rds "$(echo "$svc" | tr '[:lower:]' '[:upper:]')_SVC_PASSWORD")"
-  echo "postgres://${svc}_svc:${pw}@${HOST}:${PORT}/${svc}_db${SSL}"
-}
-
-# --- write the per-service runtime env into Secrets Manager ---------
-# The eventide/<svc> secrets exist (placeholder) from 10-foundation; ESO syncs
-# whatever we put here. `event` carries the session's AWS creds (S3 presigning —
-# the app's one AWS touch-point, §5.3), so this must re-run every session.
-put() { aws secretsmanager put-secret-value --region "$REGION" \
-  --secret-id "$1" --secret-string "$2" >/dev/null && echo "  put $1"; }
-
-put eventide/auth "$(jq -nc \
-  --arg DATABASE_URL "$(dsn auth)" \
-  --arg BETTER_AUTH_SECRET "$BETTER_AUTH_SECRET" \
-  '$ARGS.named')"
-put eventide/event "$(jq -nc \
-  --arg DATABASE_URL "$(dsn event)" \
-  --arg S3_BUCKET_NAME "$UPLOADS_BUCKET" \
-  --arg S3_REGION "$REGION" \
-  --arg AWS_ACCESS_KEY_ID "$(cred AccessKeyId)" \
-  --arg AWS_SECRET_ACCESS_KEY "$(cred SecretAccessKey)" \
-  --arg AWS_SESSION_TOKEN "$(cred SessionToken)" \
-  '$ARGS.named')"
-put eventide/registration "$(jq -nc \
-  --arg DATABASE_URL "$(dsn registration)" \
-  '$ARGS.named')"
-
-# --- ESO's own AWS credentials (session creds, ~4h TTL, refreshed here) ---
-kubectl -n eventide create secret generic eventide-aws-creds \
+mksecret eventide-auth \
+  --from-literal=DATABASE_URL="postgres://auth_svc:$(rds AUTH_SVC_PASSWORD)@${HOST}:${PORT}/auth_db${SSL}" \
+  --from-literal=BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET}"
+# event also gets S3: the uploads bucket name + the current session's AWS
+# credentials (the app's one AWS touch-point — presigning cover-image URLs;
+# IRSA and node-role access are both denied, §5.3). These expire with the
+# session — re-run `make deploy` (or just this block) each session.
+UPLOADS_BUCKET="$(terraform -chdir=infra/terraform/10-foundation output -raw uploads_bucket)"
+CREDS="$(aws configure export-credentials --format process 2>/dev/null || true)"
+cred() { echo "$CREDS" | jq -r ".$1 // empty"; }
+mksecret eventide-event \
+  --from-literal=DATABASE_URL="postgres://event_svc:$(rds EVENT_SVC_PASSWORD)@${HOST}:${PORT}/event_db${SSL}" \
+  --from-literal=S3_BUCKET_NAME="$UPLOADS_BUCKET" \
+  --from-literal=S3_REGION="$REGION" \
   --from-literal=AWS_ACCESS_KEY_ID="$(cred AccessKeyId)" \
   --from-literal=AWS_SECRET_ACCESS_KEY="$(cred SecretAccessKey)" \
-  --from-literal=AWS_SESSION_TOKEN="$(cred SessionToken)" \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --from-literal=AWS_SESSION_TOKEN="$(cred SessionToken)"
+mksecret eventide-registration \
+  --from-literal=DATABASE_URL="postgres://registration_svc:$(rds REGISTRATION_SVC_PASSWORD)@${HOST}:${PORT}/registration_db${SSL}"
 
-# --- deploy the chart -----------------------------------------------
+# --- deploy the chart -------------------------------------------------
 echo "== helm upgrade --install eventide =="
-# No --wait: on a first install the pods stay pending until ESO has created the
-# eventide-<svc> Secrets, which happens after helm returns.
 helm upgrade --install eventide infra/helm/eventide \
   -f infra/helm/eventide/values.yaml \
   -f infra/helm/eventide/values.aws.yaml \
   --set imageRegistry="$REG" \
   --set publicUrl="$PUBLIC_URL" \
+  --set eso.enabled=false \
   $(for s in $SERVICES; do echo --set services.$s.image.tag=$TAG; done) \
-  --timeout 420s
-
-echo "== wait for ESO to sync the service Secrets =="
-kubectl -n eventide wait --for=condition=Ready externalsecret --all --timeout=180s
-
-# envFrom does not re-read a Secret in a running pod — roll the deployments onto
-# the fresh values (also covers a redeploy where the image tag didn't change).
-kubectl -n eventide rollout restart deployment -l app.kubernetes.io/part-of=eventide
+  --wait --timeout 420s
 
 for svc in $SERVICES; do
   kubectl -n eventide rollout status "deployment/$svc" --timeout=180s

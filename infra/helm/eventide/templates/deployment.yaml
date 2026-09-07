@@ -50,9 +50,9 @@ spec:
               value: {{ tpl $v $root | quote }}
             {{- end }}
           {{- if $svc.secretName }}
-          # DATABASE_URL (+ auth's BETTER_AUTH_SECRET / GOOGLE_*) — ESO fills this
-          # Secret on EKS, `kubectl create secret` from a file on k3d. The app
-          # only ever reads process.env (SYSTEM-DESIGN §5.2).
+          # DATABASE_URL (+ auth's BETTER_AUTH_SECRET / GOOGLE_*) — scripts/deploy.sh
+          # creates this Secret on EKS, k3d-up.sh from a file on k3d (or ESO when
+          # eso.enabled). The app only ever reads process.env (SYSTEM-DESIGN §5.2).
           envFrom:
             - secretRef:
                 name: {{ $svc.secretName }}

@@ -74,24 +74,20 @@ Say: *no cross-service foreign keys are possible — the engine refuses.*
 - (Optional) open a second browser, book until capacity hits zero, show the
   rejection — capacity enforced by `registration` counting its own rows.
 
-### 4. Rotate a secret live
+### 4. Secrets are external, not baked in
 
 ```sh
-# show the current synced value first
-kubectl -n eventide get secret eventide-<svc> -o jsonpath='{.data.SOME_KEY}' | base64 -d
-
-aws secretsmanager put-secret-value --secret-id eventide/<svc> \
-  --secret-string '{...new value...}'
-
-# refreshInterval is 1m (values.aws.yaml) — watch ESO pick it up:
-kubectl -n eventide get externalsecret eventide-<svc> -w      # STATUS -> SecretSynced
-# ...then re-read the k8s Secret to show it changed, and:
-kubectl -n eventide rollout restart deploy/<svc>
+# no secret material in the image or the rendered manifests
+helm -n eventide get manifest eventide | grep -i -A2 'kind: Secret'   # → nothing
+# the k8s Secret is populated by deploy.sh from Secrets Manager
+kubectl -n eventide get secret eventide-auth -o jsonpath='{.data.DATABASE_URL}' | base64 -d
+aws secretsmanager get-secret-value --secret-id eventide/rds-master --query SecretString --output text | jq 'keys'
 ```
 
-App keeps working. The other two services are untouched. To force the sync
-instantly instead of waiting the minute:
-`kubectl -n eventide annotate externalsecret eventide-<svc> force-sync=$(date +%s) --overwrite`
+Optional live rotation: change one value in `eventide/rds-master`, re-run
+`SERVICES=<svc> bash scripts/deploy.sh` — the new pod picks up the new k8s Secret,
+the other two services are untouched. (No ESO — SYSTEM-DESIGN §5.2.1. Rehearse
+which value actually round-trips cleanly before doing this live.)
 
 ### 5. Scale under load
 
@@ -156,4 +152,4 @@ so we know it works.
 | `make up` half-built | session creds expired mid-apply | never start after hour 3; re-`apply` to finish |
 | OAuth redirect mismatch | deployed URL not in Google client | port-forward fallback over `localhost` |
 | Image upload fails | bucket CORS | check `10-foundation` S3 CORS rule allows the SPA origin |
-| ESO secret not syncing | refresh interval too long for a live demo | lower `refreshInterval`, or `kubectl annotate` to force |
+| pod `CreateContainerConfigError` on a Secret key | `deploy.sh` didn't run / `eventide/rds-master` stale | re-run `bash scripts/deploy.sh` with fresh lab creds |

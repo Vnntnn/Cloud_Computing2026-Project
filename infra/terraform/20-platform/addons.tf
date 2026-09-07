@@ -68,41 +68,12 @@ resource "helm_release" "metrics_server" {
   timeout = 300
 }
 
-# External Secrets Operator — reconciles the chart's ExternalSecret resources
-# (infra/helm/eventide, eso.enabled=true) into Kubernetes Secrets, reading AWS
-# Secrets Manager. The operator + its CRDs must exist before `helm upgrade
-# eventide` applies any ExternalSecret, so it is installed here with the cluster,
-# not by scripts/deploy.sh.
-#
-# Auth: the ClusterSecretStore points at a Secret of static session credentials
-# that deploy.sh refreshes each session (`eventide-aws-creds`). The lab node role
-# carries no `secretsmanager:GetSecretValue` and `iam:AttachRolePolicy` is denied
-# (docs/lab-probe-2026-09-07.txt), so IMDS auth is not an option — same
-# constraint that forces injected creds on the `event` pod for S3 (§5.3).
-resource "helm_release" "external_secrets" {
-  name             = "external-secrets"
-  repository       = "https://charts.external-secrets.io"
-  chart            = "external-secrets"
-  version          = "2.10.0"
-  namespace        = "external-secrets"
-  create_namespace = true
-
-  set = [
-    { name = "installCRDs", value = "true" },
-    # Single-node-friendly: no leader-election replica pile-up on a 2-node lab.
-    { name = "replicaCount", value = "1" },
-    { name = "webhook.replicaCount", value = "1" },
-    { name = "certController.replicaCount", value = "1" },
-  ]
-
-  depends_on = [
-    aws_eks_node_group.default,
-    aws_eks_addon.coredns,
-  ]
-
-  wait    = true
-  timeout = 300
-}
+# NB: no External Secrets Operator here. IRSA is unavailable and the node role
+# can't read Secrets Manager (iam:AttachRolePolicy denied), so ESO would need a
+# static-credential secretRef that expires every session — no better than
+# scripts/deploy.sh doing `kubectl create secret` from eventide/rds-master, which
+# is what it does. The chart keeps the ESO templates behind `eso.enabled` for a
+# non-lab environment. See SYSTEM-DESIGN §5.2 / PROJECT-KNOWLEDGE-BASE §3.
 
 # CloudWatch Container Insights — pod CPU/memory graphs for the report
 # (SYSTEM-DESIGN.md §10). The `amazon-cloudwatch-observability` add-on runs a

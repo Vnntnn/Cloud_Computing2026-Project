@@ -119,15 +119,14 @@ Cross-cutting:
   (`localhost`) and deployed, avoids two SameSite configs.
 - **ingress-nginx as a `NodePort` Service + an NLB created by Terraform** (not
   `Service type=LoadBalancer`, whose ELB is invisible to Terraform state and orphans on destroy).
-- **External Secrets Operator** — the app only ever reads `process.env`. On EKS, ESO fills
-  K8s Secrets from Secrets Manager; on k3d, `kubectl create secret` from a local file. Same code.
-  ESO operator is a `helm_release` in `20-platform/addons.tf` (chart 2.10.0). The
-  `ClusterSecretStore` authenticates with **static session creds** (`eventide-aws-creds`,
-  refreshed each `deploy.sh`) — the node role has no `secretsmanager` access and
-  `iam:AttachRolePolicy` is denied, so IMDS auth is impossible. `deploy.sh` writes the real
-  per-rebuild values into `eventide/<svc>` with `put-secret-value`, deploys `eso.enabled=true`,
-  `kubectl wait`s the ExternalSecrets, then `rollout restart`s. **Code done 2026-09-07, not
-  yet run on EKS.**
+- **Secret delivery** — the app only ever reads `process.env`. `scripts/deploy.sh` runs with
+  the lab session creds, reads `eventide/rds-master` (the one Terraform-maintained secret),
+  and `kubectl create secret`s `eventide-{auth,event,registration}`; on k3d the same Secrets
+  come from a local file. Same app code, same chart, `eso.enabled` toggle. **ESO is NOT used
+  on EKS** (SYSTEM-DESIGN §5.2.1): IRSA unavailable + node role has no `secretsmanager` +
+  `iam:AttachRolePolicy` denied → ESO would need a static-cred `secretRef` that expires per
+  session, no gain over `deploy.sh`. The `ClusterSecretStore`/`ExternalSecret` templates
+  stay in the chart, off, for a non-lab env.
 - **Terraform split by lifetime:** `00-bootstrap` (state bucket, by hand) · `10-foundation`
   (ECR, S3, Secrets Manager — never destroyed) · `20-platform` (EKS, RDS, NLB — destroyed nightly).
 - **Presigned S3 URLs** for uploads — bytes never enter the cluster.

@@ -58,7 +58,7 @@ microservice topology and exercises every required AWS service.
 │                    │                  │      HTTP (in-cluster enrichment)  │ │
 │                    │                  └◄───────────────────┘               │ │
 │                                                                             │ │
-│   External Secrets Operator ──► Kubernetes Secrets ──► process.env          │ │
+│   Secrets Manager ─(deploy.sh)─► Kubernetes Secrets ──► process.env         │ │
 └──────────────────────────────────────────────────┬──────────────────────────┘
                                                    │
               ┌────────────────────┬───────────────┴────────┐
@@ -335,49 +335,55 @@ networking fault.
 ### 5.2 Secret delivery
 
 ```
-AWS Secrets Manager        eventide/auth · eventide/event · eventide/registration
-        │                  (real values written each rebuild by scripts/deploy.sh)
-        │  External Secrets Operator  (ClusterSecretStore authenticates with the
-        │                              session creds in Secret eventide-aws-creds —
-        ▼                              the node role has no secretsmanager access)
+AWS Secrets Manager        eventide/rds-master   (Terraform writes it each rebuild:
+        │                                         master creds + per-service passwords
+        │                                         + BETTER_AUTH_SECRET)
+        │  scripts/deploy.sh   (runs on your laptop with the lab session creds,
+        ▼                       reads rds-master, composes each DATABASE_URL)
 Kubernetes Secret          eventide-auth · eventide-event · eventide-registration
-        │
-        │  envFrom.secretRef   (deploy.sh rolls the pods so the fresh values land)
+        │                   (kubectl create secret — plus the session's AWS_* keys
+        │                    into eventide-event for S3 presigning)
+        │  envFrom.secretRef
         ▼
 process.env.DATABASE_URL   the application knows nothing about AWS
 ```
 
-**As built:** ESO operator + CRDs installed with the cluster (`20-platform/addons.tf`,
-chart `external-secrets` 2.10.0). The chart renders one `ClusterSecretStore` +
-one `ExternalSecret` per service (`infra/helm/eventide/templates/externalsecrets.yaml`,
-`eso.enabled=true` in `values.aws.yaml`). `refreshInterval: 1m`, so the "rotate a
-secret, watch it sync" demo needs no manual poke. `scripts/deploy.sh` writes the
-per-rebuild env (`aws secretsmanager put-secret-value`) — 10-foundation only seeds
-the placeholder shape and then ignores changes.
+**As built:** `scripts/deploy.sh` is the delivery mechanism on EKS — it reads
+`eventide/rds-master` (the one secret Terraform maintains) and `kubectl create secret`s
+the three `eventide-<svc>` Secrets the pods read via `envFrom`. On k3d the same three
+Secrets come from `scripts/k3d-up.sh` reading a local file. **Identical app code,
+identical chart, one `eso.enabled` toggle** — see §5.2.1 for why ESO stays off here.
 
 Contents:
 
 | Secret | Holds |
 |---|---|
-| `eventide/auth` | `DATABASE_URL` (auth_db), **`BETTER_AUTH_SECRET`** (key-encryption key for the JWKS private keys). `BETTER_AUTH_URL` comes from the chart (`publicUrl`); `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` added when OAuth is wired. |
-| `eventide/event` | `DATABASE_URL` (event_db), `S3_BUCKET_NAME`, `S3_REGION`, and the session's `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` for presigning |
-| `eventide/registration` | `DATABASE_URL` (registration_db) |
-| `eventide-aws-creds` (k8s Secret, not in SM) | session creds ESO itself uses to read the three above; refreshed every `deploy.sh` run |
+| `eventide-auth` | `DATABASE_URL` (auth_db), **`BETTER_AUTH_SECRET`** (key-encryption key for the JWKS private keys). `BETTER_AUTH_URL` comes from the chart (`publicUrl`); `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` added when OAuth is wired. |
+| `eventide-event` | `DATABASE_URL` (event_db), `S3_BUCKET_NAME`, `S3_REGION`, and the session's `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` for presigning |
+| `eventide-registration` | `DATABASE_URL` (registration_db) |
 
 Note what is **not** here: no shared JWT signing key. `event` and `registration` fetch
 public keys from `auth`'s JWKS endpoint at runtime, so there is no signing material to
 distribute (§5.1).
 
-ESO was chosen over the two alternatives specifically because of the local/AWS split:
-
-| Approach | Problem |
-|---|---|
-| AWS SDK `GetSecretValue` at boot | Needs AWS credentials and an AWS dependency inside the app; nothing to point it at locally. |
-| Secrets Store CSI driver | Requires IRSA (unavailable) and leaks AWS into the local environment. |
-| **External Secrets Operator** | App reads `process.env`. On EKS, ESO fills the Secret from Secrets Manager; on k3d, `kubectl create secret` from a local file. **Identical code, identical manifests, zero conditionals.** |
-
 **Environment variables are validated with Zod at process start**, so a missing injected
 secret fails with a clear message instead of a mystery crash.
+
+### 5.2.1 Why not the External Secrets Operator on EKS
+
+The chart carries a full ESO setup — `ClusterSecretStore` + one `ExternalSecret` per
+service, behind `eso.enabled` (`infra/helm/eventide/templates/externalsecrets.yaml`).
+It is **off on EKS** and used by neither environment, for a concrete reason:
+
+ESO runs *in* the cluster and must call `secretsmanager:GetSecretValue`. Its options for
+AWS credentials are IRSA (unavailable — no `iam:CreateOpenIDConnectProvider`) or the node
+instance role via IMDS. The pre-created node role carries only the three `AmazonEKS*`
+policies — **no Secrets Manager** — and `iam:AttachRolePolicy` is denied, so it can't be
+granted. The only way to make ESO work is to hand it a `secretRef` to a Secret of static
+session credentials that **expire every ~4 h and must be refreshed by a deploy anyway** —
+at which point it is strictly more moving parts than `deploy.sh` doing the
+`kubectl create secret` itself. So `deploy.sh` does. The ESO path is kept in the chart
+for a non-lab environment where IRSA is available.
 
 ### 5.3 Credentials for pods (IRSA is unavailable)
 
@@ -388,11 +394,12 @@ Accounts cannot be used. The two remaining options:
    no expiry. **Ruled out 2026-09-07:** `iam:AttachRolePolicy` is denied
    (`docs/lab-probe-2026-09-07.txt`), and the pre-created node role carries only the three
    `AmazonEKS*` policies — no S3, no Secrets Manager.
-2. **Inject the lab session credentials as a Kubernetes Secret**, refreshed each deploy by
-   `scripts/deploy.sh` (`aws configure export-credentials`). This is what's built. It
-   expires every ~4 h; a redeploy refreshes it. Two consumers:
-   - `eventide/event` — the `event` pod presigns S3 URLs directly (the app's one AWS call).
-   - `eventide-aws-creds` — the ESO `ClusterSecretStore` reads Secrets Manager with it.
+2. **Inject the lab session credentials where needed**, refreshed each deploy by
+   `scripts/deploy.sh` (`aws configure export-credentials`). This is what's built:
+   `deploy.sh` itself uses the session creds to read `eventide/rds-master` and build the
+   k8s Secrets, and puts `AWS_*` into `eventide-event` so the `event` pod can presign S3
+   URLs — the app's one direct AWS call. Everything expires every ~4 h; a redeploy
+   refreshes it, which the session lifecycle requires regardless.
 
 > **Report note:** static, short-lived credentials in a cluster Secret is not how you would
 > run this in production (you would use IRSA / Pod Identity). It is a deliberate workaround
@@ -612,7 +619,7 @@ keeps working in later sessions even though session credentials change.
 | Cluster | k3d (k3s in Docker), Traefik disabled | EKS 1.33, 2 × t3.medium |
 | Ingress | ingress-nginx | ingress-nginx (NodePort) + Terraform NLB |
 | Database | Postgres container, 3 databases via init script | RDS, 3 databases |
-| Secrets | `kubectl create secret` from a local file | ESO ← Secrets Manager |
+| Secrets | `kubectl create secret` from a local file (`k3d-up.sh`) | `kubectl create secret` from `eventide/rds-master` (`deploy.sh`); ESO templates present but off (§5.2.1) |
 | Object storage | real S3 (cheap) or MinIO | S3 |
 | Images | local registry `eventide-registry:5000` | ECR |
 | Frontend | `vite dev` on `localhost:5173` → NLB or k3d over HTTP | Static bundle in S3, served by CloudFront (wired up in week 4 only) |
@@ -746,7 +753,7 @@ demo day the infrastructure will have been rebuilt from zero twenty times.
 | Local cluster | k3d | Real Kubernetes in ~20 s; same manifests as EKS. |
 | Packaging | Helm, one chart, three releases | `values-local.yaml` / `values-aws.yaml`. |
 | IaC | Terraform (raw `aws_eks_*`, not the community module) | The `terraform-aws-modules/eks` module `iam:GetRole`s the `voclabs` session role, which `Pvoclabs2` denies (§7.1). Raw resources for a lab cluster are ~50 lines, not the "week" a production cluster would take. |
-| Secrets | External Secrets Operator | App only ever reads `process.env`. |
+| Secrets | Secrets Manager → `deploy.sh` → k8s Secret (ESO templates present, off — §5.2.1) | App only ever reads `process.env`. |
 | Monitoring | CloudWatch Container Insights | Terraform add-on vs. two days of Helm. |
 | Load testing | k6 | Drives the autoscaling demo. |
 
@@ -857,8 +864,11 @@ cloud-project/
    refuses. The architecture is enforced, not merely described.
 3. **Use the app.** Log in, create an event, upload a cover image, register a ticket —
    noting the image bytes went straight to S3 and never entered the cluster.
-4. **Rotate a secret live.** Change one password in Secrets Manager, let ESO sync, restart
-   the pod, keep working — while the other two services stay untouched.
+4. **Show secrets are external.** `helm get manifest` and the container image carry no
+   secret material; `kubectl get secret eventide-auth -o yaml` is populated by
+   `scripts/deploy.sh` from Secrets Manager `eventide/rds-master`. Rotate one value there
+   and redeploy that one service to show the chain is live. (Exact mechanic finalised at
+   rehearsal — see `docs/DEMO-RUNSHEET.md`.)
 5. **Scale under load.** k6 on one side, `kubectl get hpa -w` and `kubectl get pods -w` on
    the other. Replicas climb 2 → 8, then settle.
 6. **Destroy it,** on purpose, in front of the room.

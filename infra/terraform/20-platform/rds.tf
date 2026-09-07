@@ -9,8 +9,8 @@ resource "random_password" "db_master" {
 }
 
 # Per-service role passwords. The db-bootstrap Job CREATE ROLEs with these; the
-# services' DATABASE_URLs (assembled by ESO in week 2) use the same values. All
-# regenerated on every rebuild, alongside the master password.
+# services' DATABASE_URLs (assembled by scripts/deploy.sh from this same secret)
+# use the same values. All regenerated on every rebuild, alongside the master password.
 resource "random_password" "svc" {
   for_each = toset(["auth_svc", "event_svc", "registration_svc"])
   length   = 20

@@ -10,7 +10,7 @@ resource "aws_secretsmanager_secret" "service" {
   for_each = toset(var.services)
 
   name        = "${var.project}/${each.key}"
-  description = "Runtime env for the ${each.key} service — consumed by External Secrets Operator."
+  description = "Runtime env for the ${each.key} service — the ESO source when eso.enabled (off in the lab; deploy.sh builds the k8s Secret from eventide/rds-master instead — SYSTEM-DESIGN §5.2.1)."
 
   # Lab iteration: allow immediate recreation, don't hold a 7-30 day recovery
   # window on a secret name we might need to recreate.

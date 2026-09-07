@@ -260,30 +260,21 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       `apps/event/src/lib/db.ts`; `/health/ready` does a real `select 1`. E2E verified:
       auth JWT → create event → owner_id = JWT sub; bad/absent token → 401. **S3 presigned
       cover-upload deferred to week 3.**)*
-- [x] ESO installed; `ClusterSecretStore`; three `ExternalSecret` resources. **Wired
-      end-to-end 2026-09-07 (code — not yet run on EKS):**
-      - Operator + CRDs → `helm_release "external_secrets"` (chart `external-secrets`
-        2.10.0) in `20-platform/addons.tf`, so `make up` gives an ESO-ready cluster.
-      - **Finding that changed the design:** the pre-created node role has no
-        `secretsmanager:GetSecretValue` and `iam:AttachRolePolicy` is denied
-        (`lab-probe-2026-09-07.txt`), so ESO **cannot** auth via IMDS. The
-        `ClusterSecretStore` now uses `auth.secretRef` → a `eventide-aws-creds` Secret of
-        session creds that `deploy.sh` refreshes each run (same constraint that forces
-        injected creds on `event` for S3).
-      - `deploy.sh` now `aws secretsmanager put-secret-value`s the real per-rebuild env
-        into `eventide/{auth,event,registration}`, deploys with `eso.enabled=true` (no more
-        `--set eso.enabled=false`), waits `kubectl wait --for=condition=Ready externalsecret`,
-        then `rollout restart` so pods pick up the synced Secret.
-      - `refreshInterval: 1m` in `values.aws.yaml` → the "rotate a secret, watch it sync"
-        demo is automatic. k3d unchanged (`eso.enabled: false`, `kubectl create secret`).
+- [x] ESO `ClusterSecretStore` + `ExternalSecret` templates in the chart, behind
+      `eso.enabled`. **Not used on EKS (decided 2026-09-07):** ESO in-cluster needs AWS
+      creds to call `GetSecretValue` — IRSA unavailable, node role has no `secretsmanager`
+      access, `iam:AttachRolePolicy` denied → the only path is a `secretRef` to static
+      session creds that expire every ~4 h and need a deploy to refresh anyway, i.e. more
+      moving parts than `deploy.sh` doing `kubectl create secret` itself. So `deploy.sh`
+      does (from `eventide/rds-master`). Templates kept for a non-lab environment.
+      See SYSTEM-DESIGN §5.2.1.
 - [ ] **`GATE`** — pods read `process.env.DATABASE_URL` with no AWS SDK call in app code.
       *(app-side true + verified on k3d. **On EKS: close it once `deploy.sh` runs against a
-      live cluster** — `kubectl get externalsecret -n eventide` all `SecretSynced`, pods up,
-      app flow green.)*
+      live cluster** — `kubectl get secret -n eventide`, pods up, app flow green.)*
 - [x] Both services deployed to EKS behind ingress paths. *(Helm chart `infra/helm/eventide`
-      — one release, all services + Ingress + HPA + ESO + db-bootstrap Job. **fully
-      deployed + E2E-tested on k3d** 2026-09-07. `scripts/deploy.sh` (ESO path, above) not
-      yet run against EKS — that's the open GATE.)*
+      — one release, all services + Ingress + HPA + db-bootstrap Job. **fully deployed +
+      E2E-tested on k3d** 2026-09-07. `scripts/deploy.sh` not yet run against EKS post the
+      DNS/secret changes — that's the open GATE.)*
 
 ---
 
@@ -426,7 +417,8 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 - [ ] Start `terraform apply` at the top and talk over it.
 - [ ] Show the database boundary being refused by Postgres.
 - [ ] Log in with Google, create an event, upload an image, book a ticket.
-- [ ] Rotate a secret in Secrets Manager, let ESO sync, restart the pod, keep working.
+- [ ] Show secrets are external (no secret in the image / `helm get manifest`); rotate one
+      value in `eventide/rds-master` + redeploy that service, keep working.
 - [ ] k6 + `kubectl get hpa -w` side by side.
 - [ ] Destroy it, on purpose, in front of the room.
 - [ ] **Fallback rehearsed:** `kubectl port-forward svc/auth 3000:3000` if DNS or TLS
