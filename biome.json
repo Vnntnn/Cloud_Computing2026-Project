@@ -8,7 +8,8 @@
       "!**/migrations/**",
       "!**/dist/**",
       "!**/.turbo/**",
-      "!packages/db/src/auth/schema.ts"
+      "!packages/db/src/auth/schema.ts",
+      "!apps/web/src/index.css"
     ]
   },
   "formatter": {

@@ -17,9 +17,8 @@ can slip. If a day runs long, cut from the *bottom* of that day, never from a GA
 - [ ] Confirm the **exact checkpoint day** and what it requires — proposal, design
       presentation, or working code.
 - [ ] Confirm the **final demo date**. Week 4 below assumes ~2 October.
-- [ ] Confirm what `shadcn --preset bfEjlVBAI` configures — specifically whether it targets
-      Tailwind v3 or v4. A major-version mismatch is the one place this frontend stack
-      reliably breaks.
+- [x] `shadcn --preset bfEjlVBAI` → **Tailwind v4** (confirmed by the user 2026-09-07).
+      `apps/web` is set up for v4; the preset itself was not run (components hand-rolled).
 
 ---
 
@@ -277,14 +276,27 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 
 ### Frontend — **hard cap: 2 days**
 
-- [ ] Vite + React + Tailwind + shadcn (`--preset bfEjlVBAI`, verify the Tailwind major
-      version first).
-- [ ] Three Eden Treaty clients: `edenAuth`, `edenEvent`, `edenReg`.
-- [ ] Four screens: event list, event detail, login, my tickets. **Deliberately unstyled
-      beyond shadcn defaults.**
-- [ ] Token in `localStorage`, sent as `Authorization: Bearer`.
-- [ ] Build → S3 → CloudFront (or Cloudflare, per the Week 2 decision).
-- [ ] **`GATE`** — deployed SPA completes Google login and books a ticket.
+- [x] Vite + React 19 + Tailwind **v4** (`@tailwindcss/vite`, `@theme` in `index.css`,
+      no config file). `--preset bfEjlVBAI` not run — hand-rolled `button`/`input`/`card`
+      in shadcn style instead, so the preset's unknowns don't matter (it can be layered on
+      later if it's just theme tokens). `apps/web`, in the Bun workspace + turbo.
+- [x] Eden Treaty clients — `edenEvent` + `edenReg` (`@eventide/{event,registration}/app`
+      `type App`). **auth uses better-auth's own `createAuthClient`** (+ `jwtClient`), not
+      Eden — better-auth owns `/api/auth/*`, Eden only sees the health routes. Deviation
+      from the "three Eden clients" line, noted.
+- [x] Four screens: event list (`/`), event detail (`/events/:id` — register button),
+      login (`/login` — email/password + Google button), my tickets (`/tickets`). Minimal,
+      neutral palette.
+- [x] Token in `localStorage` (`eventide.bearer` from `set-auth-token`), the JWT fetched
+      via `authClient.token()` and cached to ~1 min before expiry, sent to event/
+      registration as `Authorization: Bearer` (`lib/eden.ts` `onRequest`).
+- [x] Dev parity: Vite proxies `/api/{auth,events,registrations}` → :3000/:3001/:3002, so
+      the SPA always talks to its own origin — identical to prod behind one ingress.
+- [x] `bun run build` / `check-types` / `lint` green. **Not yet run in a real browser**
+      (Chrome extension not connected this session) — the APIs it calls are all E2E-verified.
+- [ ] Build → S3 → CloudFront (or Cloudflare, per the Week 2 decision). *(needs lab)*
+- [ ] **`GATE`** — deployed SPA completes Google login and books a ticket. *(needs Google
+      OAuth client + deploy)*
 
 > If this week slips, **cut the frontend, not the infrastructure.** Swagger is a complete
 > demo surface on its own.

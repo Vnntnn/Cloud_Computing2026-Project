@@ -1,0 +1,33 @@
+{
+  "name": "@eventide/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "biome check .",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "5.9.2",
+    "vite": "^8.2.2"
+  },
+  "dependencies": {
+    "@elysiajs/eden": "^1.4.9",
+    "@eventide/event": "workspace:*",
+    "@eventide/registration": "workspace:*",
+    "better-auth": "^1.7.3",
+    "clsx": "^2.1.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.3",
+    "tailwind-merge": "^3.6.0"
+  }
+}
