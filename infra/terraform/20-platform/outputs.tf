@@ -28,6 +28,15 @@ output "ingress_nginx_version" {
   value = helm_release.ingress_nginx.version
 }
 
+output "public_url" {
+  description = <<-EOT
+    Custom-domain URL when 10-foundation has DNS enabled, else "". deploy.sh uses
+    it as PUBLIC_URL (JWT iss/aud, BETTER_AUTH_URL). DNS may take a few minutes to
+    propagate after apply; the cert must already be ISSUED.
+  EOT
+  value       = local.dns_enabled ? "https://${local.public_host}" : ""
+}
+
 output "rds_endpoint" {
   description = "host:port for the RDS instance."
   value       = aws_db_instance.main.endpoint

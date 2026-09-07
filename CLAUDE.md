@@ -121,6 +121,13 @@ Cross-cutting:
   `Service type=LoadBalancer`, whose ELB is invisible to Terraform state and orphans on destroy).
 - **External Secrets Operator** — the app only ever reads `process.env`. On EKS, ESO fills
   K8s Secrets from Secrets Manager; on k3d, `kubectl create secret` from a local file. Same code.
+  ESO operator is a `helm_release` in `20-platform/addons.tf` (chart 2.10.0). The
+  `ClusterSecretStore` authenticates with **static session creds** (`eventide-aws-creds`,
+  refreshed each `deploy.sh`) — the node role has no `secretsmanager` access and
+  `iam:AttachRolePolicy` is denied, so IMDS auth is impossible. `deploy.sh` writes the real
+  per-rebuild values into `eventide/<svc>` with `put-secret-value`, deploys `eso.enabled=true`,
+  `kubectl wait`s the ExternalSecrets, then `rollout restart`s. **Code done 2026-09-07, not
+  yet run on EKS.**
 - **Terraform split by lifetime:** `00-bootstrap` (state bucket, by hand) · `10-foundation`
   (ECR, S3, Secrets Manager — never destroyed) · `20-platform` (EKS, RDS, NLB — destroyed nightly).
 - **Presigned S3 URLs** for uploads — bytes never enter the cluster.
@@ -160,8 +167,13 @@ Cross-cutting:
 - **`auth_db` schema is owned entirely by better-auth** — generate migrations with its CLI,
   do not hand-write.
 - Bun services must **handle `SIGTERM`** (`process.on("SIGTERM", () => server.stop())`).
-- **Delegate a subdomain to Route 53, never the apex.** Route 53 / ACM / CloudFront are still
-  unprobed — run the extended `check-lab.sh` before building the TLS design on them.
+- **DNS/TLS: `events.<domain>` delegated to Route 53, apex stays on Cloudflare** (§5.5.1
+  option 2, chosen 2026-09-07). Zone + wildcard ACM cert are **permanent** (`10-foundation/
+  dns.tf`, opt-in via `dns.auto.tfvars`); the NLB TLS listener + ALIAS record are in
+  `20-platform` and rebuild nightly. Single host — SPA at `/`, APIs at `/api/*`, no CORS.
+  Never recreate the hosted zone (its NS delegation at Cloudflare is set by hand, once).
+  IaC written 2026-09-07, **not yet applied** — needs a session + the real domain. CloudFront
+  stays denied.
 - RDS: `skip_final_snapshot = true`, `deletion_protection = false`, or nightly destroy fails.
 - HPA max is **8 replicas** — a `t3.medium` allows only 17 pods; beyond the ceiling pods sit
   `Pending` with an error that looks like a bug.

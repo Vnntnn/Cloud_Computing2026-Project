@@ -29,9 +29,15 @@ eso:
   createClusterSecretStore: true
   storeName: eventide-secretstore
   region: us-east-1
-  # ServiceAccount the store authenticates as. Empty → default (node role via
-  # IMDS — IRSA is unavailable in the lab, SYSTEM-DESIGN §5.3).
+  # ServiceAccount the store authenticates as (IRSA). Empty → not used.
   serviceAccount: ""
+  # Secret holding static AWS creds for the ClusterSecretStore
+  # (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN keys). Empty →
+  # the operator falls back to the default AWS credential chain (node role via
+  # IMDS). The lab node role has no secretsmanager access and iam:AttachRolePolicy
+  # is denied (SYSTEM-DESIGN §5.3), so values.aws.yaml sets this to a Secret that
+  # scripts/deploy.sh fills with the session's credentials each deploy.
+  authSecretName: ""
   refreshInterval: 1h
   # Secrets Manager secret name -> k8s Secret name. Keys are copied verbatim.
   secrets:

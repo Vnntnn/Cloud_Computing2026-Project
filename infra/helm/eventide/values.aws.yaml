@@ -10,8 +10,15 @@ eso:
   enabled: true
   createClusterSecretStore: true
   region: us-east-1
-  # Empty SA → External Secrets uses the node role via IMDS (no IRSA — §5.3).
   serviceAccount: ""
+  # deploy.sh creates this Secret from `aws configure export-credentials` each
+  # run (session creds — the only principal with secretsmanager access; the node
+  # role has none and iam:AttachRolePolicy is denied, §5.3). Expires with the
+  # 4 h session; a redeploy refreshes it.
+  authSecretName: eventide-aws-creds
+  # Fast enough that the "rotate a secret, watch it sync" demo (DEMO-RUNSHEET §5)
+  # doesn't need a manual force-sync. ~3 GetSecretValue calls/min ≈ $0.001/day.
+  refreshInterval: 1m
 
 defaults:
   replicas: 2

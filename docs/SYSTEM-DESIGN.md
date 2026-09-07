@@ -336,23 +336,33 @@ networking fault.
 
 ```
 AWS Secrets Manager        eventide/auth · eventide/event · eventide/registration
-        │
-        │  External Secrets Operator (static credentials — IRSA is unavailable)
-        ▼
+        │                  (real values written each rebuild by scripts/deploy.sh)
+        │  External Secrets Operator  (ClusterSecretStore authenticates with the
+        │                              session creds in Secret eventide-aws-creds —
+        ▼                              the node role has no secretsmanager access)
 Kubernetes Secret          eventide-auth · eventide-event · eventide-registration
         │
-        │  envFrom.secretRef
+        │  envFrom.secretRef   (deploy.sh rolls the pods so the fresh values land)
         ▼
 process.env.DATABASE_URL   the application knows nothing about AWS
 ```
+
+**As built:** ESO operator + CRDs installed with the cluster (`20-platform/addons.tf`,
+chart `external-secrets` 2.10.0). The chart renders one `ClusterSecretStore` +
+one `ExternalSecret` per service (`infra/helm/eventide/templates/externalsecrets.yaml`,
+`eso.enabled=true` in `values.aws.yaml`). `refreshInterval: 1m`, so the "rotate a
+secret, watch it sync" demo needs no manual poke. `scripts/deploy.sh` writes the
+per-rebuild env (`aws secretsmanager put-secret-value`) — 10-foundation only seeds
+the placeholder shape and then ignores changes.
 
 Contents:
 
 | Secret | Holds |
 |---|---|
-| `eventide/auth` | `DATABASE_URL` (auth_db), **`BETTER_AUTH_SECRET`** (key-encryption key for the JWKS private keys), **`GOOGLE_CLIENT_ID`**, **`GOOGLE_CLIENT_SECRET`**, `BETTER_AUTH_URL` |
-| `eventide/event` | `DATABASE_URL` (event_db), S3 bucket name |
+| `eventide/auth` | `DATABASE_URL` (auth_db), **`BETTER_AUTH_SECRET`** (key-encryption key for the JWKS private keys). `BETTER_AUTH_URL` comes from the chart (`publicUrl`); `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` added when OAuth is wired. |
+| `eventide/event` | `DATABASE_URL` (event_db), `S3_BUCKET_NAME`, `S3_REGION`, and the session's `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` for presigning |
 | `eventide/registration` | `DATABASE_URL` (registration_db) |
+| `eventide-aws-creds` (k8s Secret, not in SM) | session creds ESO itself uses to read the three above; refreshed every `deploy.sh` run |
 
 Note what is **not** here: no shared JWT signing key. `event` and `registration` fetch
 public keys from `auth`'s JWKS endpoint at runtime, so there is no signing material to
@@ -372,18 +382,21 @@ secret fails with a clear message instead of a mystery crash.
 ### 5.3 Credentials for pods (IRSA is unavailable)
 
 `iam:CreateOpenIDConnectProvider` is denied in the Learner Lab, so IAM Roles for Service
-Accounts cannot be used. Two options, in order of preference:
+Accounts cannot be used. The two remaining options:
 
-1. **Preferred, pending a test:** if `iam:AttachRolePolicy` is permitted, attach S3 and
-   Secrets Manager policies to `LabEksNodeRole`. Pods then obtain credentials from the
-   instance metadata service automatically, with **no configuration and no expiry**.
-2. **Guaranteed fallback:** inject the lab session credentials as a Kubernetes Secret,
-   refreshed each session by `scripts/lab-creds.sh`. Works today, but expires every four
-   hours.
+1. **Attach policies to `LabEksNodeRole`** so pods get credentials from IMDS automatically,
+   no expiry. **Ruled out 2026-09-07:** `iam:AttachRolePolicy` is denied
+   (`docs/lab-probe-2026-09-07.txt`), and the pre-created node role carries only the three
+   `AmazonEKS*` policies — no S3, no Secrets Manager.
+2. **Inject the lab session credentials as a Kubernetes Secret**, refreshed each deploy by
+   `scripts/deploy.sh` (`aws configure export-credentials`). This is what's built. It
+   expires every ~4 h; a redeploy refreshes it. Two consumers:
+   - `eventide/event` — the `event` pod presigns S3 URLs directly (the app's one AWS call).
+   - `eventide-aws-creds` — the ESO `ClusterSecretStore` reads Secrets Manager with it.
 
-> **Report note:** pods reading node credentials via IMDS is something you would *block* in
-> production, because it grants every pod the node's full permissions. Here it is a
-> deliberate workaround for a restricted environment. Name the trade-off explicitly.
+> **Report note:** static, short-lived credentials in a cluster Secret is not how you would
+> run this in production (you would use IRSA / Pod Identity). It is a deliberate workaround
+> for a lab that denies both OIDC federation and policy attachment. Name the trade-off.
 
 ### 5.4 Network posture
 
@@ -412,19 +425,32 @@ in one environment and first-party in the other — two configurations to keep a
 
 ### 5.5.1 Where TLS is terminated — three options
 
-Route 53, ACM and CloudFront were **not probed** and their Learner Lab availability is
-unverified. Run the extended `scripts/check-lab.sh` before committing to option 2.
-
 | | Approach | Notes |
 |---|---|---|
 | **1** | **Cloudflare proxied DNS → NLB.** Proxied CNAME, Cloudflare terminates TLS, origin fetch over plain HTTP. | Zero new AWS services. Rebuild updates take **seconds** via the Cloudflare API — a proxied record has no client-side TTL to wait out. Survives switching to a teammate's AWS account with a single CNAME change. Origin leg unencrypted (Flexible SSL) — state this in the report. |
-| **2** | **Delegate a subdomain to Route 53 + ACM.** `api.<domain>` → ALIAS to the NLB, cert from ACM with DNS validation. | **Chosen direction.** Adds Route 53 and ACM to the architecture, and the ALIAS record is managed by Terraform in `20-platform`, so nightly rebuilds re-point DNS **automatically** with no external API call. Costs $0.50/month for the hosted zone. |
+| **2** | **Delegate a subdomain to Route 53 + ACM.** `events.<domain>` → ALIAS to the NLB, wildcard cert from ACM with DNS validation, TLS terminated at the NLB's `:443` listener. | **CHOSEN 2026-09-07** (user's call). Adds Route 53 and ACM to the architecture; the ALIAS record is managed by Terraform in `20-platform`, so nightly rebuilds re-point DNS **automatically** with no external API call. Costs $0.50/month for the hosted zone. |
 | **3** | cert-manager + Let's Encrypt in-cluster | Kubernetes-native and impressive, but Let's Encrypt permits only **5 duplicate certificates per week** for an identical domain set, so nightly rebuilds exhaust the quota in five days. Viable only with a staging issuer for daily work. Rejected. |
 
-**Delegate a subdomain, never the apex.** Point `NS` records for something like
-`cloud.<domain>` at the Route 53 hosted zone and leave the apex on Cloudflare. This keeps
-any existing production use of the domain untouched, and makes the fallback to option 1
-a matter of deleting four NS records rather than re-delegating a live zone.
+**As built (option 2):**
+
+- **`events.<domain>` delegated, apex stays on Cloudflare.** `NS` records for `events` point
+  at the Route 53 hosted zone. This keeps any existing use of the domain untouched, and
+  makes the fallback to option 1 a matter of deleting four NS records rather than
+  re-delegating a live zone. Because the subdomain is fully delegated, Cloudflare's proxy
+  and SSL mode do **not** apply to it — TLS is entirely AWS-side.
+- **Single host.** `https://events.<domain>` serves the SPA at `/` and the APIs at `/api/*`
+  through one ingress. No `api.` / `app.` split, so no CORS between origins. Google's
+  callback is `https://events.<domain>/api/auth/callback/google`.
+- **TLS at the NLB.** The Terraform-managed NLB gets a `:443` **TLS listener** with the ACM
+  wildcard cert (`events.<domain>` + `*.events.<domain>`), forwarding **plain HTTP** to
+  ingress-nginx's `:80` NodePort. The NLB→node leg is unencrypted but never leaves the VPC —
+  stated in the report. ingress-nginx does no ssl-redirect (it can't see the original
+  scheme through the L4 NLB); `:80` stays open for unauthenticated smoke tests.
+- **Lifetime split.** Zone + cert + validation records are **permanent** (`10-foundation/
+  dns.tf`) so the NS delegation is set once. Only the ALIAS A-record pointing at the current
+  NLB is ephemeral (`20-platform/route53.tf`), re-created each `make up`. The cert stays
+  `PENDING_VALIDATION` until the Cloudflare NS records are live, then issues on ACM's own
+  retry — no second apply needed.
 
 > **Risk this creates.** The Route 53 hosted zone lives inside the Learner Lab account. If
 > you fall back to a teammate's account in demo week (§2 of the knowledge base), the zone

@@ -9,13 +9,16 @@ the $50 cap in ~15 days.
 | EKS control plane (`eventide`, k8s 1.33) | **Raw `aws_eks_cluster`** — the community module `GetRole`s `voclabs` (denied by `Pvoclabs2`). Reuses `LabEksClusterRole` (regex + `one()`). `bootstrap_cluster_creator_admin_permissions = true`. `bootstrap_self_managed_addons = false` + managed vpc-cni/kube-proxy/coredns addons. |
 | Managed node group | 2 × `t3.small` (`-var node_instance_type=t3.medium` for the week-4 HPA demo), AL2023. Reuses `LabEksNodeRole`. min 2 / max 4. |
 | RDS PostgreSQL | `db.t3.micro`, default (public) subnets, SG-isolated to the node SG, `publicly_accessible = false`. No backups / no final snapshot / no deletion protection. |
-| NLB + 2 target groups + ASG attachments | `:80`/`:443` TCP → ingress-nginx NodePorts (`30080`/`30443`). Built by Terraform so `destroy` is reliable. |
+| NLB + 2 target groups + ASG attachments | `:80` TCP → ingress-nginx `:80` NodePort (`30080`). `:443` is a **TLS listener + ACM cert** → `30080` when `10-foundation` has a custom domain (`dns.tf`), else plain-TCP passthrough → `30443`. Built by Terraform so `destroy` is reliable. |
+| Route 53 ALIAS A-record (`route53.tf`, conditional) | `events.<domain>` → the fresh NLB, re-pointed every apply. Zero manual steps. Present only when `10-foundation` remote state carries a zone ID + cert ARN. |
 | **ingress-nginx** (`helm_release`, `addons.tf`) | Chart 4.15.1, NodePort, values from `infra/helm/ingress-nginx.values.yaml`. In Terraform so `make up` gives a cluster that's ready for the app; dies with the cluster on `down`. |
 | `eventide/rds-master` secret | master creds + endpoint for the DB-bootstrap Job. |
 
 ## Prerequisites
 
-- `10-foundation` applied.
+- `10-foundation` applied. This layer reads its outputs via `data.terraform_remote_state`
+  (`data.tf`) — the custom domain (zone ID, cert ARN) flows through automatically. If
+  `10-foundation` predates `dns.tf`, re-apply it once so the new (empty) outputs exist.
 - Fresh lab credentials in `~/.aws/credentials` (see `../README.md`).
 - `bash scripts/check-lab.sh` re-run if the lab was reset since last time — the
   `LabEks*Role` suffixes change and `one()` in `data.tf` will fail if the regex

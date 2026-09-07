@@ -22,6 +22,9 @@ dist/
 *.tfstate.*
 crash.log
 *.tfvars.local
+# real variable values (custom domain, teammate account) — keep the .example
+*.auto.tfvars
+!*.auto.tfvars.example
 override.tf
 override.tf.json
 *_override.tf

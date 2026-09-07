@@ -56,13 +56,13 @@ variable "node_desired_size" {
 }
 
 variable "ingress_http_nodeport" {
-  description = "NodePort that ingress-nginx's Service exposes for HTTP. Set in infra/helm values; the NLB forwards :80 here."
+  description = "NodePort ingress-nginx exposes for HTTP. The NLB forwards :80 here, and also :443 after terminating TLS with the ACM cert (nlb.tf)."
   type        = number
   default     = 30080
 }
 
 variable "ingress_https_nodeport" {
-  description = "NodePort that ingress-nginx's Service exposes for HTTPS. The NLB forwards :443 here (plain TCP passthrough until ACM lands in week 2)."
+  description = "NodePort ingress-nginx exposes for HTTPS. Only used by the pre-domain :443 TCP passthrough; once the custom domain is wired the NLB terminates TLS itself and forwards to the HTTP NodePort."
   type        = number
   default     = 30443
 }

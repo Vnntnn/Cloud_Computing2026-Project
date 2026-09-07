@@ -112,10 +112,17 @@ make down
 
 ## Notes
 
-- `scripts/lab-creds.sh` (the per-session node-credential refresh in the TODO
-  daily ritual) is **not needed** for the current deploy path — `deploy.sh`
-  assembles the `eventide-<svc>` k8s Secrets directly from `eventide/rds-master`,
-  and no app code calls the AWS SDK. It only comes back if the ESO path is
-  adopted with node-role IMDS auth.
-- If `check-lab.sh` shows `iam:AttachRolePolicy` is now permitted, that unlocks
-  the ESO path (`docs/TODO.md` §3) — a separate task, not part of this close-out.
+- **Deploy path (ESO, as of 2026-09-07 — first EKS run pending):** `deploy.sh`
+  `put-secret-value`s the real env into `eventide/{auth,event,registration}`,
+  creates `eventide-aws-creds` (session creds for ESO itself), deploys
+  `eso.enabled=true`, `kubectl wait`s the ExternalSecrets, `rollout restart`s.
+  The ESO operator comes from `make up` (`20-platform/addons.tf`). If an
+  ExternalSecret is stuck: `kubectl -n eventide describe externalsecret <name>` —
+  almost always expired creds in `eventide-aws-creds` (re-run `make deploy`) or
+  the operator pod not ready yet.
+- `scripts/lab-creds.sh` is **not needed** — `deploy.sh` handles every credential
+  the cluster needs (`eventide-aws-creds` for ESO, the `AWS_*` keys in
+  `eventide/event` for S3 presigning).
+- `iam:AttachRolePolicy` is **denied** (confirmed 2026-09-07). If a future lab
+  reset changes that, ESO and `event` could drop the static creds for node-role
+  IMDS — a nice-to-have, not required.

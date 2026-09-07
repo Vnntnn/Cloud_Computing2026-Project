@@ -1,0 +1,13 @@
+# Copy to `dns.auto.tfvars` (gitignored, auto-loaded) and fill in the domain to
+# turn on the Route 53 zone + ACM cert. Leave the file absent to keep DNS off.
+#
+#   cp dns.auto.tfvars.example dns.auto.tfvars
+#   terraform -chdir=infra/terraform/10-foundation apply
+#   terraform -chdir=infra/terraform/10-foundation output route53_name_servers
+#   # -> paste those 4 NS records into Cloudflare as NS records for `events`
+#
+# Only 10-foundation reads this. 20-platform picks the zone/cert up from remote
+# state automatically on the next `make up`.
+
+dns_domain = "example.com"
+# dns_subdomain = "events"   # default; the deployed host is <sub>.<domain>

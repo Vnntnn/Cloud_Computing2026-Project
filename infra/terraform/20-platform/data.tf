@@ -1,5 +1,27 @@
 data "aws_caller_identity" "current" {}
 
+# --- 10-foundation outputs ------------------------------------------------
+# The custom domain (Route 53 zone + ACM cert) lives in the permanent layer.
+# Read it here so the NLB gets a TLS listener and an ALIAS record re-pointed at
+# the fresh load balancer on every rebuild. All three collapse to "" until
+# 10-foundation is applied with `dns_domain` set — then `dns_enabled` flips and
+# nlb.tf / route53.tf switch from plain-TCP passthrough to TLS.
+data "terraform_remote_state" "foundation" {
+  backend = "s3"
+  config = {
+    bucket = "eventide-tfstate-735838417080"
+    key    = "10-foundation/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+
+locals {
+  acm_certificate_arn = try(data.terraform_remote_state.foundation.outputs.acm_certificate_arn, "")
+  route53_zone_id     = try(data.terraform_remote_state.foundation.outputs.route53_zone_id, "")
+  public_host         = try(data.terraform_remote_state.foundation.outputs.public_host, "")
+  dns_enabled         = local.acm_certificate_arn != "" && local.route53_zone_id != ""
+}
+
 # --- Lab IAM roles ----------------------------------------------------------
 # iam:CreateRole is denied. Reuse the roles AWS Academy pre-creates. NEVER
 # hardcode the ARNs: the "c219141a…" prefix changes on every lab reset and

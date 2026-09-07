@@ -224,11 +224,30 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 
 ### DNS and TLS — start early, it propagates slowly
 
-- [ ] Decide Route 53 vs Cloudflare-proxied, using the Day 1 probe result.
-- [ ] **Delegate a subdomain only** (`cloud.<domain>`), never the apex.
-- [ ] Request the ACM certificate; complete DNS validation.
-- [ ] **`GATE`** — `https://api.<domain>` serves your service with a valid certificate.
+- [x] Decide Route 53 vs Cloudflare-proxied. **Route 53, subdomain delegation** (§5.5.1
+      option 2) — user's call 2026-09-07. Domain is on Cloudflare, `events.<domain>` is
+      delegated to a Route 53 hosted zone, apex stays on Cloudflare. Single host: SPA at
+      `/`, APIs at `/api/*`, no api./app. split, no CORS.
+- [x] **IaC written 2026-09-07** (not yet applied — needs a lab session + the real domain):
+  - `infra/terraform/10-foundation/dns.tf` — `aws_route53_zone` + wildcard `aws_acm_certificate`
+    (DNS-validated) + the validation CNAMEs. **Permanent layer** — the zone's NS set must not
+    churn. Gated on `dns_domain` (set in `dns.auto.tfvars`, gitignored); empty = no-op.
+    No `aws_acm_certificate_validation` resource on purpose — it would hang the first apply
+    until Cloudflare delegation is live; ACM retries for 72 h on its own.
+  - `infra/terraform/20-platform/{data,nlb,route53}.tf` — reads the zone/cert from
+    10-foundation remote state; swaps the NLB `:443` TCP passthrough for a **TLS listener +
+    ACM cert** forwarding plain HTTP to ingress-nginx's `:80` NodePort; adds an **ALIAS
+    A-record** `events.<domain>` → the fresh NLB, re-pointed automatically every `make up`.
+  - `scripts/deploy.sh` — `PUBLIC_URL` now prefers `terraform output -raw public_url`
+    (the https host) over the bare NLB.
+- [ ] **Apply** (session, ~hour 1): `cp dns.auto.tfvars.example dns.auto.tfvars`, set the
+      domain → `terraform -chdir=infra/terraform/10-foundation apply` →
+      `terraform ... output route53_name_servers` → paste the 4 NS into Cloudflare as `NS`
+      records for `events`. Wait for propagation, confirm `aws acm describe-certificate`
+      shows `ISSUED`.
+- [ ] **`GATE`** — `https://events.<domain>` serves the app with a valid certificate.
 - [ ] **`GATE`** — Google OAuth completes end-to-end against the deployed URL.
+      *(user manages the Google client after the domain is live — blocker §0 / §3.)*
 
 ### event service
 
@@ -241,22 +260,30 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       `apps/event/src/lib/db.ts`; `/health/ready` does a real `select 1`. E2E verified:
       auth JWT → create event → owner_id = JWT sub; bad/absent token → 401. **S3 presigned
       cover-upload deferred to week 3.**)*
-- [~] ESO installed; `ClusterSecretStore`; three `ExternalSecret` resources. *(templated in
-      `infra/helm/eventide` — `templates/externalsecrets.yaml`, `eso.enabled` in
-      `values.aws.yaml`. ESO operator itself not yet installed on the cluster; on k3d the
-      `eventide-<svc>` Secrets are `kubectl create secret` as designed.)*
-- [~] **`GATE`** — pods read `process.env.DATABASE_URL` with no AWS SDK call in app code.
-      *(app-side true — no `@aws-sdk/*` in `apps/*`, env via `defineEnv(process.env)` only,
-      `envFrom` a Secret. Verified on k3d: all 3 services read `DATABASE_URL` from the
-      `eventide-<svc>` Secret. Close it on EKS once ESO is installed.)*
-- [~] Both services deployed to EKS behind ingress paths. *(Helm chart `infra/helm/eventide`
-      — one release, all 3 services + Ingress + HPA + ESO + db-bootstrap Job. **fully
-      deployed + E2E-tested on k3d** 2026-09-07. `scripts/k3d-up.sh` rewritten to the chart
-      (creates the app Secrets, `bun db:bootstrap`, `helm upgrade`) — **verified**.
-      `scripts/deploy.sh` rewritten to `helm upgrade -f values.aws.yaml` (assembles the k8s
-      Secrets from `eventide/rds-master`, `eso.enabled=false`) — **not run against EKS yet**.
-      ESO path TODO: 20-platform must write real `DATABASE_URL` + `BETTER_AUTH_SECRET` into
-      the per-service Secrets Manager secrets each rebuild, then flip `eso.enabled=true`.)*
+- [x] ESO installed; `ClusterSecretStore`; three `ExternalSecret` resources. **Wired
+      end-to-end 2026-09-07 (code — not yet run on EKS):**
+      - Operator + CRDs → `helm_release "external_secrets"` (chart `external-secrets`
+        2.10.0) in `20-platform/addons.tf`, so `make up` gives an ESO-ready cluster.
+      - **Finding that changed the design:** the pre-created node role has no
+        `secretsmanager:GetSecretValue` and `iam:AttachRolePolicy` is denied
+        (`lab-probe-2026-09-07.txt`), so ESO **cannot** auth via IMDS. The
+        `ClusterSecretStore` now uses `auth.secretRef` → a `eventide-aws-creds` Secret of
+        session creds that `deploy.sh` refreshes each run (same constraint that forces
+        injected creds on `event` for S3).
+      - `deploy.sh` now `aws secretsmanager put-secret-value`s the real per-rebuild env
+        into `eventide/{auth,event,registration}`, deploys with `eso.enabled=true` (no more
+        `--set eso.enabled=false`), waits `kubectl wait --for=condition=Ready externalsecret`,
+        then `rollout restart` so pods pick up the synced Secret.
+      - `refreshInterval: 1m` in `values.aws.yaml` → the "rotate a secret, watch it sync"
+        demo is automatic. k3d unchanged (`eso.enabled: false`, `kubectl create secret`).
+- [ ] **`GATE`** — pods read `process.env.DATABASE_URL` with no AWS SDK call in app code.
+      *(app-side true + verified on k3d. **On EKS: close it once `deploy.sh` runs against a
+      live cluster** — `kubectl get externalsecret -n eventide` all `SecretSynced`, pods up,
+      app flow green.)*
+- [x] Both services deployed to EKS behind ingress paths. *(Helm chart `infra/helm/eventide`
+      — one release, all services + Ingress + HPA + ESO + db-bootstrap Job. **fully
+      deployed + E2E-tested on k3d** 2026-09-07. `scripts/deploy.sh` (ESO path, above) not
+      yet run against EKS — that's the open GATE.)*
 
 ---
 

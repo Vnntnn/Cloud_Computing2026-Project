@@ -77,13 +77,21 @@ Say: *no cross-service foreign keys are possible — the engine refuses.*
 ### 4. Rotate a secret live
 
 ```sh
+# show the current synced value first
+kubectl -n eventide get secret eventide-<svc> -o jsonpath='{.data.SOME_KEY}' | base64 -d
+
 aws secretsmanager put-secret-value --secret-id eventide/<svc> \
-  --secret-string '{...new password...}'
-# wait for ESO refresh interval, then:
+  --secret-string '{...new value...}'
+
+# refreshInterval is 1m (values.aws.yaml) — watch ESO pick it up:
+kubectl -n eventide get externalsecret eventide-<svc> -w      # STATUS -> SecretSynced
+# ...then re-read the k8s Secret to show it changed, and:
 kubectl -n eventide rollout restart deploy/<svc>
 ```
 
-App keeps working. The other two services are untouched.
+App keeps working. The other two services are untouched. To force the sync
+instantly instead of waiting the minute:
+`kubectl -n eventide annotate externalsecret eventide-<svc> force-sync=$(date +%s) --overwrite`
 
 ### 5. Scale under load
 

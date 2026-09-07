@@ -32,3 +32,31 @@ output "secret_arns" {
   description = "Secrets Manager ARN per service — referenced by ESO ExternalSecret resources."
   value       = { for k, s in aws_secretsmanager_secret.service : k => s.arn }
 }
+
+# --- Custom domain (dns.tf) — consumed by 20-platform via terraform_remote_state.
+# All empty / [] when dns_domain is unset.
+
+output "public_host" {
+  description = "Single host the deployed system is served at, e.g. events.example.com."
+  value       = local.zone_name
+}
+
+output "public_url" {
+  description = "https://<public_host> — feed to deploy.sh as PUBLIC_URL (JWT iss/aud, BETTER_AUTH_URL)."
+  value       = local.dns_enabled ? "https://${local.zone_name}" : ""
+}
+
+output "route53_zone_id" {
+  description = "Hosted zone ID — 20-platform adds the NLB ALIAS record here each rebuild."
+  value       = local.dns_enabled ? aws_route53_zone.app[0].zone_id : ""
+}
+
+output "route53_name_servers" {
+  description = "Paste these 4 NS records into Cloudflare for the delegated subdomain, once."
+  value       = local.dns_enabled ? aws_route53_zone.app[0].name_servers : []
+}
+
+output "acm_certificate_arn" {
+  description = "Wildcard cert ARN for the NLB TLS listener (20-platform/nlb.tf). PENDING_VALIDATION until the NS delegation is live."
+  value       = local.dns_enabled ? aws_acm_certificate.app[0].arn : ""
+}
