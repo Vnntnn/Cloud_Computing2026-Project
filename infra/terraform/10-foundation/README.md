@@ -10,6 +10,7 @@ survive a platform teardown — pushed images, uploaded cover images, secret val
 | S3 uploads bucket (`eventide-uploads-<account>`) | Cover images are re-seeded each rebuild, but the bucket + CORS policy shouldn't churn. |
 | 3 × Secrets Manager secret (`eventide/{auth,event,registration}`) | Real secret values are entered once and must not be lost on teardown. |
 | Route 53 hosted zone + ACM wildcard cert (`dns.tf`, opt-in) | The zone's NS records are delegated from Cloudflare **by hand, once** — recreating the zone changes the NS set and breaks the delegation. The cert DNS-validates once and is reused across every platform rebuild. |
+| `eventide/google-oauth` secret (`oauth.tf`, opt-in) | Google OAuth client id/secret — stable across rebuilds, Terraform-managed from `google.auto.tfvars`. `scripts/deploy.sh` merges it into `eventide-auth`. |
 
 ## Prerequisites
 
@@ -77,6 +78,22 @@ remote state on the next `make up` and wires the NLB TLS listener + ALIAS record
 
 **This layer is never destroyed**, so the zone and its NS delegation are set once
 and survive every nightly platform rebuild.
+
+## Google OAuth (`oauth.tf`) — optional, opt-in
+
+Off unless `google_client_id` + `google_client_secret` are set. When set, Terraform
+creates the `eventide/google-oauth` secret; `scripts/deploy.sh` reads it into the
+`eventide-auth` k8s Secret on the next `make deploy`.
+
+```bash
+cp google.auto.tfvars.example google.auto.tfvars   # gitignored; paste the client creds
+terraform -chdir=infra/terraform/10-foundation apply
+```
+
+Register the redirect URI in Google Cloud Console (exact match, HTTPS, no wildcard):
+`https://events.<domain>/api/auth/callback/google` and (for dev)
+`http://localhost:3000/api/auth/callback/google`. Consent screen → **In production**,
+scopes limited to `openid` / `email` / `profile` (SYSTEM-DESIGN §5.1.1).
 
 ## Overrides
 

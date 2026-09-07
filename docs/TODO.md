@@ -210,9 +210,15 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       wired but only registered when `GOOGLE_CLIENT_ID`/`_SECRET` are present — `env.ts`
       defaults everything for `make dev`, prod guard throws on missing injected secrets.)*
 - [ ] Google Cloud Console: OAuth client, consent screen → **Production**, scopes limited to
-      `openid`/`email`/`profile`. Register both redirect URIs:
-      `http://localhost:3000/...` and `https://api.<domain>/...`. *(deferred — needs the
-      Google project + the deployed hostname; email/password unblocks everything else.)*
+      `openid`/`email`/`profile`. Register redirect URIs (exact, HTTPS):
+      `http://localhost:3000/api/auth/callback/google` and
+      `https://events.<domain>/api/auth/callback/google`. *(deferred — user manages after the
+      domain is live; email/password unblocks everything else.)*
+- [x] **Terraform plumbing for the client creds** (`50734cd`-era + follow-up): variables
+      `google_client_id` / `google_client_secret` in `10-foundation/oauth.tf` →
+      `eventide/google-oauth` secret (opt-in, Terraform-managed) → `scripts/deploy.sh` merges
+      into `eventide-auth`. Paste the creds into `google.auto.tfvars` (gitignored), apply
+      10-foundation, `make deploy`. Nothing to do until the Console client exists.
 - [x] **`GATE`** — `GET /api/auth/jwks` returns public keys. *(pass, local 2026-09-07:
       `{"keys":[{"alg":"EdDSA","crv":"Ed25519",...}]}`. sign-up/sign-in return
       `set-auth-token`; `GET /api/auth/token` with the bearer returns a valid EdDSA JWT

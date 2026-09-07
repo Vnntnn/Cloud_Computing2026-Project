@@ -13,10 +13,10 @@
 #
 # Secrets: this script assembles the eventide-{auth,event,registration} k8s
 # Secrets directly from `eventide/rds-master` (the same source the db-bootstrap
-# Job uses) and deploys with eso.enabled=false. The chart keeps the ESO
-# templates behind that toggle — see infra/helm/eventide/templates/
-# externalsecrets.yaml and SYSTEM-DESIGN §5.2 for why they stay disabled in the
-# lab (IRSA is unavailable and the node role can't read Secrets Manager).
+# Job uses), plus `eventide/google-oauth` into eventide-auth if that secret
+# exists (10-foundation/oauth.tf), and deploys with eso.enabled=false. The chart
+# keeps the ESO templates behind that toggle — see SYSTEM-DESIGN §5.2.1 for why
+# they stay disabled in the lab.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -62,9 +62,22 @@ mksecret() { kubectl -n eventide create secret generic "$1" "${@:2}" \
 # ?sslmode=require — RDS PG16 forces SSL (rds.force_ssl=1); `require` encrypts
 # without verifying the cert, which is fine inside the VPC.
 SSL="?sslmode=require"
-mksecret eventide-auth \
-  --from-literal=DATABASE_URL="postgres://auth_svc:$(rds AUTH_SVC_PASSWORD)@${HOST}:${PORT}/auth_db${SSL}" \
+
+# Google OAuth (optional). eventide/google-oauth is Terraform-managed in
+# 10-foundation from google_client_id / google_client_secret (oauth.tf). Absent →
+# auth runs email/password only (SYSTEM-DESIGN §5.1.1).
+AUTH_ARGS=(
+  --from-literal=DATABASE_URL="postgres://auth_svc:$(rds AUTH_SVC_PASSWORD)@${HOST}:${PORT}/auth_db${SSL}"
   --from-literal=BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET}"
+)
+GOOGLE_JSON="$(aws secretsmanager get-secret-value --region "$REGION" \
+  --secret-id eventide/google-oauth --query SecretString --output text 2>/dev/null || true)"
+if [ -n "$GOOGLE_JSON" ]; then
+  AUTH_ARGS+=(--from-literal=GOOGLE_CLIENT_ID="$(echo "$GOOGLE_JSON" | jq -r .GOOGLE_CLIENT_ID)")
+  AUTH_ARGS+=(--from-literal=GOOGLE_CLIENT_SECRET="$(echo "$GOOGLE_JSON" | jq -r .GOOGLE_CLIENT_SECRET)")
+  echo "google oauth: enabled"
+fi
+mksecret eventide-auth "${AUTH_ARGS[@]}"
 # event also gets S3: the uploads bucket name + the current session's AWS
 # credentials (the app's one AWS touch-point — presigning cover-image URLs;
 # IRSA and node-role access are both denied, §5.3). These expire with the

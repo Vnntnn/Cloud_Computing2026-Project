@@ -358,7 +358,7 @@ Contents:
 
 | Secret | Holds |
 |---|---|
-| `eventide-auth` | `DATABASE_URL` (auth_db), **`BETTER_AUTH_SECRET`** (key-encryption key for the JWKS private keys). `BETTER_AUTH_URL` comes from the chart (`publicUrl`); `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` added when OAuth is wired. |
+| `eventide-auth` | `DATABASE_URL` (auth_db), **`BETTER_AUTH_SECRET`** (key-encryption key for the JWKS private keys). `BETTER_AUTH_URL` comes from the chart (`publicUrl`). `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are merged in by `deploy.sh` from the Terraform-managed `eventide/google-oauth` secret (`10-foundation/oauth.tf`) when it exists — absent, auth is email/password only. |
 | `eventide-event` | `DATABASE_URL` (event_db), `S3_BUCKET_NAME`, `S3_REGION`, and the session's `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` for presigning |
 | `eventide-registration` | `DATABASE_URL` (registration_db) |
 

@@ -12,11 +12,12 @@ locals {
   # (packages/shared/src/env.ts), so a missing key fails loudly.
   secret_templates = {
     auth = {
-      DATABASE_URL         = "postgres://REPLACE_ME"
-      BETTER_AUTH_SECRET   = "REPLACE_ME"
-      BETTER_AUTH_URL      = "REPLACE_ME"
-      GOOGLE_CLIENT_ID     = "REPLACE_ME"
-      GOOGLE_CLIENT_SECRET = "REPLACE_ME"
+      DATABASE_URL       = "postgres://REPLACE_ME"
+      BETTER_AUTH_SECRET = "REPLACE_ME"
+      BETTER_AUTH_URL    = "REPLACE_ME"
+      # GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are optional and live in their own
+      # Terraform-managed secret eventide/google-oauth (oauth.tf) — deploy.sh
+      # merges them into eventide-auth. auth runs email/password-only without them.
     }
     event = {
       DATABASE_URL   = "postgres://REPLACE_ME"

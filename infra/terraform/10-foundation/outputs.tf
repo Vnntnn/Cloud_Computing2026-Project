@@ -60,3 +60,9 @@ output "acm_certificate_arn" {
   description = "Wildcard cert ARN for the NLB TLS listener (20-platform/nlb.tf). PENDING_VALIDATION until the NS delegation is live."
   value       = local.dns_enabled ? aws_acm_certificate.app[0].arn : ""
 }
+
+output "google_oauth_secret" {
+  description = "Secrets Manager name holding the Google OAuth client id/secret, or \"\" when Google sign-in is disabled. scripts/deploy.sh reads it into eventide-auth."
+  # nonsensitive(): the *name* is fixed and public; only the secret value is sensitive.
+  value = nonsensitive(local.google_oauth_enabled) ? "${var.project}/google-oauth" : ""
+}
