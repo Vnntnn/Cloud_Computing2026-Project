@@ -216,9 +216,19 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 
 ### event service
 
-- [ ] CRUD, listing, JWT verification via `jose` `createRemoteJWKSet` against auth's JWKS.
+- [~] CRUD, listing, JWT verification via `jose` `createRemoteJWKSet` against auth's JWKS.
+      *(done local 2026-09-07: `GET /api/events`, `GET /api/events/:id`,
+      `GET /api/events/:id/summary` (trimmed shape for registration, §4.4),
+      `POST /api/events` guarded by `{ auth: true }`. Verification is the shared
+      `bearerAuth` Elysia macro in `@eventide/shared/auth` — `jose` local verify vs JWKS,
+      no hop to auth, no DB call; `event`+`registration` both reuse it. `event_db` wired via
+      `apps/event/src/lib/db.ts`; `/health/ready` does a real `select 1`. E2E verified:
+      auth JWT → create event → owner_id = JWT sub; bad/absent token → 401. **S3 presigned
+      cover-upload deferred to week 3.**)*
 - [ ] ESO installed; `ClusterSecretStore`; three `ExternalSecret` resources.
 - [ ] **`GATE`** — pods read `process.env.DATABASE_URL` with no AWS SDK call in app code.
+      *(app-side already true — no `@aws-sdk/*` in `apps/*`; env via `defineEnv(process.env)`
+      only. Needs ESO on the cluster to close.)*
 - [ ] Both services deployed to EKS behind ingress paths.
 
 ---

@@ -1,7 +1,9 @@
 import { openapi } from '@elysiajs/openapi'
 import { HealthResponse } from '@eventide/shared/models'
+import { sql } from 'drizzle-orm'
 import { Elysia } from 'elysia'
 import { env } from './env.ts'
+import { db } from './lib/db.ts'
 import { event } from './modules/event/index.ts'
 
 const SERVICE = 'event'
@@ -19,12 +21,22 @@ export const app = new Elysia()
     response: 'Health',
     detail: { summary: 'Liveness probe', tags: ['health'] },
   })
-  // Readiness: dependencies are reachable.
-  // TODO(week2): real `SELECT 1` against the @eventide/db pool.
-  .get('/health/ready', () => ({ status: 'ok' as const, service: SERVICE }), {
-    response: 'Health',
-    detail: { summary: 'Readiness probe', tags: ['health'] },
-  })
+  // Readiness: event_db is reachable.
+  .get(
+    '/health/ready',
+    async ({ status }) => {
+      try {
+        await db.execute(sql`select 1`)
+        return { status: 'ok' as const, service: SERVICE }
+      } catch {
+        return status(503, { status: 'degraded' as const, service: SERVICE })
+      }
+    },
+    {
+      response: { 200: 'Health', 503: 'Health' },
+      detail: { summary: 'Readiness probe', tags: ['health'] },
+    },
+  )
   .get('/', () => ({ service: SERVICE, version: '0.0.0' }))
   .use(event)
 

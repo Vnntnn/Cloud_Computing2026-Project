@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./env": "./src/env.ts",
-    "./models": "./src/models/index.ts"
+    "./models": "./src/models/index.ts",
+    "./auth": "./src/auth/bearer.ts"
   },
   "scripts": {
     "lint": "biome check .",
@@ -17,6 +18,7 @@
     "elysia": ">=1.4.0"
   },
   "dependencies": {
+    "jose": "^6.2.12",
     "zod": "^4.1.11"
   },
   "devDependencies": {

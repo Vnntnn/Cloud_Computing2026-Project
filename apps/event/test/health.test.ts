@@ -8,8 +8,31 @@ describe('event health', () => {
     expect(await res.json()).toEqual({ status: 'ok', service: 'event' })
   })
 
-  it('GET /health/ready is 200', async () => {
+  it('GET /health/ready reports DB reachability without throwing', async () => {
+    // 200 when event_db is reachable (local `make dev`), 503 when it is not
+    // (CI has no Postgres) — either is correct, a 500 is not.
     const res = await app.handle(new Request('http://localhost/health/ready'))
-    expect(res.status).toBe(200)
+    expect([200, 503]).toContain(res.status)
+    const body = (await res.json()) as { status: string; service: string }
+    expect(body.service).toBe('event')
+    expect(['ok', 'degraded']).toContain(body.status)
+  })
+})
+
+describe('event auth guard', () => {
+  it('POST /api/events without a bearer token is 401', async () => {
+    const res = await app.handle(
+      new Request('http://localhost/api/events', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'x',
+          venue: 'y',
+          startsAt: '2026-10-01T18:00:00Z',
+          capacity: 10,
+        }),
+      }),
+    )
+    expect(res.status).toBe(401)
   })
 })

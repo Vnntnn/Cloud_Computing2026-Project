@@ -18,7 +18,9 @@
     "@elysiajs/openapi": "^1.4.11",
     "@eventide/db": "workspace:*",
     "@eventide/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2",
     "elysia": "^1.4.9",
+    "postgres": "^3.4.9",
     "zod": "^4.1.11"
   }
 }

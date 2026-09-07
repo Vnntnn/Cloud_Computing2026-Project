@@ -1,18 +1,40 @@
 import { t } from 'elysia'
 
 /**
- * Request/response models for the event module — Elysia `t` (TypeBox) only,
- * registered on the controller via `.model()`. This is the single source of
- * truth for both validation and types; do not add a parallel Zod schema.
+ * Request/response models for the event module — Elysia `t` (TypeBox) only, the
+ * single source of truth for validation *and* types. Do not add a parallel Zod
+ * schema (it would break Eden inference — CLAUDE.md).
  */
-export const EventModel = {
-  event: t.Object({
-    id: t.String({ format: 'uuid' }),
-    title: t.String(),
-    venue: t.String(),
-    startsAt: t.String({ format: 'date-time' }),
-    capacity: t.Integer({ minimum: 1 }),
-  }),
-}
 
-export type EventShape = typeof EventModel.event.static
+const event = t.Object({
+  id: t.String({ format: 'uuid' }),
+  title: t.String({ minLength: 1, maxLength: 200 }),
+  description: t.String({ default: '' }),
+  venue: t.String({ minLength: 1, maxLength: 200 }),
+  startsAt: t.String({ format: 'date-time' }),
+  capacity: t.Integer({ minimum: 1 }),
+  coverKey: t.Union([t.String(), t.Null()]),
+  ownerId: t.String(), // better-auth user.id — text, not uuid
+  createdAt: t.String({ format: 'date-time' }),
+})
+
+const createBody = t.Object({
+  title: t.String({ minLength: 1, maxLength: 200 }),
+  description: t.Optional(t.String({ maxLength: 5000 })),
+  venue: t.String({ minLength: 1, maxLength: 200 }),
+  startsAt: t.String({ format: 'date-time' }),
+  capacity: t.Integer({ minimum: 1 }),
+})
+
+/** The trimmed shape `registration` reads over HTTP at booking time (§4.4). */
+const summary = t.Object({
+  id: t.String({ format: 'uuid' }),
+  title: t.String(),
+  capacity: t.Integer({ minimum: 1 }),
+})
+
+export const EventModel = { event, createBody, summary }
+
+export type EventShape = typeof event.static
+export type CreateEventBody = typeof createBody.static
+export type EventSummary = typeof summary.static
