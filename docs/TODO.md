@@ -24,16 +24,16 @@ can slip. If a day runs long, cut from the *bottom* of that day, never from a GA
 
 ## 1. Daily ritual
 
-### Every session start
+### Every session start  (see `docs/week1-closeout.md` for the copy-paste version)
 
 - [ ] Learner Lab → **Start Lab**. Note the credit remaining.
 - [ ] Copy AWS CLI credentials into `~/.aws/credentials` (they expire with the session).
-- [ ] `terraform -chdir=infra/terraform/20-platform apply` — ~18 min. Start it, then do
-      something else.
-- [ ] `aws eks update-kubeconfig --region us-east-1 --name eventide`
-- [ ] Refresh the in-cluster AWS credentials Secret (`scripts/lab-creds.sh`) — **unless**
-      the `AttachRolePolicy` route worked, in which case this step disappears.
-- [ ] Run the migration + seed Job.
+- [ ] `bash scripts/check-lab.sh` — role suffixes / denials change on every reset.
+- [ ] `make up` — `terraform apply 20-platform` (~18 min) + kubeconfig + `get nodes`.
+- [ ] `bash scripts/db-bootstrap.sh` — build+push the db-bootstrap image, run the Job.
+- [ ] `make deploy` (Helm, all 3 services) then `make seed AUTH_URL=http://<nlb>`.
+- [ ] `scripts/lab-creds.sh` is **not needed** on the current path — `deploy.sh` builds the
+      k8s Secrets from `eventide/rds-master` and no app code calls the AWS SDK.
 
 ### Every session end — non-negotiable
 
@@ -148,7 +148,10 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       (`oven/bun:1` → `oven/bun:1-slim` in `packages/db/Dockerfile`). Then `make db-bootstrap`
       should run clean.)*
 - [ ] **`GATE`** — full `destroy`, then rebuild from zero, end to end. This is the step
-      everyone skips. *(deferred with db-bootstrap — do both next session.)*
+      everyone skips. *(runbook: `docs/week1-closeout.md`. db-bootstrap image slimmed
+      185 MB → 89 MB (`oven/bun:1-slim` + focused deps, no monorepo lockfile) — verified
+      local. Everything else scripted: `make up` / `db-bootstrap.sh` / `make deploy` (Helm)
+      / `make seed` / `make down`. **Needs a lab session.**)*
 
 ### Day 5 (Fri) — checkpoint
 
