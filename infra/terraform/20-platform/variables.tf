@@ -67,6 +67,19 @@ variable "ingress_https_nodeport" {
   default     = 30443
 }
 
+variable "enable_container_insights" {
+  description = <<-EOT
+    Install the amazon-cloudwatch-observability add-on (Container Insights) for
+    pod CPU/memory graphs in the week-4 report. OFF by default: its CloudWatch
+    agent needs CloudWatchAgentServerPolicy on the node role, and whether
+    iam:AttachRolePolicy is permitted in the lab is unprobed. See addons.tf for
+    the probe commands. `kubectl top pods` + the HPA event log cover the scaling
+    evidence without it.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "db_instance_class" {
   type    = string
   default = "db.t3.micro"

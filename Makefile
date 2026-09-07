@@ -1,4 +1,4 @@
-.PHONY: dev db bootstrap up deploy down k3d k3d-down help
+.PHONY: dev db bootstrap up deploy down k3d k3d-down load help
 
 TF_PLATFORM := terraform -chdir=infra/terraform/20-platform
 
@@ -30,6 +30,9 @@ deploy: ## build+push the app image(s), apply infra/k8s, roll out
 
 db-bootstrap: ## create the 3 RDS databases + roles + run migrations (one-shot Job)
 	bash scripts/db-bootstrap.sh
+
+load: ## k6 autoscaling load test vs /api/events — pass BASE_URL=http://<nlb-dns>
+	BASE_URL="$(BASE_URL)" k6 run load/k6/events.js
 
 down: ## destroy 20-platform and verify nothing survived — run at EVERY session end
 	bash scripts/teardown.sh

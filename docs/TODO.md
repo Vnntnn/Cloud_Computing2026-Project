@@ -239,11 +239,22 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 
 ### Autoscaling
 
-- [ ] Resource `requests` and `limits` on all three services — HPA does not work without
-      requests.
-- [ ] metrics-server; HPA on `event` (CPU target ~60%, min 2, **max 8**).
-- [ ] CloudWatch Container Insights add-on enabled in Terraform.
-- [ ] k6 script against `/api/events`; tune load until replicas visibly climb and settle.
+- [~] Resource `requests` and `limits` on all three services — HPA does not work without
+      requests. *(`event.yaml` has them: `50m/64Mi` req, `250m/192Mi` lim. `auth` /
+      `registration` need the same when their manifests are written.)*
+- [~] metrics-server; HPA on `event` (CPU target ~60%, min 2, **max 8**). *(prepped
+      2026-09-07: `helm_release.metrics_server` in `20-platform/addons.tf` — chart 3.12.2,
+      `--kubelet-insecure-tls`; `infra/k8s/event-hpa.yaml` — `autoscaling/v2`, CPU 60%,
+      2→8, fast scale-up / 60s scale-down. `make deploy` applies it with the dir.
+      Untested against a live cluster.)*
+- [~] CloudWatch Container Insights add-on enabled in Terraform. *(prepped, **gated OFF**:
+      `aws_eks_addon.cloudwatch_observability`, `count = var.enable_container_insights ? 1 : 0`.
+      Its CloudWatch agent needs `CloudWatchAgentServerPolicy` on the node role via
+      `iam:AttachRolePolicy` — still unprobed. Probe commands in `addons.tf`. Fallback:
+      `kubectl top pods` + HPA event log.)*
+- [~] k6 script against `/api/events`; tune load until replicas visibly climb and settle.
+      *(`load/k6/events.js` — ramping-vus 0→50→120→0 over 12 min; `make load BASE_URL=…`;
+      `load/README.md` has the watch-pane commands + tuning notes. Not yet run.)*
 - [ ] **`GATE`** — replicas go 2 → 8 under load and scale back down afterwards.
 - [ ] Screenshot `kubectl get hpa -w`, pod counts, and Container Insights graphs.
 
@@ -252,6 +263,8 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 
 ### Report
 
+- [~] Skeleton written — `docs/REPORT.md` (10 sections, each led by its trade-off + the
+      evidence it needs). Fill prose as work lands.
 - [ ] Lead with the trade-offs, not the feature list:
   - [ ] Service boundary placed to avoid a distributed transaction
   - [ ] Database-per-service enforced by Postgres, not by convention
@@ -273,6 +286,8 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 
 ### Demo runsheet
 
+- [~] Written — `docs/DEMO-RUNSHEET.md` (evening-before, pre-flight, 6-step live sequence,
+      post-demo, rehearsal checklist + known-failure table). Refine after Rehearsal 1.
 - [ ] Start `terraform apply` at the top and talk over it.
 - [ ] Show the database boundary being refused by Postgres.
 - [ ] Log in with Google, create an event, upload an image, book a ticket.
