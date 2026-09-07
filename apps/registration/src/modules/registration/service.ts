@@ -61,6 +61,11 @@ async function signTicket(row: typeof tickets.$inferSelect) {
 export abstract class RegistrationService {
   static async create(input: CreateOrder, userId: string, idempotencyKey: string) {
     const requestHash = hash(JSON.stringify(input))
+
+    // Fast path: an already-recorded key needs no event lookup. The authoritative
+    // check runs again inside the transaction under an advisory lock, so two
+    // concurrent requests with the same key (a double-clicked "Buy") cannot both
+    // pass this and race to INSERT the key.
     const [replay] = await db
       .select()
       .from(idempotencyKeys)
@@ -102,6 +107,30 @@ export abstract class RegistrationService {
     )
 
     return db.transaction(async (tx) => {
+      // Serialise same-key requests: the first to commit writes the key row, any
+      // that were waiting on this lock then see it and return the same order.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${idempotencyKey}, 0))`)
+      const [locked] = await tx
+        .select()
+        .from(idempotencyKeys)
+        .where(and(eq(idempotencyKeys.scope, 'order'), eq(idempotencyKeys.key, idempotencyKey)))
+        .limit(1)
+      if (locked) {
+        if (locked.userId !== userId || locked.requestHash !== requestHash)
+          throw new InvalidOrder('idempotency key reused with another request')
+        const [existing] = locked.resourceId
+          ? await tx.select().from(orders).where(eq(orders.id, locked.resourceId)).limit(1)
+          : []
+        if (existing) {
+          const items = await tx
+            .select()
+            .from(orderItems)
+            .where(eq(orderItems.orderId, existing.id))
+            .orderBy(asc(orderItems.id))
+          return formatOrder(existing, items)
+        }
+      }
+
       for (const type of [...selected].sort((a, b) => a.id.localeCompare(b.id))) {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${type.id}, 0))`)
         await tx
