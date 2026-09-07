@@ -49,3 +49,11 @@ export function signOut() {
   jwtCache = null
   return authClient.signOut()
 }
+
+export function authApiFetch(path: string, init: RequestInit = {}) {
+  const token = localStorage.getItem(BEARER_KEY)
+  const headers = new Headers(init.headers)
+  if (token) headers.set('authorization', `Bearer ${token}`)
+  if (init.body) headers.set('content-type', 'application/json')
+  return fetch(path, { ...init, headers })
+}

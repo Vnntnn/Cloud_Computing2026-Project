@@ -1,5 +1,6 @@
 import { treaty } from '@elysiajs/eden'
 import type { App as EventApp } from '@eventide/event/app'
+import type { App as PaymentApp } from '@eventide/payment/app'
 import type { App as RegistrationApp } from '@eventide/registration/app'
 import { getJwt } from './auth'
 
@@ -14,3 +15,4 @@ const config = {
 
 export const edenEvent = treaty<EventApp>(window.location.origin, config)
 export const edenReg = treaty<RegistrationApp>(window.location.origin, config)
+export const edenPayment = treaty<PaymentApp>(window.location.origin, config)

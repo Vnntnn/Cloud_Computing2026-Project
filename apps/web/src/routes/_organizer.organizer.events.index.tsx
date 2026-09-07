@@ -1,0 +1,82 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { toast } from 'sonner'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { edenEvent } from '@/lib/eden'
+
+const managedEventsQuery = {
+  queryKey: ['events', 'managed'] as const,
+  queryFn: async () => {
+    const result = await edenEvent.api.organizer.events.get({ query: { page: 1, pageSize: 100 } })
+    if (result.error || !result.data || result.data instanceof Response)
+      throw new Error('Unable to load managed events')
+    return result.data
+  },
+}
+
+export const Route = createFileRoute('/_organizer/organizer/events/')({
+  loader: ({ context }) => context.queryClient.ensureQueryData(managedEventsQuery),
+  component: OrganizerEventsPage,
+})
+
+function OrganizerEventsPage() {
+  const queryClient = useQueryClient()
+  const { data } = useQuery(managedEventsQuery)
+  const transition = useMutation({
+    mutationFn: async ({ id, action }: { id: string; action: 'publish' | 'close' }) => {
+      const result = await edenEvent.api.events({ id })[action].post()
+      if (result.error) throw new Error(`Unable to ${action} event`)
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['events'] })
+      toast.success('Event status updated')
+    },
+  })
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-heading text-3xl font-semibold">Organizer dashboard</h1>
+          <p className="text-muted-foreground">Manage your event lifecycle and check-ins.</p>
+        </div>
+        <Button render={<Link to="/organizer/events/new" />}>Create event</Button>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {data?.items.map((event) => (
+          <Card key={event.id}>
+            <CardHeader>
+              <CardTitle>{event.title}</CardTitle>
+              <Badge>{event.status}</Badge>
+            </CardHeader>
+            <CardContent>
+              {new Date(event.startsAt).toLocaleString('en-TH', { timeZone: 'Asia/Bangkok' })}
+            </CardContent>
+            <CardFooter className="flex gap-2">
+              <Button
+                variant="outline"
+                render={<Link to="/events/$eventId" params={{ eventId: event.id }} />}
+              >
+                View
+              </Button>
+              {event.status === 'DRAFT' ? (
+                <Button onClick={() => transition.mutate({ id: event.id, action: 'publish' })}>
+                  Publish
+                </Button>
+              ) : null}
+              {event.status === 'PUBLISHED' ? (
+                <Button onClick={() => transition.mutate({ id: event.id, action: 'close' })}>
+                  Close
+                </Button>
+              ) : null}
+              <Button variant="outline" render={<Link to="/organizer/check-in" />}>
+                Check in
+              </Button>
+            </CardFooter>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
