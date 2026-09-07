@@ -17,6 +17,15 @@ resource "random_password" "svc" {
   special  = false
 }
 
+# Key-encryption key for better-auth's JWKS private keys. better-auth requires
+# >= 32 chars. Regenerated on every rebuild — auth_db is recreated too, so the
+# jwks row is always fresh. Carried in the rds-master secret (scripts/deploy.sh
+# reads it into the eventide-auth k8s Secret).
+resource "random_password" "better_auth" {
+  length  = 48
+  special = false
+}
+
 resource "aws_db_subnet_group" "main" {
   name       = "${var.project}-db"
   subnet_ids = data.aws_subnets.abc.ids
@@ -96,6 +105,7 @@ resource "aws_secretsmanager_secret_version" "db_master" {
       # so a plain connection is rejected ("no pg_hba.conf entry ... no encryption").
       # `require` = encrypt, don't verify the cert (fine inside the VPC).
       MASTER_DATABASE_URL = "postgres://${aws_db_instance.main.username}:${random_password.db_master.result}@${aws_db_instance.main.endpoint}/postgres?sslmode=require"
+      BETTER_AUTH_SECRET  = random_password.better_auth.result
     },
     # AUTH_SVC_PASSWORD / EVENT_SVC_PASSWORD / REGISTRATION_SVC_PASSWORD
     { for k, v in random_password.svc : "${upper(k)}_PASSWORD" => v.result },

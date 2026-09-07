@@ -50,9 +50,9 @@ RDS_JSON="$(aws secretsmanager get-secret-value --secret-id "$MASTER_SECRET_ARN"
   --query SecretString --output text)"
 rds() { echo "$RDS_JSON" | jq -r ".$1"; }
 HOST="$(rds host)"; PORT="$(rds port)"
-# Stable-per-rebuild secret for better-auth's JWKS key encryption. RDS (and so
-# auth_db) is recreated on every rebuild, so a fresh value here is fine.
-BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-$(rds password)}"
+# 48-char key-encryption key for better-auth's JWKS — from the rds-master secret
+# (20-platform/rds.tf), regenerated on every rebuild alongside auth_db.
+BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-$(rds BETTER_AUTH_SECRET)}"
 
 mksecret() { kubectl -n eventide create secret generic "$1" "${@:2}" \
   --dry-run=client -o yaml | kubectl apply -f -; }
