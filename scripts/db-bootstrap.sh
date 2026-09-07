@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create the 3 service databases + owner roles on RDS and run the migrations, as
+# Create the 4 service databases + owner roles on RDS and run the migrations, as
 # a one-shot in-cluster Job. Idempotent — safe to re-run every session after
 # `make up`. Week-1 Day-4 GATE.
 #

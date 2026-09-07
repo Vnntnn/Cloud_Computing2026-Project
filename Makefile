@@ -1,4 +1,4 @@
-.PHONY: dev db bootstrap seed seed-eks up deploy down k3d k3d-down load help
+.PHONY: dev db bootstrap db-reset seed seed-eks up deploy down k3d k3d-down load help
 
 TF_PLATFORM := terraform -chdir=infra/terraform/20-platform
 
@@ -9,13 +9,17 @@ help: ## list targets
 db: ## start the local Postgres container
 	docker compose up -d db
 
-bootstrap: db ## create the 3 service DBs + roles, run drizzle migrations
+bootstrap: db ## create the 4 service DBs + roles, run drizzle migrations
 	@printf 'waiting for postgres'; \
 	until docker compose exec -T db pg_isready -U postgres >/dev/null 2>&1; do printf '.'; sleep 1; done; \
 	echo
 	bun run --filter @eventide/db db:bootstrap
 
-dev: bootstrap ## postgres + the 3 services in watch mode
+db-reset: ## discard local database data, recreate all 4 databases, and migrate
+	docker compose down -v
+	$(MAKE) bootstrap
+
+dev: bootstrap ## postgres + the 4 services in watch mode
 	bun run dev
 
 seed: ## demo seed LOCAL (4 organisers + 15 events + 5 attendees w/ tickets) — needs `make dev` up
@@ -33,10 +37,10 @@ up: ## apply 20-platform (EKS + RDS + NLB + ingress-nginx), point kubectl at it
 	aws eks update-kubeconfig --region us-east-1 --name eventide
 	kubectl get nodes
 
-deploy: ## build+push the 3 images to ECR, helm upgrade the eventide chart, roll out
+deploy: ## build+push the service images to ECR, helm upgrade the eventide chart, roll out
 	bash scripts/deploy.sh
 
-db-bootstrap: ## create the 3 RDS databases + roles + run migrations (one-shot Job)
+db-bootstrap: ## create the 4 RDS databases + roles + run migrations (one-shot Job)
 	bash scripts/db-bootstrap.sh
 
 load: ## k6 autoscaling load test vs /api/events — pass BASE_URL=http://<nlb-dns>

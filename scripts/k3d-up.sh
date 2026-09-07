@@ -28,12 +28,14 @@ REG_PORT=5111                              # host -> k3d registry (container :50
 REG_INCLUSTER="eventide-registry:${REG_PORT}"
 INGRESS_VERSION=4.15.1
 INGRESS_IMAGE="registry.k8s.io/ingress-nginx/controller:v1.15.1"  # chart 4.15.1's appVersion
-SERVICES="auth event registration web"
+SERVICES="auth event registration payment web"
 TAG="${1:-$(git rev-parse --short HEAD)}"
 
 # Must match apps/auth/src/env.ts's dev default so the auth_db.jwks row created
 # by `make dev` stays decryptable under `make k3d` (and vice versa).
 BETTER_AUTH_SECRET="dev-only-insecure-better-auth-secret-0000000"
+INTERNAL_SERVICE_TOKEN="dev-only-internal-service-token-000000"
+TICKET_SIGNING_SECRET="dev-only-ticket-signing-secret-0000000"
 DB_HOST_INCLUSTER="host.k3d.internal"
 
 # --- cluster (idempotent) ------------------------------------------------
@@ -95,9 +97,16 @@ mksecret eventide-auth \
   --from-literal=DATABASE_URL="postgres://auth_svc:auth_svc@${DB_HOST_INCLUSTER}:5432/auth_db" \
   --from-literal=BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET}"
 mksecret eventide-event \
-  --from-literal=DATABASE_URL="postgres://event_svc:event_svc@${DB_HOST_INCLUSTER}:5432/event_db"
+  --from-literal=DATABASE_URL="postgres://event_svc:event_svc@${DB_HOST_INCLUSTER}:5432/event_db" \
+  --from-literal=INTERNAL_SERVICE_TOKEN="$INTERNAL_SERVICE_TOKEN"
 mksecret eventide-registration \
-  --from-literal=DATABASE_URL="postgres://registration_svc:registration_svc@${DB_HOST_INCLUSTER}:5432/registration_db"
+  --from-literal=DATABASE_URL="postgres://registration_svc:registration_svc@${DB_HOST_INCLUSTER}:5432/registration_db" \
+  --from-literal=INTERNAL_SERVICE_TOKEN="$INTERNAL_SERVICE_TOKEN" \
+  --from-literal=TICKET_SIGNING_SECRET="$TICKET_SIGNING_SECRET" \
+  --from-literal=TICKET_SIGNING_KEY_ID="eventide-dev-v1"
+mksecret eventide-payment \
+  --from-literal=DATABASE_URL="postgres://payment_svc:payment_svc@${DB_HOST_INCLUSTER}:5432/payment_db" \
+  --from-literal=INTERNAL_SERVICE_TOKEN="$INTERNAL_SERVICE_TOKEN"
 
 # --- deploy the chart (same chart as EKS, values-local overlay) -------
 echo "== helm upgrade --install eventide =="

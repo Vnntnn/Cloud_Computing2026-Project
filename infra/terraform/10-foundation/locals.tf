@@ -26,5 +26,8 @@ locals {
     registration = {
       DATABASE_URL = "postgres://REPLACE_ME"
     }
+    payment = {
+      DATABASE_URL = "postgres://REPLACE_ME"
+    }
   }
 }

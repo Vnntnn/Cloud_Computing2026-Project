@@ -19,7 +19,7 @@ variable "project" {
 variable "services" {
   description = "The microservices that each get an ECR repo and a Secrets Manager secret."
   type        = list(string)
-  default     = ["auth", "event", "registration"]
+  default     = ["auth", "event", "registration", "payment"]
 }
 
 variable "tool_images" {

@@ -38,7 +38,7 @@ spec:
           image: {{ include "eventide.image" (dict "svc" (dict "image" $root.Values.dbBootstrap.image) "root" $root) }}
           imagePullPolicy: {{ $root.Values.imagePullPolicy }}
           env:
-            {{- range $k := (list "MASTER_DATABASE_URL" "AUTH_SVC_PASSWORD" "EVENT_SVC_PASSWORD" "REGISTRATION_SVC_PASSWORD") }}
+            {{- range $k := (list "MASTER_DATABASE_URL" "AUTH_SVC_PASSWORD" "EVENT_SVC_PASSWORD" "REGISTRATION_SVC_PASSWORD" "PAYMENT_SVC_PASSWORD") }}
             - name: {{ $k }}
               valueFrom:
                 secretKeyRef:

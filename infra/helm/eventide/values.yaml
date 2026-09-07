@@ -38,6 +38,7 @@ eso:
     eventide-auth: eventide/auth
     eventide-event: eventide/event
     eventide-registration: eventide/registration
+    eventide-payment: eventide/payment
     eventide-rds-master: eventide/rds-master
 
 # One-shot Job: create the 3 databases + roles on RDS, run migrations. Disabled
@@ -61,7 +62,14 @@ defaults:
 services:
   auth:
     port: 3000
-    ingressPaths: ["/api/auth"]
+    # /api/admin/{users,organizers,audit-logs} are auth's; /api/admin/events is
+    # event's — ingress-nginx routes by longest-matching prefix, so the split works.
+    ingressPaths:
+      - /api/auth
+      - /api/users
+      - /api/admin/users
+      - /api/admin/organizers
+      - /api/admin/audit-logs
     image: { repository: eventide/auth, tag: latest }
     secretName: eventide-auth
     env:
@@ -70,7 +78,15 @@ services:
   event:
     port: 3000
     # /health and /swagger at the root are event's smoke-test surfaces.
-    ingressPaths: ["/api/events", "/health", "/swagger"]
+    ingressPaths:
+      - /api/events
+      - /api/categories
+      - /api/venues
+      - /api/ticket-types
+      - /api/organizer/events
+      - /api/admin/events
+      - /health
+      - /swagger
     image: { repository: eventide/event, tag: latest }
     secretName: eventide-event
     env:
@@ -84,18 +100,33 @@ services:
 
   registration:
     port: 3000
-    ingressPaths: ["/api/registrations"]
+    ingressPaths: ["/api/orders", "/api/tickets", "/api/check-ins"]
     image: { repository: eventide/registration, tag: latest }
     secretName: eventide-registration
     env:
       AUTH_JWKS_URL: "http://auth.{{ .Values.namespace }}.svc.cluster.local/api/auth/jwks"
       AUTH_BASE_URL: "{{ .Values.publicUrl }}"
       EVENT_SERVICE_URL: "http://event.{{ .Values.namespace }}.svc.cluster.local"
+    expiry:
+      enabled: true
+      schedule: "* * * * *"
+
+  payment:
+    port: 3000
+    replicas: 1
+    ingressPaths: ["/api/payments"]
+    image: { repository: eventide/payment, tag: latest }
+    secretName: eventide-payment
+    env:
+      AUTH_JWKS_URL: "http://auth.{{ .Values.namespace }}.svc.cluster.local/api/auth/jwks"
+      AUTH_BASE_URL: "{{ .Values.publicUrl }}"
+      REGISTRATION_SERVICE_URL: "http://registration.{{ .Values.namespace }}.svc.cluster.local"
 
   # Static React SPA on nginx-unprivileged (uid 101, :8080). Catches every path
   # the API rules don't — one origin, no CORS, no CloudFront (denied in the lab).
   web:
     port: 8080
+    replicas: 1
     runAsUser: 101
     readOnlyRootFs: false # nginx writes /var/cache/nginx, /var/run
     ingressPaths: ["/"]

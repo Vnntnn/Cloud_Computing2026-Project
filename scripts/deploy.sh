@@ -23,7 +23,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 REGION=us-east-1
-SERVICES="${SERVICES:-auth event registration web}"
+SERVICES="${SERVICES:-auth event registration payment web}"
 TAG="${1:-$(git rev-parse --short HEAD)}"
 
 REG="$(terraform -chdir=infra/terraform/10-foundation output -raw ecr_registry)"
@@ -56,6 +56,8 @@ HOST="$(rds host)"; PORT="$(rds port)"
 # 48-char key-encryption key for better-auth's JWKS — from the rds-master secret
 # (20-platform/rds.tf), regenerated on every rebuild alongside auth_db.
 BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-$(rds BETTER_AUTH_SECRET)}"
+INTERNAL_SERVICE_TOKEN="$(rds INTERNAL_SERVICE_TOKEN)"
+TICKET_SIGNING_SECRET="$(rds TICKET_SIGNING_SECRET)"
 
 mksecret() { kubectl -n eventide create secret generic "$1" "${@:2}" \
   --dry-run=client -o yaml | kubectl apply -f -; }
@@ -87,13 +89,20 @@ CREDS="$(aws configure export-credentials --format process 2>/dev/null || true)"
 cred() { echo "$CREDS" | jq -r ".$1 // empty"; }
 mksecret eventide-event \
   --from-literal=DATABASE_URL="postgres://event_svc:$(rds EVENT_SVC_PASSWORD)@${HOST}:${PORT}/event_db${SSL}" \
+  --from-literal=INTERNAL_SERVICE_TOKEN="$INTERNAL_SERVICE_TOKEN" \
   --from-literal=S3_BUCKET_NAME="$UPLOADS_BUCKET" \
   --from-literal=S3_REGION="$REGION" \
   --from-literal=AWS_ACCESS_KEY_ID="$(cred AccessKeyId)" \
   --from-literal=AWS_SECRET_ACCESS_KEY="$(cred SecretAccessKey)" \
   --from-literal=AWS_SESSION_TOKEN="$(cred SessionToken)"
 mksecret eventide-registration \
-  --from-literal=DATABASE_URL="postgres://registration_svc:$(rds REGISTRATION_SVC_PASSWORD)@${HOST}:${PORT}/registration_db${SSL}"
+  --from-literal=DATABASE_URL="postgres://registration_svc:$(rds REGISTRATION_SVC_PASSWORD)@${HOST}:${PORT}/registration_db${SSL}" \
+  --from-literal=INTERNAL_SERVICE_TOKEN="$INTERNAL_SERVICE_TOKEN" \
+  --from-literal=TICKET_SIGNING_SECRET="$TICKET_SIGNING_SECRET" \
+  --from-literal=TICKET_SIGNING_KEY_ID="eventide-v1"
+mksecret eventide-payment \
+  --from-literal=DATABASE_URL="postgres://payment_svc:$(rds PAYMENT_SVC_PASSWORD)@${HOST}:${PORT}/payment_db${SSL}" \
+  --from-literal=INTERNAL_SERVICE_TOKEN="$INTERNAL_SERVICE_TOKEN"
 
 # --- deploy the chart -------------------------------------------------
 echo "== helm upgrade --install eventide =="

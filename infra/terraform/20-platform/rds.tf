@@ -12,7 +12,7 @@ resource "random_password" "db_master" {
 # services' DATABASE_URLs (assembled by scripts/deploy.sh from this same secret)
 # use the same values. All regenerated on every rebuild, alongside the master password.
 resource "random_password" "svc" {
-  for_each = toset(["auth_svc", "event_svc", "registration_svc"])
+  for_each = toset(["auth_svc", "event_svc", "registration_svc", "payment_svc"])
   length   = 20
   special  = false
 }
@@ -22,6 +22,16 @@ resource "random_password" "svc" {
 # jwks row is always fresh. Carried in the rds-master secret (scripts/deploy.sh
 # reads it into the eventide-auth k8s Secret).
 resource "random_password" "better_auth" {
+  length  = 48
+  special = false
+}
+
+resource "random_password" "internal_service" {
+  length  = 48
+  special = false
+}
+
+resource "random_password" "ticket_signing" {
   length  = 48
   special = false
 }
@@ -104,8 +114,10 @@ resource "aws_secretsmanager_secret_version" "db_master" {
       # `?sslmode=require` — RDS PG16's default parameter group sets rds.force_ssl=1,
       # so a plain connection is rejected ("no pg_hba.conf entry ... no encryption").
       # `require` = encrypt, don't verify the cert (fine inside the VPC).
-      MASTER_DATABASE_URL = "postgres://${aws_db_instance.main.username}:${random_password.db_master.result}@${aws_db_instance.main.endpoint}/postgres?sslmode=require"
-      BETTER_AUTH_SECRET  = random_password.better_auth.result
+      MASTER_DATABASE_URL    = "postgres://${aws_db_instance.main.username}:${random_password.db_master.result}@${aws_db_instance.main.endpoint}/postgres?sslmode=require"
+      BETTER_AUTH_SECRET     = random_password.better_auth.result
+      INTERNAL_SERVICE_TOKEN = random_password.internal_service.result
+      TICKET_SIGNING_SECRET  = random_password.ticket_signing.result
     },
     # AUTH_SVC_PASSWORD / EVENT_SVC_PASSWORD / REGISTRATION_SVC_PASSWORD
     { for k, v in random_password.svc : "${upper(k)}_PASSWORD" => v.result },
