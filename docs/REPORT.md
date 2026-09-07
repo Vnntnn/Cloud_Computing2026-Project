@@ -229,11 +229,12 @@ green through the freshly-created NLB.
 
 ## 5. Kubernetes & deployment
 
-**One Helm chart, one release** (`infra/helm/eventide`) that ranges over the
-four services. `values-local.yaml` (k3d) and `values-aws.yaml` (EKS) differ only
-in image registry, replica count, the public URL, and whether the HPA is on. *(SYSTEM-DESIGN §12 said "three releases"; one release ranging over services
-was chosen for a single `helm upgrade` and one revision history — the Deployments
-and HPAs are still independent.)*
+**One Helm chart, one release** (`infra/helm/eventide`) that ranges over the five
+service Deployments (`auth`, `event`, `registration`, `payment`, `web`) plus the
+reservation-expiry CronJob and the db-bootstrap Job. `values.yaml` and the
+`values.local.yaml` k3d overlay differ only in image registry, replica count, the
+public URL, and whether the HPA is on. The Deployments and HPAs are independent;
+one release just gives a single `helm upgrade` and one revision history.
 
 **ingress-nginx as a NodePort Service + a Terraform-created NLB**, not
 `Service type=LoadBalancer`. A `type=LoadBalancer` Service makes its own ELB
@@ -247,22 +248,31 @@ $0.10/hr control-plane cost. Instead a 22 MB `nginx-unprivileged` image serves
 the built bundle behind the same ingress — the `/` path — with `/api/*` winning
 by longest-prefix match. This is what gives the single origin in §3.
 
-**Images.** The three services compile to a single Bun binary
+**Images.** The four services compile to a single Bun binary
 (`bun build --compile`) on `gcr.io/distroless/base-debian12:nonroot` — ~44 MB
 each, 2–3× lower runtime memory than running the source, which is what lets more
-pods fit under the CNI IP ceiling (§7). The `db-bootstrap` migration image is a
+pods fit under the CNI IP ceiling (§7). `registration`'s image also carries an
+`expire` binary run by the CronJob. The `db-bootstrap` migration image is a
 focused install (postgres + drizzle-orm + drizzle-kit only, not the monorepo
-lockfile) — 89 MB, down from 185 MB.
+lockfile) — 89 MB, down from 185 MB. `web` is a ~22 MB `nginx-unprivileged`
+image serving the Vite build.
 
 **Local parity.** A k3d cluster runs the **same Helm chart** with the local
-overlay. Verified end-to-end: sign in → JWT → book a seeded event → dup returns
-409 → tickets list enriched — identical to EKS.
+overlay. Verified end-to-end: sign in → JWT → publish an event → reserve → mock
+pay → order CONFIRMED → QR ticket → check-in — identical to EKS.
 
-**CI/CD stops at the image.** No OIDC federation is possible (§2), so
-`.github/workflows` builds and tests only; `scripts/deploy.sh` does the deploy
-locally with fresh session credentials: build → push to ECR → `helm upgrade`
-`-f values-aws.yaml` → `rollout status`. In an unrestricted account the same
-steps run in CI against an assumed role.
+**CI/CD stops at the image, but tests the guarantees.** No OIDC federation is
+possible (§2), so `.github/workflows/ci.yml` builds, type-checks and tests only.
+The `check` job runs `lint / check-types / test / build` against a real
+`postgres:16` service (the transaction tests — concurrent oversell, idempotent
+order + payment, hold expiry, payment reconciliation, QR-scan outcomes,
+ban/session-revocation — need a database), and a second `e2e` job boots the four
+services and runs `scripts/smoke.ts`, a 27-assertion persona walk (organizer
+publishes → attendee buys and pays → sold-out 409 → check-in SUCCESS then
+DUPLICATE → admin suspends + bans, audit and payment views reflect it).
+`scripts/deploy.sh` does the deploy locally with fresh session credentials:
+build → push to ECR → `helm upgrade` → `rollout status`. In an unrestricted
+account the same steps run in CI against an assumed role.
 
 ## 6. Security & secrets
 
