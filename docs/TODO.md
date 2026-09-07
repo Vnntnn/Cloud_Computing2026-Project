@@ -29,11 +29,18 @@ can slip. If a day runs long, cut from the *bottom* of that day, never from a GA
 - [ ] Learner Lab → **Start Lab**. Note the credit remaining.
 - [ ] Copy AWS CLI credentials into `~/.aws/credentials` (they expire with the session).
 - [ ] `bash scripts/check-lab.sh` — role suffixes / denials change on every reset.
-- [ ] `make up` — `terraform apply 20-platform` (~18 min) + kubeconfig + `get nodes`.
-- [ ] `bash scripts/db-bootstrap.sh` — build+push the db-bootstrap image, run the Job.
-- [ ] `make deploy` (Helm, all 3 services) then `make seed AUTH_URL=http://<nlb>`.
-- [ ] `scripts/lab-creds.sh` is **not needed** on the current path — `deploy.sh` builds the
-      k8s Secrets from `eventide/rds-master` and no app code calls the AWS SDK.
+- [ ] *(first time / when DNS or OAuth changes)* fill `10-foundation/{dns,google}.auto.tfvars`
+      and `terraform -chdir=infra/terraform/10-foundation apply`; if DNS is new, paste
+      `terraform output route53_name_servers` into Cloudflare and wait for `aws acm
+      describe-certificate` to read `ISSUED`.
+- [ ] `make up` — `terraform apply 20-platform` (~17 min) + kubeconfig + `get nodes`.
+      Add `NODE_INSTANCE_TYPE=t3.medium` for the week-4 HPA load test.
+- [ ] `make db-bootstrap` — build+push the db-bootstrap image, run the Job.
+- [ ] `make deploy` (Helm, all 4 services incl. `web`) then `make seed-eks` (in-cluster —
+      RDS is private).
+- [ ] `scripts/lab-creds.sh` is **not needed** — `deploy.sh` builds the k8s Secrets from
+      `eventide/rds-master` (+ `eventide/google-oauth` if present) and no app code calls
+      the AWS SDK except `event`'s S3 presign (which gets injected session creds).
 
 ### Every session end — non-negotiable
 
@@ -58,8 +65,9 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       `bun` are installed.
 - [ ] **AWS Budgets alarm at $10**, email to yourself. *Do this before anything else.*
 - [ ] Run `bash scripts/check-lab.sh`; save the output to `docs/lab-probe-<date>.txt`.
-  - [ ] **Record whether Route 53 / ACM / CloudFront are permitted** — the TLS design
-        depends on it and it is currently unverified.
+  - [~] **Route 53 / ACM** — IaC written (`10-foundation/dns.tf`), permission confirmed
+        only on the first `apply`. CloudFront DENIED (below), so the SPA is served from the
+        cluster, not S3+CDN.
   - [x] **`iam:AttachRolePolicy` — DENIED** (confirmed 2026-09-07, `docs/lab-probe-2026-09-07.txt`).
         So the ESO node-role/IMDS path is out; `deploy.sh` assembles the k8s Secrets from
         `eventide/rds-master` instead (already built). Node role already carries
@@ -352,9 +360,11 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       One fix needed: `auth` must `trustedOrigins` the Vite dev origin (`localhost:5173`)
       or better-auth's CSRF check rejects login — set in the auth `dev` script; deployed is
       same-origin so no config.
-- [ ] Build → S3 → CloudFront (or Cloudflare, per the Week 2 decision). *(needs lab)*
+- [x] SPA served **from the cluster** — `apps/web` is the 4th service in the Helm chart
+      (nginx-unprivileged, catches `/`), one origin with the APIs, no CORS. CloudFront is
+      denied and S3+CDN adds a moving part for no benefit at this scale (`7f7a1d0`).
 - [ ] **`GATE`** — deployed SPA completes Google login and books a ticket. *(needs Google
-      OAuth client + deploy)*
+      OAuth client + a deploy against EKS)*
 
 > If this week slips, **cut the frontend, not the infrastructure.** Swagger is a complete
 > demo surface on its own.
@@ -401,8 +411,12 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
   - [ ] Service boundary placed to avoid a distributed transaction
   - [ ] Database-per-service enforced by Postgres, not by convention
   - [ ] Asymmetric JWT via JWKS — other services cannot mint tokens
-  - [ ] IRSA unavailable → static credentials, security trade-off documented
+  - [ ] IRSA unavailable → static session credentials for `event`'s S3 presign; ESO
+        evaluated and shelved (its `secretRef` would expire per session anyway) →
+        `deploy.sh` builds the k8s Secrets from Secrets Manager. Trade-off documented.
   - [ ] NAT gateway avoided → public subnets + security groups, cost-driven
+  - [ ] SPA served from the cluster (4th Helm service) — CloudFront denied, S3+CDN adds a
+        moving part for no benefit; one origin removes CORS
   - [ ] Bearer tokens over cookies → environment parity; XSS exposure stated
   - [ ] CI/CD stops at the image → OIDC federation impossible in the lab
   - [ ] Go evaluated and rejected on delivery risk, not ignorance

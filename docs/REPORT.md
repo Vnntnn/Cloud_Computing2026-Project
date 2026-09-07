@@ -63,7 +63,7 @@ Deliberately **not** built, each with its reason (`PROJECT-KNOWLEDGE-BASE.md`
 
 ```
                          Browser (React SPA)
-                                 │  one origin: http://<nlb>  (https via Cloudflare, §6)
+                                 │  one origin: https://events.<domain>  (Route 53 + ACM at the NLB, §6)
                                  ▼
                      Network Load Balancer  (aws_lb, Terraform)
                                  │  TCP :80/:443 → NodePort 30080/30443
@@ -184,8 +184,7 @@ green through the freshly-created NLB.
 
 **One Helm chart, one release** (`infra/helm/eventide`) that ranges over the
 four services. `values-local.yaml` (k3d) and `values-aws.yaml` (EKS) differ only
-in image registry, replica count, the public URL, and whether ESO / the HPA are
-on. *(SYSTEM-DESIGN §12 said "three releases"; one release ranging over services
+in image registry, replica count, the public URL, and whether the HPA is on. *(SYSTEM-DESIGN §12 said "three releases"; one release ranging over services
 was chosen for a single `helm upgrade` and one revision history — the Deployments
 and HPAs are still independent.)*
 
@@ -226,10 +225,14 @@ denied** (probed 2026-09-07), so pods cannot get credentials from the node role
 either. The app is therefore built to need **no AWS credentials at all**: it
 only ever reads `process.env`. On EKS the `eventide-<svc>` Kubernetes Secrets
 are assembled by `scripts/deploy.sh` from the Terraform-managed
-`eventide/rds-master` secret; the External Secrets Operator path (Secrets
-Manager → K8s Secret) is templated in the chart and used once ESO is installed.
-On k3d the same Secrets come from `kubectl create secret`. Same manifests, same
-code.
+`eventide/rds-master` secret; on k3d the same Secrets come from `kubectl create
+secret`. Same manifests, same code. **The External Secrets Operator was
+evaluated and shelved** (SYSTEM-DESIGN §5.2.1): with no IRSA and no
+Secrets-Manager access on the node role, its `ClusterSecretStore` would need a
+`secretRef` to static session credentials that expire every session and must be
+refreshed by a deploy anyway — more moving parts than the deploy script doing
+`kubectl create secret` itself. The ESO templates stay in the chart behind
+`eso.enabled` for a non-lab environment.
 
 > **Report note.** Having a deploy script hold the assembled `DATABASE_URL`
 > briefly is weaker than IRSA. In production you would use IRSA or Pod Identity
@@ -241,10 +244,10 @@ and it exists *because* the database boundary forbade the easy options.
 
 **Bearer tokens, never cookies.** The SPA sends `Authorization: Bearer <jwt>`.
 A cookie would need `SameSite=None; Secure` in one environment and first-party
-in another — two configurations to keep alive. The token in `localStorage` is
-readable by XSS where an `httpOnly` cookie is not; this is stated, not hidden,
-and is the price of environment parity under a no-TLS-on-the-load-balancer
-constraint.
+in another — two configurations to keep alive — and behaves identically in dev
+(`localhost` over HTTP, which browsers and Google both permit) and deployed. The
+token in `localStorage` is readable by XSS where an `httpOnly` cookie is not;
+this is stated, not hidden, and is the price of environment parity.
 
 **Network posture.** Nodes and RDS sit in the **default VPC's public subnets**,
 deliberately — to avoid a NAT gateway ($0.045/hr + data, and the lab budget does
@@ -253,12 +256,16 @@ from the node security group, and RDS is not publicly accessible. Pod egress to
 the internet (needed for Google OAuth) goes through the internet gateway — no
 NAT — verified with `curl https://accounts.google.com` from a pod (`302`).
 
-**TLS.** CloudFront is denied and cert-manager's quota is too small for nightly
-rebuilds. The plan is **Cloudflare-proxied DNS** in front of the NLB —
-Cloudflare terminates TLS, the origin leg is plain HTTP inside the trust
-boundary of a demo. Route 53 + ACM are permitted (probed) and remain the
-alternative. *(Not yet wired — the deployed demo runs over `http://<nlb>` or a
-`kubectl port-forward` for the Google-OAuth step.)*
+**TLS.** CloudFront is denied and cert-manager's Let's Encrypt quota (5 duplicate
+certs/week) is exhausted by nightly rebuilds. The design is **a subdomain
+delegated to Route 53 + an ACM wildcard cert, TLS terminated at the NLB**
+(SYSTEM-DESIGN §5.5.1 option 2). The hosted zone and cert live in the permanent
+Terraform layer so the Cloudflare NS delegation is set once; `20-platform` gives
+the NLB a `:443` TLS listener and re-points an `ALIAS` record at the fresh NLB
+every rebuild — no external API call per session. Cloudflare-proxied DNS in front
+of the NLB is the documented fallback. *(IaC written; applied once the domain is
+delegated. Until then the demo runs over `http://<nlb>` or a `kubectl
+port-forward` for the Google-OAuth step.)*
 
 **Incident.** Live lab credentials were pasted into a chat on 2026-09-06; the
 session was rotated immediately afterward. Noted because the process fix — never
