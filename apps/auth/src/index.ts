@@ -5,6 +5,7 @@ import { Elysia } from 'elysia'
 import { env } from './env.ts'
 import { auth } from './lib/auth.ts'
 import { db } from './lib/db.ts'
+import { users } from './modules/user/index.ts'
 
 const SERVICE = 'auth'
 
@@ -44,6 +45,7 @@ export const app = new Elysia()
   // stay unambiguous.
   .all('/api/auth/*', ({ request }) => auth.handler(request))
   .all('/api/auth', ({ request }) => auth.handler(request))
+  .use(users)
 
 export type App = typeof app
 

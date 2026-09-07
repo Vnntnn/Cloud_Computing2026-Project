@@ -22,6 +22,8 @@ export interface AuthUser {
   /** better-auth `user.id` — `text`, not a uuid (CLAUDE.md). */
   id: string
   email: string
+  role: 'attendee' | 'organizer' | 'admin'
+  organizerApprovalStatus: 'NOT_APPLIED' | 'PENDING' | 'APPROVED' | 'REJECTED'
 }
 
 // One remote key set per URL for the life of the process. `jose` refetches
@@ -39,7 +41,20 @@ function jwksFor(url: string) {
 function userFromPayload(payload: JWTPayload): AuthUser | null {
   const id = typeof payload.sub === 'string' ? payload.sub : null
   const email = typeof payload.email === 'string' ? payload.email : null
-  return id && email ? { id, email } : null
+  const role = payload.role
+  const organizerApprovalStatus = payload.organizerApprovalStatus
+  if (
+    !id ||
+    !email ||
+    (role !== 'attendee' && role !== 'organizer' && role !== 'admin') ||
+    (organizerApprovalStatus !== 'NOT_APPLIED' &&
+      organizerApprovalStatus !== 'PENDING' &&
+      organizerApprovalStatus !== 'APPROVED' &&
+      organizerApprovalStatus !== 'REJECTED')
+  ) {
+    return null
+  }
+  return { id, email, role, organizerApprovalStatus }
 }
 
 /**

@@ -13,20 +13,21 @@
     "lint": "biome check .",
     "check-types": "tsc --noEmit",
     "test": "bun test",
-    "generate:auth-schema": "better-auth generate --config src/lib/auth.ts --output ../../packages/db/src/auth/schema.ts -y"
+    "generate:auth-schema": "better-auth generate --config src/lib/auth.ts --output ../../packages/db/src/auth/schema.ts -y",
+    "check:auth-schema": "bun run generate:auth-schema && git diff --exit-code -- ../../packages/db/src/auth/schema.ts"
   },
   "dependencies": {
-    "@better-auth/drizzle-adapter": "^1.7.3",
+    "@better-auth/drizzle-adapter": "1.7.3",
     "@elysiajs/openapi": "^1.4.11",
     "@eventide/db": "workspace:*",
     "@eventide/shared": "workspace:*",
-    "better-auth": "^1.7.3",
+    "better-auth": "1.7.3",
     "drizzle-orm": "^0.45.2",
     "elysia": "^1.4.9",
     "postgres": "^3.4.9",
     "zod": "^4.1.11"
   },
   "devDependencies": {
-    "@better-auth/cli": "^1.4.21"
+    "@better-auth/cli": "1.4.21"
   }
 }
