@@ -22,6 +22,7 @@ export const env = defineEnv(
     AUTH_JWKS_URL: z.url().default('http://localhost:3000/api/auth/jwks'),
     // Expected `iss` / `aud` on the JWT — auth's BETTER_AUTH_URL.
     AUTH_BASE_URL: z.url().default('http://localhost:3000'),
+    INTERNAL_SERVICE_TOKEN: z.string().min(32).default('dev-only-internal-service-token-000000'),
 
     // S3 cover-image uploads (§4.2, §12). Unset → the cover-upload route is
     // disabled and events simply have no image. AWS credentials come from the
@@ -36,9 +37,9 @@ export const env = defineEnv(
 // SYSTEM-DESIGN §5.2 — a missing injected value must fail loudly at boot in a
 // deployed environment, not silently use the localhost default.
 if (env.NODE_ENV === 'production') {
-  const missing = (['DATABASE_URL', 'AUTH_JWKS_URL', 'AUTH_BASE_URL'] as const).filter(
-    (k) => !process.env[k],
-  )
+  const missing = (
+    ['DATABASE_URL', 'AUTH_JWKS_URL', 'AUTH_BASE_URL', 'INTERNAL_SERVICE_TOKEN'] as const
+  ).filter((k) => !process.env[k])
   if (missing.length > 0) {
     throw new Error(`event: missing required env in production: ${missing.join(', ')}`)
   }

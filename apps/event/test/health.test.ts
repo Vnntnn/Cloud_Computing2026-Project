@@ -27,8 +27,10 @@ describe('event auth guard', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           title: 'x',
-          venue: 'y',
           startsAt: '2026-10-01T18:00:00Z',
+          endsAt: '2026-10-01T20:00:00Z',
+          salesStartAt: '2026-09-01T00:00:00Z',
+          salesEndAt: '2026-10-01T17:00:00Z',
           capacity: 10,
         }),
       }),
