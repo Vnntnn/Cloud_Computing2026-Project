@@ -60,9 +60,13 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 - [ ] Run `bash scripts/check-lab.sh`; save the output to `docs/lab-probe-<date>.txt`.
   - [ ] **Record whether Route 53 / ACM / CloudFront are permitted** — the TLS design
         depends on it and it is currently unverified.
-  - [ ] **Record whether `iam:AttachRolePolicy` succeeded.** If yes, pods get S3 and Secrets
-        Manager access from the node role via IMDS, and the per-session credential refresh
-        script is never needed.
+  - [x] **`iam:AttachRolePolicy` — DENIED** (confirmed 2026-09-07, `docs/lab-probe-2026-09-07.txt`).
+        So the ESO node-role/IMDS path is out; `deploy.sh` assembles the k8s Secrets from
+        `eventide/rds-master` instead (already built). Node role already carries
+        `AmazonEKS_CNI_Policy` + `AmazonEC2ContainerRegistryReadOnly` + `AmazonEKSWorkerNodePolicy`.
+  - [x] **CloudFront — DENIED** (`cloudfront:ListDistributions` AccessDenied). Route 53 /
+        ACM `list-*` returned empty with no error → probably permitted, needs a real create
+        to confirm. TLS design leans Cloudflare-proxied (§5.5.1 option 1).
 - [x] Create the Terraform state bucket by hand (`aws s3api` commands); documented in
       `infra/terraform/00-bootstrap/README.md`. *(bucket `eventide-tfstate-735838417080`,
       versioned + PAB + AES256; S3 native locking, no DynamoDB.)*

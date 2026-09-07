@@ -1,0 +1,49 @@
+
+=== IDENTITY ===
+735838417080	arn:aws:sts::735838417080:assumed-role/voclabs/user5234244=Suwijak_Promsatid	AROA2WU3DGC4F7QKQQZEC:user5234244=Suwijak_Promsatid
+
+=== REGION ===
+us-east-1
+
+=== LabRole (needed: EKS cluster + node role) ===
+arn:aws:iam::735838417080:role/LabRole
+
+=== Can we CREATE an IAM role?  (AccessDenied EXPECTED) ===
+
+aws: [ERROR]: An error occurred (AccessDenied) when calling the CreateRole operation: User: arn:aws:sts::735838417080:assumed-role/voclabs/user5234244=Suwijak_Promsatid is not authorized to perform: iam:CreateRole on resource: arn:aws:iam::735838417080:role/zz-probe-delete-me because no identity-based policy allows the iam:CreateRole action
+
+=== Can we create an OIDC provider?  (decides IRSA) ===
+
+=== >>> EKS  <<<  THE decisive one ===
+
+=== RDS ===
+
+=== Secrets Manager ===
+eventide/event	eventide/auth	eventide/registration
+
+=== ECR ===
+eventide/db-bootstrap	eventide/registration	eventide/event	eventide/auth
+
+=== S3 ===
+2026-09-06 19:59:58 eventide-tfstate-735838417080
+2026-09-06 20:05:07 eventide-uploads-735838417080
+
+=== ECS (fallback plan A) ===
+
+=== EC2 (fallback plan B: k3s) ===
+
+=== DONE ===
+AccessDenied / UnauthorizedOperation on a line = that service is blocked.
+
+=== Can we ATTACH a policy to the EKS node role?  (decides whether pods can skip static creds) ===
+node role: c219141a5531090l16607217t1w735838417-LabEksNodeRole-SCC8imJNOjRW
+
+aws: [ERROR]: An error occurred (AccessDenied) when calling the AttachRolePolicy operation: User: arn:aws:sts::735838417080:assumed-role/voclabs/user5234244=Suwijak_Promsatid is not authorized to perform: iam:AttachRolePolicy on resource: role c219141a5531090l16607217t1w735838417-LabEksNodeRole-SCC8imJNOjRW because no identity-based policy allows the iam:AttachRolePolicy action
+AmazonEKS_CNI_Policy	AmazonEC2ContainerRegistryReadOnly	AmazonEKSWorkerNodePolicy
+
+=== Route 53 / ACM / CloudFront  (UNVERIFIED — decides the whole TLS design) ===
+--- route53 ---
+--- acm ---
+--- cloudfront ---
+
+aws: [ERROR]: An error occurred (AccessDenied) when calling the ListDistributions operation: User: arn:aws:sts::735838417080:assumed-role/voclabs/user5234244=Suwijak_Promsatid is not authorized to perform: cloudfront:ListDistributions because no identity-based policy allows the cloudfront:ListDistributions action
