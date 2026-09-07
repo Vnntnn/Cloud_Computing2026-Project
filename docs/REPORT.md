@@ -1,7 +1,8 @@
 # Eventide — Cloud Computing 2026 Project Report
 
-> **Draft.** Prose is written for the sections whose work is done; `⟨…⟩` marks a
-> number or screenshot to drop in from the final lab run. Companions:
+> **Draft — near complete.** Every section has real prose; the only `⟨…⟩` left
+> are the week-4 autoscaling numbers (§7) and the final credit figure (§8), both
+> from the last lab run. Companions:
 > [`SYSTEM-DESIGN.md`](./SYSTEM-DESIGN.md) (what), [`PROJECT-KNOWLEDGE-BASE.md`](./PROJECT-KNOWLEDGE-BASE.md)
 > (why + decision log), [`TODO.md`](./TODO.md) (build state).
 >
@@ -171,8 +172,13 @@ refresh. All bucket configuration still lives in Terraform, in the granular
 
 **State:** S3 backend with native lockfile (`use_lockfile`), no DynamoDB table.
 
-**Evidence:** `terraform apply` output ⟨24 resources⟩, `terraform state list`,
-and the teardown sweep (§8) coming back empty on every check.
+**Evidence:** `terraform apply` on `20-platform` creates **25 resources** from
+nothing (measured 2026-09-07); `terraform state list`; and the teardown sweep
+(§8) coming back empty on every check. A full destroy→rebuild that session:
+**`make down` 8m56s** (25 destroyed, sweep clean), **`make up` 16m37s** from
+zero, then `db-bootstrap` (11s), `helm upgrade` (4 services rolled out),
+in-cluster seed, and the full app flow + the cross-DB boundary refusal — all
+green through the freshly-created NLB.
 
 ## 5. Kubernetes & deployment
 
@@ -296,14 +302,15 @@ summary, and Container Insights graphs (or `top` snapshots) for the window.
 | NAT gateway | **$0.000** | avoided by design |
 | **Total, up** | **≈ $0.27 / hr** | **≈ $3.40 / day idle** |
 
-- A four-hour working session costs **≈ $1.10**. ⟨N⟩ sessions plus demo day
-  ≈ **$⟨25⟩** actual, against **≈ $180** if `20-platform` were left running for
-  the term.
+- A four-hour working session costs **≈ $1.10**. Across the term this is on
+  track for **≈ $25** actual (⟨fill the final figure from the Learner Lab credit
+  meter⟩), against **≈ $180** if `20-platform` were left running.
 - Leaving the platform layer up between sessions exhausts $50 in **~15 days** —
   before the demo.
 - **Cost optimisation through ephemeral infrastructure**, with a real secondary
-  benefit: by demo day the whole stack has been rebuilt from zero ⟨~20⟩ times,
-  so the Terraform is genuinely exercised, not written once and hoped over.
+  benefit: the stack is rebuilt from zero every working session (twice in the
+  2026-09-07 session alone — see §4), so the Terraform is genuinely exercised,
+  not written once and hoped over.
 
 ### Teardown
 
@@ -330,6 +337,6 @@ running-instance query, target groups — every check must return empty.
 - `docs/lab-probe-2026-09-07.txt` — raw capability probe (what the lab denies).
 - `docs/week1-closeout.md` — the rebuild-from-zero runbook.
 - `docs/DEMO-RUNSHEET.md` — the live-demo script.
+- `docs/checkpoint.html` — the Week-1 checkpoint deck (architecture SVG is here).
 - Terraform module tree + key `.tf` excerpts.
 - `scripts/teardown.sh` verification transcript.
-- Architecture diagram — `docs/architecture/aws/` (regenerate to final).
