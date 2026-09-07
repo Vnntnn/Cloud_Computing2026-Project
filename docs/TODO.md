@@ -207,10 +207,9 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       `set-auth-token`; `GET /api/auth/token` with the bearer returns a valid EdDSA JWT
       whose `kid` matches JWKS, claims `sub`/`email`/`iss`/`aud`.)*
 - [x] `@elysiajs/openapi` mounted (already in all 3 services at `/swagger`).
-- [ ] **Deploy blocker (pre-existing, not auth-specific):** `bun build --compile` binaries
-      don't serve on the installed Bun 1.4.0 (Aug build) — `event`'s binary fails the same
-      way. `bun src/index.ts` works fine. Fix the Bun toolchain before the distroless
-      image path (§12.1) can ship.
+- [x] Compiled Bun binary on distroless — **works in-cluster.** (The earlier "binary won't
+      serve" was a local-macOS artifact only; the linux/amd64 image built in Docker runs
+      fine — verified 2026-09-07, all 3 services serving on k3d via the Helm chart.)
 
 ### DNS and TLS — start early, it propagates slowly
 
@@ -231,11 +230,19 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       `apps/event/src/lib/db.ts`; `/health/ready` does a real `select 1`. E2E verified:
       auth JWT → create event → owner_id = JWT sub; bad/absent token → 401. **S3 presigned
       cover-upload deferred to week 3.**)*
-- [ ] ESO installed; `ClusterSecretStore`; three `ExternalSecret` resources.
-- [ ] **`GATE`** — pods read `process.env.DATABASE_URL` with no AWS SDK call in app code.
-      *(app-side already true — no `@aws-sdk/*` in `apps/*`; env via `defineEnv(process.env)`
-      only. Needs ESO on the cluster to close.)*
-- [ ] Both services deployed to EKS behind ingress paths.
+- [~] ESO installed; `ClusterSecretStore`; three `ExternalSecret` resources. *(templated in
+      `infra/helm/eventide` — `templates/externalsecrets.yaml`, `eso.enabled` in
+      `values.aws.yaml`. ESO operator itself not yet installed on the cluster; on k3d the
+      `eventide-<svc>` Secrets are `kubectl create secret` as designed.)*
+- [~] **`GATE`** — pods read `process.env.DATABASE_URL` with no AWS SDK call in app code.
+      *(app-side true — no `@aws-sdk/*` in `apps/*`, env via `defineEnv(process.env)` only,
+      `envFrom` a Secret. Verified on k3d: all 3 services read `DATABASE_URL` from the
+      `eventide-<svc>` Secret. Close it on EKS once ESO is installed.)*
+- [~] Both services deployed to EKS behind ingress paths. *(Helm chart `infra/helm/eventide`
+      — one release, all 3 services + Ingress + HPA + ESO + db-bootstrap Job. `helm lint` /
+      `helm template` clean for both overlays; **fully deployed + E2E-tested on k3d**
+      2026-09-07. EKS deploy pending a lab session. `scripts/{deploy,k3d-up}.sh` still apply
+      raw `infra/k8s/event.yaml` — need repointing at the chart.)*
 
 ---
 

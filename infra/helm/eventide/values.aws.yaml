@@ -1,0 +1,25 @@
+# EKS overlay — `helm ... -f values.yaml -f values.aws.yaml
+#   --set imageRegistry=$(terraform -chdir=infra/terraform/10-foundation output -raw ecr_registry)
+#   --set publicUrl=https://<domain>`
+#
+# ESO fills the eventide-<svc> Secrets from Secrets Manager; the NLB (Terraform)
+# forwards :80 to ingress-nginx's NodePort, so no host is pinned here until the
+# custom domain lands.
+
+eso:
+  enabled: true
+  createClusterSecretStore: true
+  region: us-east-1
+  # Empty SA → External Secrets uses the node role via IMDS (no IRSA — §5.3).
+  serviceAccount: ""
+
+defaults:
+  replicas: 2
+
+services:
+  event:
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 60

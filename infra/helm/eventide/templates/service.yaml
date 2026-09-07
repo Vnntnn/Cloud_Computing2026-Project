@@ -1,0 +1,18 @@
+{{- $root := . -}}
+{{- range $name, $svc := .Values.services }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $root.Values.namespace }}
+  labels:
+    {{- include "eventide.labels" (dict "name" $name "root" $root) | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+{{- end }}

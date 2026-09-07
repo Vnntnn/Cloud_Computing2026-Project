@@ -1,13 +1,14 @@
 # infra/k8s
 
-Raw manifests for the app on EKS (and k3d). The single Helm chart with
-`values-local` / `values-aws` replaces these in week 2; for now `kubectl apply`
-is enough.
+> **Superseded by `infra/helm/eventide`** (2026-09-07) — one release, all three
+> services, verified end-to-end on k3d. These raw manifests stay only until
+> `scripts/{deploy,k3d-up}.sh` are repointed at the chart.
 
 | File | What |
 |---|---|
 | `event.yaml` | `eventide` namespace + `event` Deployment / Service / Ingress. |
-| `db-bootstrap.job.yaml` | one-shot Job — creates `auth_db`/`event_db`/`registration_db` + owner roles on RDS, runs migrations. `bash scripts/db-bootstrap.sh` (or `make db-bootstrap`). |
+| `event-hpa.yaml` | `event` HPA (CPU 60%, 2→8) — week 4 autoscaling demo. |
+| `db-bootstrap.job.yaml` | one-shot Job — creates `auth_db`/`event_db`/`registration_db` + owner roles on RDS, runs migrations. `bash scripts/db-bootstrap.sh` (or `make db-bootstrap`). Also folded into the chart as a hook. |
 
 ## Prerequisites
 

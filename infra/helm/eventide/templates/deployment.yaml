@@ -1,0 +1,75 @@
+{{- $root := . -}}
+{{- range $name, $svc := .Values.services }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ $root.Values.namespace }}
+  labels:
+    {{- include "eventide.labels" (dict "name" $name "root" $root) | nindent 4 }}
+spec:
+  replicas: {{ $svc.replicas | default $root.Values.defaults.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels:
+        {{- include "eventide.labels" (dict "name" $name "root" $root) | nindent 8 }}
+    spec:
+      # Spread across nodes so one node loss can't take a whole service down.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ $name }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $root.Values.defaults.runAsUser }}
+        runAsGroup: {{ $root.Values.defaults.runAsUser }}
+        fsGroup: {{ $root.Values.defaults.runAsUser }}
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: {{ $name }}
+          image: {{ include "eventide.image" (dict "svc" $svc "root" $root) }}
+          imagePullPolicy: {{ $root.Values.imagePullPolicy }}
+          ports:
+            - { name: http, containerPort: {{ $svc.port }} }
+          env:
+            - { name: PORT, value: {{ $svc.port | quote }} }
+            - { name: NODE_ENV, value: {{ $root.Values.nodeEnv | quote }} }
+            {{- range $k, $v := $svc.env }}
+            - name: {{ $k }}
+              value: {{ tpl $v $root | quote }}
+            {{- end }}
+          {{- if $svc.secretName }}
+          # DATABASE_URL (+ auth's BETTER_AUTH_SECRET / GOOGLE_*) — ESO fills this
+          # Secret on EKS, `kubectl create secret` from a file on k3d. The app
+          # only ever reads process.env (SYSTEM-DESIGN §5.2).
+          envFrom:
+            - secretRef:
+                name: {{ $svc.secretName }}
+          {{- end }}
+          # Liveness never touches the DB (CLAUDE.md hard rule); readiness does.
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml ($svc.resources | default $root.Values.defaults.resources) | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+{{- end }}

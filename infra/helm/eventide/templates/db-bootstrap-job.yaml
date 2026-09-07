@@ -1,0 +1,54 @@
+{{- if .Values.dbBootstrap.enabled }}
+{{- $root := . -}}
+# One-shot: create auth_db / event_db / registration_db + owner roles on RDS,
+# then run the drizzle migrations. Idempotent (bootstrap.ts checks pg_roles /
+# pg_database first). Runs as a Helm hook after the release is applied, so a
+# plain `helm upgrade` re-migrates.
+#
+# Requires: the eventide/db-bootstrap image pushed to the registry, and the
+# {{ .Values.dbBootstrap.masterSecretName }} Secret present (ESO fills it from
+# Secrets Manager eventide/rds-master when eso.enabled).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-bootstrap
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: eventide
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: db-bootstrap
+        app.kubernetes.io/part-of: eventide
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: bootstrap
+          image: {{ include "eventide.image" (dict "svc" (dict "image" $root.Values.dbBootstrap.image) "root" $root) }}
+          imagePullPolicy: {{ $root.Values.imagePullPolicy }}
+          env:
+            {{- range $k := (list "MASTER_DATABASE_URL" "AUTH_SVC_PASSWORD" "EVENT_SVC_PASSWORD" "REGISTRATION_SVC_PASSWORD") }}
+            - name: {{ $k }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.dbBootstrap.masterSecretName }}
+                  key: {{ $k }}
+            {{- end }}
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false # drizzle-kit writes a temp dir
+            capabilities: { drop: ["ALL"] }
+{{- end }}
