@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
-# Local EKS stand-in: a k3d cluster running the SAME infra/k8s manifests the
-# real cluster runs (week 1 Day 4 — local/prod parity GATE).
+# Local EKS stand-in: a k3d cluster running the SAME Helm chart the real cluster
+# runs (infra/helm/eventide), with the k3d overlay (values.local.yaml).
 #
 # The mapping to the AWS session lifecycle:
 #
 #   make up      ->  k3d cluster create + helm install ingress-nginx   (this script, top half)
-#   make deploy  ->  docker build -> push to k3d registry -> kubectl apply  (this script, bottom half)
+#   make deploy  ->  docker build -> push to k3d registry -> helm upgrade  (this script, bottom half)
 #   make down    ->  k3d cluster delete                                (scripts/k3d-down.sh)
 #
-# ingress-nginx uses the same values file as 20-platform/addons.tf, plus a small
-# k3d overlay (infra/helm/ingress-nginx.values.local.yaml). The APP manifests are
-# byte-identical — that is the whole point of the exercise.
+# ingress-nginx uses the same values file as 20-platform/addons.tf plus the k3d
+# overlay. The APP is the same chart as EKS — only values-local vs values-aws and
+# the image registry differ. That is the whole point of the exercise.
+#
+# The three service databases live in the host `docker compose` Postgres; the
+# in-cluster pods reach it at host.k3d.internal:5432. On EKS this is RDS, filled
+# by the db-bootstrap Job; here `packages/db` bootstrap runs from the host.
 #
 #   bash scripts/k3d-up.sh            # tag = git short sha
 #   bash scripts/k3d-up.sh local     # explicit tag
-#   SERVICES="event auth" bash scripts/k3d-up.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,8 +28,13 @@ REG_PORT=5111                              # host -> k3d registry (container :50
 REG_INCLUSTER="eventide-registry:${REG_PORT}"
 INGRESS_VERSION=4.15.1
 INGRESS_IMAGE="registry.k8s.io/ingress-nginx/controller:v1.15.1"  # chart 4.15.1's appVersion
-SERVICES="${SERVICES:-event}"
+SERVICES="auth event registration"
 TAG="${1:-$(git rev-parse --short HEAD)}"
+
+# Must match apps/auth/src/env.ts's dev default so the auth_db.jwks row created
+# by `make dev` stays decryptable under `make k3d` (and vice versa).
+BETTER_AUTH_SECRET="dev-only-insecure-better-auth-secret-0000000"
+DB_HOST_INCLUSTER="host.k3d.internal"
 
 # --- cluster (idempotent) ------------------------------------------------
 if k3d cluster list -o json | grep -q "\"name\":\"${CLUSTER}\""; then
@@ -45,10 +53,6 @@ fi
 kubectl config use-context "k3d-${CLUSTER}" >/dev/null
 
 # --- ingress-nginx (same values as EKS + k3d overlay) ------------------
-# Pre-load the controller image via the host Docker cache. registry.k8s.io is
-# slow from here (~4 min for the 110 MB image) and the pull happens inside every
-# fresh k3d node — importing it once keeps `make k3d` under a minute on reruns
-# and off the critical path of the helm --wait.
 echo "== preload ${INGRESS_IMAGE} into k3d =="
 docker image inspect "${INGRESS_IMAGE}" >/dev/null 2>&1 || docker pull "${INGRESS_IMAGE}"
 k3d image import "${INGRESS_IMAGE}" -c "${CLUSTER}"
@@ -56,8 +60,6 @@ k3d image import "${INGRESS_IMAGE}" -c "${CLUSTER}"
 echo "== helm install ingress-nginx =="
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx >/dev/null 2>&1 || true
 helm repo update ingress-nginx >/dev/null
-# A prior run that timed out on the (slow, ~110 MB) controller image pull leaves
-# the release wedged in `pending-install`/`failed` — clear it before retrying.
 case "$(helm -n ingress-nginx status ingress-nginx -o json 2>/dev/null \
         | grep -o '"status":"[a-z-]*"' | head -1)" in
   *pending-install*|*failed*) helm -n ingress-nginx uninstall ingress-nginx || true ;;
@@ -69,6 +71,14 @@ helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
   -f infra/helm/ingress-nginx.values.local.yaml \
   --wait --timeout 8m
 
+# --- databases: host compose Postgres + migrations --------------------
+echo "== host Postgres + bootstrap (auth_db / event_db / registration_db) =="
+docker compose up -d db
+printf 'waiting for postgres'
+until docker compose exec -T db pg_isready -U postgres >/dev/null 2>&1; do printf '.'; sleep 1; done
+echo
+bun run --filter @eventide/db db:bootstrap
+
 # --- build -> push to the k3d registry --------------------------------
 for svc in $SERVICES; do
   echo "== build $svc (native arch, no --platform — k3d nodes match the host) =="
@@ -76,18 +86,31 @@ for svc in $SERVICES; do
   docker push "localhost:${REG_PORT}/eventide/$svc:$TAG"
 done
 
-# --- apply the SAME manifests ----------------------------------------
-echo "== kubectl apply -f infra/k8s/ =="
-kubectl apply -f infra/k8s/event.yaml
+# --- app Secrets (ESO's job on EKS; a local file here — SYSTEM-DESIGN §5.2) ---
+echo "== eventide-{auth,event,registration} Secrets =="
+kubectl create namespace eventide --dry-run=client -o yaml | kubectl apply -f -
+mksecret() { kubectl -n eventide create secret generic "$1" "${@:2}" \
+  --dry-run=client -o yaml | kubectl apply -f -; }
+mksecret eventide-auth \
+  --from-literal=DATABASE_URL="postgres://auth_svc:auth_svc@${DB_HOST_INCLUSTER}:5432/auth_db" \
+  --from-literal=BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET}"
+mksecret eventide-event \
+  --from-literal=DATABASE_URL="postgres://event_svc:event_svc@${DB_HOST_INCLUSTER}:5432/event_db"
+mksecret eventide-registration \
+  --from-literal=DATABASE_URL="postgres://registration_svc:registration_svc@${DB_HOST_INCLUSTER}:5432/registration_db"
 
-for svc in $SERVICES; do
-  kubectl -n eventide set image "deployment/$svc" \
-    "$svc=${REG_INCLUSTER}/eventide/$svc:$TAG"
-  kubectl -n eventide rollout status "deployment/$svc" --timeout=120s
-done
+# --- deploy the chart (same chart as EKS, values-local overlay) -------
+echo "== helm upgrade --install eventide =="
+helm upgrade --install eventide infra/helm/eventide \
+  -f infra/helm/eventide/values.yaml \
+  -f infra/helm/eventide/values.local.yaml \
+  --set imageRegistry="${REG_INCLUSTER}" \
+  $(for s in $SERVICES; do echo --set services.$s.image.tag=$TAG; done) \
+  --wait --timeout 180s
 
 echo
 echo "deployed to k3d. smoke test (same paths as the NLB GATE on EKS):"
-echo "  curl -s http://localhost:8080/health/live   # {\"status\":\"ok\",\"service\":\"event\"}"
-echo "  curl -s http://localhost:8080/api/events    # []"
+echo "  curl -s http://localhost:8080/health/live                 # {\"status\":\"ok\",\"service\":\"event\"}"
+echo "  curl -s http://localhost:8080/api/events | jq length      # seeded events (run: make seed)"
+echo "  curl -s http://localhost:8080/api/auth/jwks               # EdDSA public key"
 echo "  open  http://localhost:8080/swagger"

@@ -239,10 +239,13 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
       `envFrom` a Secret. Verified on k3d: all 3 services read `DATABASE_URL` from the
       `eventide-<svc>` Secret. Close it on EKS once ESO is installed.)*
 - [~] Both services deployed to EKS behind ingress paths. *(Helm chart `infra/helm/eventide`
-      — one release, all 3 services + Ingress + HPA + ESO + db-bootstrap Job. `helm lint` /
-      `helm template` clean for both overlays; **fully deployed + E2E-tested on k3d**
-      2026-09-07. EKS deploy pending a lab session. `scripts/{deploy,k3d-up}.sh` still apply
-      raw `infra/k8s/event.yaml` — need repointing at the chart.)*
+      — one release, all 3 services + Ingress + HPA + ESO + db-bootstrap Job. **fully
+      deployed + E2E-tested on k3d** 2026-09-07. `scripts/k3d-up.sh` rewritten to the chart
+      (creates the app Secrets, `bun db:bootstrap`, `helm upgrade`) — **verified**.
+      `scripts/deploy.sh` rewritten to `helm upgrade -f values.aws.yaml` (assembles the k8s
+      Secrets from `eventide/rds-master`, `eso.enabled=false`) — **not run against EKS yet**.
+      ESO path TODO: 20-platform must write real `DATABASE_URL` + `BETTER_AUTH_SECRET` into
+      the per-service Secrets Manager secrets each rebuild, then flip `eso.enabled=true`.)*
 
 ---
 

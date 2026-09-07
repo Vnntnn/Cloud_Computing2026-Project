@@ -28,7 +28,7 @@ up: ## apply 20-platform (EKS + RDS + NLB + ingress-nginx), point kubectl at it
 	aws eks update-kubeconfig --region us-east-1 --name eventide
 	kubectl get nodes
 
-deploy: ## build+push the app image(s), apply infra/k8s, roll out
+deploy: ## build+push the 3 images to ECR, helm upgrade the eventide chart, roll out
 	bash scripts/deploy.sh
 
 db-bootstrap: ## create the 3 RDS databases + roles + run migrations (one-shot Job)
@@ -40,8 +40,8 @@ load: ## k6 autoscaling load test vs /api/events — pass BASE_URL=http://<nlb-d
 down: ## destroy 20-platform and verify nothing survived — run at EVERY session end
 	bash scripts/teardown.sh
 
-# --- local parity: k3d running the same infra/k8s manifests -----------
-k3d: ## local k3d cluster + ingress-nginx + the same infra/k8s manifests
+# --- local parity: k3d running the same Helm chart as EKS ------------
+k3d: ## local k3d cluster + ingress-nginx + the eventide chart (values-local)
 	bash scripts/k3d-up.sh
 
 k3d-down: ## delete the local k3d cluster + its registry
