@@ -67,10 +67,12 @@ not assumptions from documentation.
 | `iam:CreateOpenIDConnectProvider` | ❌ **Denied** | **No IRSA. No GitHub Actions OIDC.** |
 | `servicequotas:GetServiceQuota` | ❌ Denied | vCPU ceiling unknown — stay small |
 | `s3:GetBucketObjectLockConfiguration` | ❌ **Denied by org SCP** `p-lfgm2hv3` (explicit deny) | The AWS provider reads this on every `aws_s3_bucket` refresh → an S3 bucket **cannot** be a managed `aws_s3_bucket` resource. Probed 2026-09-07: it is the *only* blocked S3 read. Workaround: CLI-create the bucket (`terraform_data` + `local-exec`), consume as `data "aws_s3_bucket"`, keep all config in the granular `aws_s3_bucket_*` resources. See `infra/terraform/10-foundation/s3.tf`. |
-| ECR, Secrets Manager, S3 writes | ✅ Allowed (2026-09-07) | `10-foundation` applied clean: 3 ECR repos + lifecycle policies, 3 secrets, uploads bucket + CORS/PAB/encryption/ownership/lifecycle. |
+| ECR, Secrets Manager, S3 writes | ✅ Allowed (2026-09-07) | `10-foundation` applied clean: ECR repos + lifecycle policies (5 services incl. `payment` + `web` + a `db-bootstrap` tool image), per-service secrets, uploads bucket + CORS/PAB/encryption/ownership/lifecycle. |
 | `iam:GetRole` on **`voclabs`** | ❌ **Denied by identity policy** `Pvoclabs2` (explicit deny) | Breaks `terraform-aws-modules/eks` (every version) — it unconditionally reads `data "aws_iam_session_context" "current"` against the caller ARN, which `GetRole`s the session role. No module flag disables it. **Fix: raw `aws_eks_cluster` + `aws_eks_node_group`** with `access_config.bootstrap_cluster_creator_admin_permissions = true` (EKS resolves the creator server-side). `get-role` on `LabRole` still works — the deny is scoped to `voclabs`. |
 | EKS / RDS / NLB creation | ✅ Allowed (2026-09-07) | `20-platform` applied clean, 19 resources: EKS 1.33 + vpc-cni/kube-proxy/coredns addons + `t3.small` node group, `db.t3.micro` (`storage_encrypted` w/ `aws/rds` key), NLB + target groups + ASG attachments. `kubectl get nodes` → 2 Ready, creator has cluster admin. |
-| **Route 53 · ACM · CloudFront** | ⚠️ **NOT PROBED** | The entire TLS/custom-domain design (§5.5) depends on these. Run the extended `scripts/check-lab.sh` before building on them |
+| **CloudFront** | ❌ **Denied** (probed later) | SPA is served from an in-cluster nginx pod instead. |
+| **Route 53 · ACM** | ⚠️ **NOT PROBED** | The TLS/custom-domain design (§5.5) depends on these. Run the extended `scripts/check-lab.sh` before building on them. |
+| `iam:AttachRolePolicy` | ❌ **Denied** (probed 2026-09-07, `lab-probe-2026-09-07.txt`) | Rules out granting the node role S3/Secrets Manager → ESO stays off, `deploy.sh` injects secrets. |
 
 **The pre-created EKS roles are the decisive finding.** AWS Academy only provisions those
 when EKS is an intended, supported service in the lab. The professor set this up expecting
@@ -112,17 +114,27 @@ silently re-litigated later.
 
 | Decision | Rationale | Rejected |
 |---|---|---|
-| **Exactly 3 services** | Two demonstrate a service-to-service call; three demonstrate a real topology. More, solo, means several half-finished services and nothing deployed. | 6–8 services (the common student instinct) |
-| **Infrastructure before features** | Grading covers both; infrastructure does not compress under deadline pressure, features do. | Build the app first and containerise at the end |
+| ~~**Exactly 3 services**~~ → **4 services** | *Superseded 2026-09-07 (see "Full-System V2" below).* Originally: two demonstrate a call, three a topology. V2 adds `payment` because a real checkout needs a payment boundary + a compensating cross-service transaction. | 6–8 services (still rejected) |
+| **Infrastructure before features** | Grading covers both; infrastructure does not compress under deadline pressure, features do. The V2 feature expansion happened *after* the infra GATEs passed on real EKS, not before. | Build the app first and containerise at the end |
 | **Cut Prometheus + Grafana** → CloudWatch Container Insights | 1–2 days of Helm and dashboard work vs. a Terraform add-on, for metrics adequate to screenshot. Biggest time saving for the smallest rubric loss. | Self-hosted monitoring stack |
 | **Frontend never on the critical path** | `@elysiajs/openapi` is always a complete demo surface. A beautiful UI over a broken cluster is the exact failure mode being avoided. | Frontend-first |
-| **Frontend capped at 2 days**, deliberately unstyled | Four screens prove the services work together. That is its whole job. | Component library, design polish |
-| **No BFF / API-gateway service** | A fourth service to deploy and debug for no marks. Named in the report as the next step. | Aggregation gateway |
-| **Registration stays thin** | Create ticket, list mine, capacity check. | Waitlists, payments, email, QR codes |
+| ~~**Frontend capped at 2 days, unstyled**~~ → **official shadcn + TanStack** | *Superseded by V2.* The richer flow (checkout, countdown, check-in, admin) needs real routing/forms; still no design polish beyond the preset. | — |
+| **No BFF / API-gateway service** | A fifth service to deploy and debug for no marks. Named in the report as the next step. | Aggregation gateway |
+| ~~**Registration stays thin**~~ → **full order/inventory/refund/check-in domain** | *Superseded 2026-09-07 (see below).* | Waitlists, queues, real payment gateway, mail worker (all still rejected → deferred list) |
 
 **Must not be cut under any circumstances:** Terraform IaC, a working EKS deployment,
 Secrets Manager integration, and the HPA autoscaling demo. Those four are what a cloud
 computing rubric actually measures.
+
+#### Full-System V2 — expand the application (2026-09-07)
+
+| | |
+|---|---|
+| **Decision** | With the infra scope done and all Week-1 GATEs verified on real EKS, expand the thin MVP into a staged end-to-end ticket-commerce system modelled on the V1 DBML: add a `payment` service + `payment_db`; build out the catalog (categories, venues, ticket types, images, lifecycle), the order/inventory domain (8-minute holds, advisory-lock reservations, `reserved+sold<=quota` CHECK, expiry CronJob), a **mock** payment gateway with an idempotent reconcile, refunds, and QR check-in; add `attendee`/`organizer`/`admin` roles via the better-auth admin plugin with organizer approval + ban + an audit log; migrate the SPA to TanStack Router/Query/Form + official shadcn (`--preset bfEjlVBAI`). Plan of record: `docs/FULL-SYSTEM-IMPLEMENTATION-PLAN.md`. |
+| **Why** | Time remained after the infra risk was retired. A real checkout flow is the smallest thing that justifies a payment boundary and a compensating distributed transaction — more architecture to show for the report, at no infra cost. |
+| **Infra delta** | One more service pod (1 replica) + one more logical DB on the *same* `db.t3.micro` + a per-minute CronJob + one ECR repo + two `random_password` secrets (`INTERNAL_SERVICE_TOKEN`, `TICKET_SIGNING_SECRET`). No new AWS service, no cost change of note (base pods 4→~6, HPA ceiling still 8, `t3.small` ~17-pod ceiling unchanged). |
+| **Rejected / deferred** | Redis/Valkey seat locks, waiting room, waitlists, SQS/EventBridge, a mail worker, a real payment provider, signed webhooks — all kept on the report's "Deferred Real-Product Checklist", not built. Payment is a deterministic mock (no card fields); a full event returns `409 capacity_full` with no queue. |
+| **Verification** | `bun run lint/check-types/test/build` green; component test suites (concurrent oversell, idempotent order+payment, hold expiry, payment reconciliation, QR-scan outcomes, ban/session-revocation) run against a real Postgres in CI; `scripts/smoke.ts` (`make smoke`, CI `e2e` job) exercises all four personas end to end. |
 
 ### Technology
 
@@ -133,7 +145,7 @@ computing rubric actually measures.
 | **Turborepo monorepo** | Three repos means three CI pipelines and duplicated shared types — so `auth` issues a JWT one shape and `event` parses another, discovered at runtime. Services remain independently deployed containers: sharing a git repo is a *delivery* choice, not an architectural one. | Repo per service |
 | **k3d for local Kubernetes** | The same manifests run daily from week one. With Compose, manifests get written late and first exercised on AWS under deadline pressure. | **Docker Compose** — the decisive rejection; kind (equivalent, slightly heavier) |
 | **Hybrid dev loop** | `bun --watch` for the ~1 s inner loop, `make k3d` (~30 s) daily for the outer loop. | **Skaffold / Tilt** — at a 30 s outer loop they earn little, and when they misbehave you debug the tool instead of the project |
-| **Vite + React + Tailwind + shadcn/ui** | Static bundle, no SSR — the frontend must be a file in S3, not a pod. shadcn is copy-in components, which keeps the 2-day cap realistic. | TanStack Start (SSR would need a container); hand-rolled CSS |
+| **Vite + React + TanStack Router/Query/Form + shadcn/ui** (`--preset bfEjlVBAI`) | Static bundle, no SSR. Originally hand-written "shadcn-like" components + React Router + `useEffect` fetching; **migrated 2026-09-07 (V2)** to file-based TanStack routing with `beforeLoad` guards, TanStack Query for server state, TanStack Form + official shadcn. The bundle is still served from an nginx pod (CloudFront denied), not S3. | TanStack Start (SSR would need a real server); React Router + manual fetching (the pre-V2 state); hand-rolled CSS |
 | **Eden Treaty** | End-to-end types from each Elysia server to the SPA with no codegen step. | OpenAPI codegen; hand-written fetch wrappers |
 | **better-auth** | Sessions, password hashing and account tables solved in an afternoon rather than a week, and more credible than a hand-rolled JWT flow. | Hand-rolled auth (the original plan) |
 | **Elysia `t` / TypeBox for request models** | Best-practice guidance: models are `t.Object` registered via `.model()`, one definition serving validation *and* types. | **Zod for request bodies** — a parallel schema system would break Eden's inference. Zod is retained for boot-time env validation only, outside the request path. |
@@ -144,11 +156,12 @@ computing rubric actually measures.
 
 | Decision | Rationale | Rejected |
 |---|---|---|
-| **One RDS instance, database per service** | PostgreSQL **cannot** join across databases — the boundary is enforced by the engine, not by discipline. Makes Secrets Manager load-bearing (3 secrets, one per service) rather than decorative. | Shared tables (the classic anti-pattern); schema-per-service (cross-schema joins remain possible if grants slip); 3 RDS instances (3× cost and provisioning time for identical learning) |
-| **Capacity owned by `registration`** | If `event` owned "seats remaining", booking would write to two databases — a distributed transaction needing sagas or 2PC. Owning the ticket rows makes a booking one local transaction. | Capacity in `event` |
+| **One RDS instance, database per service** (4 DBs since V2) | PostgreSQL **cannot** join across databases — the boundary is enforced by the engine, not by discipline. Makes Secrets Manager load-bearing (4 per-service secrets + `rds-master`) rather than decorative. `schema.test.ts` asserts zero cross-DB FKs and `text` ids across boundaries. | Shared tables (the classic anti-pattern); schema-per-service (cross-schema joins remain possible if grants slip); 4 RDS instances (4× cost for identical learning) |
+| **Capacity owned by `registration`** | If `event` owned "seats remaining", booking would write to two databases — a distributed transaction needing sagas or 2PC. Owning the inventory rows makes a reservation one local transaction. V2 enforces it per ticket type via `pg_advisory_xact_lock` + a `reserved+sold<=quota` CHECK, with 8-minute holds. | Capacity in `event` |
+| **Payment as a mock service with a compensating transaction** (V2) | A real checkout is the smallest thing that needs a payment boundary. `payment` reads the trusted amount from `registration` (never the browser), takes payment idempotently, then calls `/internal/.../confirm`; if confirm fails after payment succeeded, both sides go `PENDING_VERIFICATION` with an idempotent reconcile — never a double charge. | A real gateway (Stripe/Omise — adds marks for nothing the design doesn't show); 2PC; an outbox + queue (deferred) |
 | **One frontend for all services** | Microservices is a *backend* pattern. Micro-frontends exist to let many frontend **teams** deploy independently — a problem a solo developer does not have; building one would be cargo-culting. | Micro-frontends (Module Federation, single-spa) |
-| **Static SPA on S3 + CloudFront** | The frontend is not a microservice — it is a static bundle needing no pod. Also gives a *second* use of S3 and adds CloudFront to the diagram. | A fourth container in the cluster |
-| **better-auth JWT plugin + JWKS** | better-auth defaults to cookie sessions checked against the DB. In this topology that would force `event`/`registration` either to call `auth` per request, or to read `auth_db` — **which the database boundary forbids by construction**. JWKS lets them verify locally with `jose`, no hop and no DB call. Asymmetric keys mean the other services hold only a public key and cannot mint tokens. | Shared HMAC signing key (weaker); per-request session validation hop; reading the session table (forbidden) |
+| ~~**Static SPA on S3 + CloudFront**~~ → **SPA served from an in-cluster nginx pod** | CloudFront is **denied** in the lab (probed). The SPA is still a static Vite build with no business logic, but it ships as an `nginx-unprivileged` pod behind the ingress so `/` and `/api/*` share one origin (no CORS). | S3 + CloudFront (denied); a heavyweight app server |
+| **better-auth JWT plugin + JWKS + admin plugin** | better-auth defaults to cookie sessions checked against the DB. In this topology that would force `event`/`registration`/`payment` either to call `auth` per request, or to read `auth_db` — **which the database boundary forbids by construction**. JWKS lets them verify locally with `jose`, no hop and no DB call. Asymmetric keys mean the other services hold only a public key and cannot mint tokens. V2: the admin plugin + a `createAccessControl` role set put `role`/`organizerApprovalStatus` in the JWT so authz is also local; a role/ban change deletes the user's `session` rows so a stale token can't outlive it. | Shared HMAC signing key (weaker); per-request session validation hop; reading the session table (forbidden); a separate authz service |
 | **Bearer tokens, not cookies** | Forced by a constraint unrelated to auth: an HTTPS SPA on CloudFront cannot call an HTTP NLB — browsers block it as mixed content, and ACM needs a domain the project does not have. The `Authorization` header behaves **identically** in dev (`localhost` → HTTP, allowed) and demo (CloudFront, same origin). Cookies would need `SameSite=None; Secure` in dev and first-party in prod — two configurations to keep alive. | **Option A: everything behind CloudFront** — cleanest security posture (no CORS, `httpOnly` cookies), but CloudFront sits in the persistent layer while the NLB is destroyed nightly and returns with a new DNS name, so the origin needs a ~5-minute update every morning for four weeks |
 | **Google OAuth as primary login, email/password kept enabled** | The seed Job cannot create OAuth users — 15 events need owners, and hand-clicking through Google after every nightly rebuild is untenable. Also demo-day resilience: OAuth depends on campus wifi and Google's availability. | OAuth-only |
 | **Custom domain (subdomain delegated to Route 53) + ACM** | Google rejects any non-HTTPS redirect URI outside `localhost`, and the NLB's DNS name changes nightly — so a stable HTTPS hostname is mandatory, not cosmetic. Route 53 ALIAS records are managed by Terraform in `20-platform`, so rebuilds re-point DNS automatically with no external API call. Adds two AWS services to the architecture. | **Cloudflare proxied DNS** (simpler, seconds-fast updates, survives an account switch, but adds nothing to an AWS rubric); **cert-manager + Let's Encrypt** (5-duplicate-certs-per-week limit collides with nightly rebuilds) |
@@ -237,7 +250,18 @@ scores better than the alternative implementation would have.
     no-TLS-on-the-load-balancer constraint; the `localStorage`/XSS exposure is stated, not
     hidden.
 11. **Build-time type coupling, zero runtime coupling** — Eden gives the SPA end-to-end
-    types across three services while the deployed containers stay fully independent.
+    types across the services while the deployed containers stay fully independent.
+12. **Payment mock with a compensating transaction, not a real gateway** — the
+    payment→registration boundary and the `PENDING_VERIFICATION` + idempotent-reconcile
+    path demonstrate distributed-transaction reasoning; a real provider integration would
+    add none of that. Card fields are never collected.
+13. **Inventory correctness proven, not just claimed** — a `reserved+sold<=quota` DB CHECK
+    plus per-ticket-type advisory locks, with automated tests that fire concurrent orders
+    at the last ticket and assert exactly-quota succeed. CI runs them against a real
+    Postgres.
+14. **Authorization carried in the JWT, revocable via session deletion** — no per-request
+    call to `auth`; a role or ban change deletes the user's sessions so a stale token
+    can't outlive it past its short expiry.
 
 ---
 
@@ -255,18 +279,16 @@ These block nothing today, but two of them could invalidate scope decisions.
    *Even if it only requires slides, build the EKS hello-world anyway:* the deck takes two
    hours, the Kubernetes learning curve takes four days, and only one of those can be
    deferred.
-3. **Is `iam:AttachRolePolicy` permitted?** Untested — only `CreateRole` was proven denied,
-   and it is a different action. If allowed, attach S3 and Secrets Manager policies to
-   `LabEksNodeRole` and every pod gets credentials via IMDS with no configuration and no
-   expiry, deleting the per-session refresh script. **Build against static credentials
-   regardless** — this is a 20-minute simplification, not a blocker.
+3. ~~Is `iam:AttachRolePolicy` permitted?~~ **Answered 2026-09-07: denied.** The node
+   role cannot be granted S3/Secrets Manager, so ESO stays off and `deploy.sh` injects
+   the k8s Secrets. (Decision-log "Infrastructure" and Trap table cover this.)
 4. **What do the other two teammates actually do?** The plan assumes solo delivery. If
    either becomes available, the frontend and the report are the most separable pieces.
 5. **Final demo date** — assumed early October.
-6. **What does `shadcn --preset bfEjlVBAI` configure?** Chosen by the user; its contents are
-   unverified here. If it pins a theme or component registry, confirm it agrees with the
-   installed Tailwind major version — a Tailwind v3/v4 mismatch is the one place this
-   frontend stack reliably breaks.
+6. ~~What does `shadcn --preset bfEjlVBAI` configure?~~ **Resolved (V2):** initialised
+   with the official CLI — Tailwind v4 (`@tailwindcss/vite`), Lucide icons, the full
+   component set under `apps/web/src/components/ui/`. `bun run build` is green, so no
+   Tailwind major-version mismatch.
 
 ---
 

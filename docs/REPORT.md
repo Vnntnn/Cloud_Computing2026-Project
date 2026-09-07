@@ -13,10 +13,16 @@
 
 ## 1. Overview
 
-Eventide is an event-listing and ticket-registration platform: browse events,
-log in, register for a ticket, see your tickets. It is deliberately **feature-poor
-and infrastructure-heavy** — the smallest application that still justifies a real
-microservice topology and exercises every AWS service the course asks for.
+Eventide is an event ticket-commerce platform: browse events, apply to become an
+organizer, publish events with ticket types, reserve tickets under an 8-minute
+hold, pay through a mock gateway, receive a signed QR ticket, and get checked in
+at the door — with attendee / organizer / admin roles and an audit trail.
+
+The **infrastructure** was built first and deliberately kept minimal; once every
+infrastructure GATE passed on real EKS, the **application** was expanded from a
+thin MVP into this end-to-end flow (the "Full-System V2" design). The topology
+did not change — one more service, one more logical database on the same RDS
+instance.
 
 The target environment is an **AWS Academy Learner Lab** account with a **$50
 hard cap** and four-hour credential sessions. That single constraint shapes most
@@ -24,37 +30,40 @@ of the design: infrastructure that cannot be paused is destroyed and rebuilt
 every session, and every "why not the obvious approach" answer below traces back
 to a permission the lab denies.
 
-**Built:** three independently deployed Elysia/Bun microservices (`auth`,
-`event`, `registration`) on Amazon EKS, one static React SPA served from inside
-the same cluster, backed by one RDS PostgreSQL instance with one database per
-service.
+**Built:** four independently deployed Elysia/Bun microservices (`auth`, `event`,
+`registration`, `payment`) on Amazon EKS, one static React SPA (TanStack Router /
+Query / Form + shadcn/ui) served from inside the same cluster, backed by one RDS
+PostgreSQL instance with one database per service, plus a per-minute
+reservation-expiry CronJob.
 
 | AWS service | Where it is used |
 |---|---|
-| EKS | Runs the three services + the SPA, one managed node group (2 × `t3.small`, k8s 1.33). |
-| RDS PostgreSQL | One `db.t3.micro`, three isolated databases. |
-| S3 | Terraform state; event cover-image uploads (presigned). |
-| Secrets Manager | Per-service DB credentials + the better-auth key-encryption secret. |
-| ECR | Four container images. |
+| EKS | Runs the four services + the SPA pod + the expiry CronJob, one managed node group (2 × `t3.small`, k8s 1.33). |
+| RDS PostgreSQL | One `db.t3.micro`, **four** isolated databases (`auth_db`, `event_db`, `registration_db`, `payment_db`). |
+| S3 | Terraform state; event image uploads (presigned). |
+| Secrets Manager | Per-service DB credentials, the better-auth key-encryption secret, the internal service-to-service token, the ticket-signing secret. |
+| ECR | Five service images + a db-bootstrap tool image. |
 | ELB (NLB) | Public entry point, Terraform-managed, forwards to ingress-nginx. |
 | CloudWatch | Container Insights for the autoscaling evidence *(if `iam:AttachRolePolicy` permits — see §7)*. |
 
 ## 2. Scope, and what was deliberately cut
 
 **Caveat, stated plainly:** the assignment brief was never available as text.
-Every scope decision — three services, cutting Prometheus, the frontend priority
-— is inference about what is graded. If the rubric named something below as
-required, that is a gap; it is called out here rather than left for a marker to
-find.
+Every scope decision — the service count, cutting Prometheus, the frontend
+priority — is inference about what is graded. If the rubric named something below
+as required, that is a gap; it is called out here rather than left for a marker
+to find.
 
 Deliberately **not** built, each with its reason (`PROJECT-KNOWLEDGE-BASE.md`
 §3, §7):
 
 | Cut | Why | Named in the report as |
 |---|---|---|
-| BFF / API-gateway service | A fourth service to deploy and debug for no extra marks. | The pattern at scale. |
+| BFF / API-gateway service | A fifth service to deploy and debug for no extra marks. | The pattern at scale. |
 | Prometheus + Grafana | 1–2 days of Helm values and dashboards for metrics Container Insights already gives. | A richer-observability next step. |
-| Separate RDS per service | 3× cost and provisioning time for identical pedagogical value. | The physical-isolation migration path. |
+| Separate RDS per service | 4× cost and provisioning time for identical pedagogical value. | The physical-isolation migration path — starting with `payment_db` and the high-write `registration_db`. |
+| **A real payment gateway** | The `payment → registration` boundary and the compensating transaction are the point; a Stripe/Omise integration adds none of that reasoning. | The mock replaced by a real provider + signed webhooks. |
+| Waiting room / waitlists / Redis seat locks / SQS/EventBridge / mail worker | Each is real-product infrastructure that adds operational surface without new architectural lessons. A sold-out event returns `409 capacity_full` with no queue. | The "Deferred Real-Product Checklist". |
 | GitHub Actions OIDC deploy | `iam:CreateOpenIDConnectProvider` is denied — federation is impossible here. | What CI would do in an unrestricted account. |
 | cert-manager / Let's Encrypt | 5 duplicate certs per week — nightly rebuilds exhaust the quota in five days. | Viable only with a staging issuer. |
 | CloudFront in front of the SPA | `cloudfront:*` denied in the lab (probed 2026-09-07). | Replaced by serving the SPA from the cluster (§5). |
@@ -62,80 +71,118 @@ Deliberately **not** built, each with its reason (`PROJECT-KNOWLEDGE-BASE.md`
 ## 3. Architecture
 
 ```
-                         Browser (React SPA)
-                                 │  one origin: https://events.<domain>  (Route 53 + ACM at the NLB, §6)
-                                 ▼
-                     Network Load Balancer  (aws_lb, Terraform)
-                                 │  TCP :80/:443 → NodePort 30080/30443
-┌────────────────────────────────┼──────────────────────────────────────────┐
-│ EKS 1.33 · 2×t3.small · default-VPC public subnets (us-east-1a/b/c)        │
-│                                ▼                                          │
-│                          ingress-nginx  (NodePort, not type=LoadBalancer) │
-│      /            /api/auth/*      /api/events/*     /api/registrations/*  │
-│     [web]           [auth]           [event]           [registration]     │
-│   (nginx SPA)          │                │                   │             │
-│                        │                │   ◄─── HTTP (enrichment) ───┐   │
-│                        ▼                ▼                   ▼         │   │
-│                     auth_db          event_db        registration_db │   │
-│                        └──────────  one RDS db.t3.micro  ────────────┘   │
-└──────────────────────────────────────────────────────────────────────────┘
+                    Browser (React SPA — TanStack + shadcn)
+                            │  one origin: https://events.<domain>  (Route 53 + ACM at the NLB, §6)
+                            ▼
+                 Network Load Balancer  (aws_lb, Terraform)
+                            │  TCP :80/:443 → NodePort 30080/30443
+┌───────────────────────────┼──────────────────────────────────────────────────────┐
+│ EKS 1.33 · 2×t3.small · default-VPC public subnets (us-east-1a/b/c)               │
+│                           ▼                                                       │
+│                     ingress-nginx  (NodePort, longest-prefix routing)             │
+│   /   /api/auth  /api/users  /api/events  /api/categories  /api/orders  /api/payments
+│  [web]  /api/admin/*         /api/venues  /api/ticket-types /api/tickets           │
+│         [auth]               /api/organizer/* /api/admin/events  /api/check-ins    │
+│           │                     [event]              [registration] ──► [payment]  │
+│           │                        ▲                     │   ▲   internal (token)  │
+│           │        internal checkout-summary ────────────┘   └── confirm/refund ──┘
+│           │        + JWKS: event / registration / payment verify JWTs locally      │
+│           ▼            ▼                  ▼                    ▼                     │
+│        auth_db      event_db       registration_db        payment_db               │
+│           └────────────  one RDS db.t3.micro  ──────────────────┘                   │
+│   + a per-minute reservation-expiry CronJob (concurrencyPolicy: Forbid)            │
+└──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Request path.** One public NLB → ingress-nginx (a NodePort Service) →
-Service → pod. The SPA and all three APIs sit behind **one origin** so there is
-no CORS configuration and no mixed-content problem.
+Service → pod. The SPA and all four APIs sit behind **one origin** so there is
+no CORS configuration and no mixed-content problem. ingress-nginx routes by
+longest-matching prefix, which is how `/api/admin/users` reaches `auth` while
+`/api/admin/events` reaches `event`.
 
-**The three services.**
+**The four services.**
 
-- **auth** mounts *better-auth* (Drizzle adapter + JWT plugin + bearer plugin).
-  Email/password and Google OAuth. Owns `auth_db`. Exposes `GET /api/auth/jwks`.
-- **event** — event metadata CRUD, S3 presigned cover-image upload. Owns
-  `event_db`. Verifies callers' JWTs locally (§6). Exposes `GET /api/events/:id/summary`
-  for in-cluster use.
-- **registration** — tickets. **Owns and enforces capacity.** Owns
-  `registration_db`. Calls `event` once, in-cluster, at booking time.
+- **auth** mounts *better-auth* (Drizzle adapter + JWT + bearer + **admin**
+  plugins). Email/password and Google OAuth. Roles (`attendee`/`organizer`/
+  `admin`), organizer approval, ban, and a `user_audit_logs` trail. Owns
+  `auth_db`. Exposes `GET /api/auth/jwks`; the JWT carries `role` and
+  `organizerApprovalStatus`.
+- **event** — categories, venues, events with a DRAFT→PUBLISHED→CLOSED/SUSPENDED
+  lifecycle, ticket types, event images (S3 presigned upload). Owns `event_db`.
+  Verifies callers' JWTs locally (§6). Exposes an internal `checkout-summary`
+  endpoint (token-guarded) for `registration`.
+- **registration** — ticket inventory, orders with 8-minute holds, **capacity
+  enforcement** (per-ticket-type advisory lock + a DB CHECK), signed QR tickets,
+  check-in. Owns `registration_db`. Calls `event` once at order time.
+- **payment** — a **mock** gateway. Owns `payment_db`. Takes an order ID + an
+  idempotency key (no card fields), pulls the trusted amount from
+  `registration`, records the payment, and calls `registration` to confirm the
+  order. Handles the payment-succeeded-but-confirm-failed case with an idempotent
+  reconcile (§3 trade-off 2).
 
 ### Trade-offs
 
 1. **The service boundary is placed to avoid a distributed transaction.**
-   Capacity could belong to `event` ("seats remaining"), but then booking a
+   Capacity could belong to `event` ("seats remaining"), but then reserving a
    ticket writes to two databases — a saga or two-phase commit. Instead
-   `registration` owns the ticket rows and enforces capacity by counting its
-   own table inside one local transaction, serialised per-event with a
-   transaction-scoped advisory lock:
+   `registration` owns the `ticket_inventory` rows and reserves inside one local
+   transaction, serialised per **ticket type** with a transaction-scoped advisory
+   lock, with a database CHECK as the backstop:
 
    ```
    BEGIN;
-     SELECT pg_advisory_xact_lock(hashtextextended($event_id, 0));
-     -- already booked? -> 409;  count >= capacity? -> 409
-     INSERT INTO tickets (...);
+     SELECT pg_advisory_xact_lock(hashtextextended($ticket_type_id, 0));
+     INSERT INTO ticket_inventory (...) ON CONFLICT DO NOTHING;
+     -- reserved_count + sold_count + $qty > total_quota ?  -> 409 capacity_full
+     UPDATE ticket_inventory SET reserved_count = reserved_count + $qty ...;
+     INSERT INTO orders (..., expires_at = now() + interval '8 minutes');
    COMMIT;
+   -- CHECK (reserved_count + sold_count <= total_quota)  rejects an oversell even if the code is wrong
    ```
 
-   `event` stays the source of truth for the capacity *number*; `registration`
-   reads it once over HTTP and denormalises it onto the ticket. **Verified: three
-   concurrent bookings for the last seat return `200, 409, 409` and the final
-   count is 1 — no oversell.**
+   A reservation is a **hold**: payment confirmation moves `reserved → sold` and
+   issues the tickets; expiry (the CronJob), cancellation or refund releases it.
+   `event` stays the source of truth for the quota *number*, read once at order
+   time. **Automated test: `total_quota + 6` concurrent orders for the last unit
+   return exactly `total_quota` × 200 and the rest × 409; `reserved_count` never
+   exceeds the quota.** A repeated `Idempotency-Key` (a double-clicked "Buy")
+   yields one order, proven by a concurrent test after a real bug was found and
+   fixed (the pre-transaction replay check raced the key insert).
 
-2. **Logical database-per-service on one instance.** PostgreSQL *cannot* join
+2. **The payment flow is a compensating transaction, not a saga framework.**
+   `payment` takes payment, then calls `registration`'s internal `confirm`. If
+   `confirm` fails after payment succeeded — the classic dual-write problem — the
+   payment and order both become `PENDING_VERIFICATION` and an **idempotent
+   reconcile** (`POST /api/payments/:id/reconcile`, admin or automatic retry)
+   re-runs the confirm. The payment is never taken twice; the reconcile is a
+   no-op once the order is `CONFIRMED`. `payment` reads the amount from
+   `registration`, never from the browser. **Automated test covers the
+   failure-then-reconcile path and asserts a single payment row.**
+
+3. **Logical database-per-service on one instance.** PostgreSQL *cannot* join
    across databases — the boundary is engine-enforced, not a convention that
-   depends on grants staying correct. Documented migration path to physical
-   isolation. Consequence accepted: no cross-service foreign keys or joins.
+   depends on grants staying correct. A `schema.test.ts` case asserts zero
+   cross-database foreign keys and `text` (never `uuid`) IDs across boundaries.
+   Documented migration path to physical isolation. Consequence accepted: no
+   cross-service foreign keys or joins.
 
-3. **Asymmetric JWT via JWKS.** `auth` mints EdDSA JWTs and publishes only the
-   public keys at `/api/auth/jwks`. `event` and `registration` fetch those keys
-   with `jose` and verify locally — no per-request hop to `auth`, no database
-   call. They hold only a public key and are **cryptographically incapable of
-   minting a token**. The database boundary ruled out the naive alternatives
-   (call `auth` every request; read its session table) — a constraint that
-   *improved* the design.
+4. **Asymmetric JWT via JWKS, authorization in the token.** `auth` mints EdDSA
+   JWTs and publishes only the public keys at `/api/auth/jwks`. `event`,
+   `registration` and `payment` fetch those keys with `jose` and verify locally
+   — no per-request hop to `auth`, no database call. They hold only a public key
+   and are **cryptographically incapable of minting a token**. The JWT carries
+   `role` and `organizerApprovalStatus`, so authorization is also local; a role
+   or ban change deletes the user's `session` rows so a stale token cannot
+   outlive the change past its short expiry. The database boundary ruled out the
+   naive alternatives (call `auth` every request; read its session table) — a
+   constraint that *improved* the design.
 
-4. **Monorepo for development, independent containers at runtime.** One
-   Turborepo, shared types — but four separately built images, separate
+5. **Monorepo for development, independent containers at runtime.** One
+   Turborepo, shared types — but five separately built images, separate
    Deployments, separate scaling. Delivery convenience, not architectural
    coupling.
 
-5. **Build-time type coupling, zero runtime coupling.** Eden Treaty gives the
+6. **Build-time type coupling, zero runtime coupling.** Eden Treaty gives the
    SPA end-to-end types from each Elysia server with no codegen step; the
    deployed containers never import each other.
 
@@ -146,7 +193,7 @@ All infrastructure is Terraform, **split by lifetime**:
 | Layer | Contents | Lifecycle |
 |---|---|---|
 | `00-bootstrap` | S3 state bucket | created once, by hand (chicken-and-egg) |
-| `10-foundation` | 3 ECR repos + lifecycle, 3 Secrets Manager secrets, uploads S3 bucket | applied once, **never destroyed** |
+| `10-foundation` | ECR repos + lifecycle (5 services + a tool image), Secrets Manager secrets (one per service), uploads S3 bucket | applied once, **never destroyed** |
 | `20-platform` | EKS + node group + addons, RDS, NLB, ingress-nginx, metrics-server | **destroyed and rebuilt every session** |
 
 **Raw `aws_eks_cluster` + `aws_eks_node_group`, not `terraform-aws-modules/eks`.**

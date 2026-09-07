@@ -3,7 +3,10 @@
 **Project:** Cloud Computing 2026 term project, IT KMITL
 **Repo:** `Cloud_Computing2026-Project`
 **Target environment:** AWS Academy Learner Lab, account `735838417080`, region `us-east-1`
-**Last updated:** 2026-09-06
+**Last updated:** 2026-09-08 (expanded to the Full-System V2 scope — payment service,
+orders/inventory/refunds/check-in, TanStack + shadcn SPA; see
+`docs/FULL-SYSTEM-IMPLEMENTATION-PLAN.md` and the decision-log entry in
+`docs/PROJECT-KNOWLEDGE-BASE.md`)
 
 > "Eventide" is a working name for the application. Rename freely.
 
@@ -11,25 +14,28 @@
 
 ## 1. Overview
 
-Eventide is an event-listing and ticket-registration platform, decomposed into three
+Eventide is an event-listing and ticket-commerce platform, decomposed into four
 independently deployed microservices running on Amazon EKS, with a single static
-frontend served from S3 + CloudFront.
+frontend served from the cluster (CloudFront is denied in the lab).
 
 The project is graded on **both** the application and the cloud infrastructure, with a
-written report and a live demo. The design is therefore deliberately **feature-poor and
-infrastructure-heavy**: the smallest application that still justifies a genuine
-microservice topology and exercises every required AWS service.
+written report and a live demo. The application was originally scoped
+**feature-poor and infrastructure-heavy**; with time remaining it was expanded to
+the **Full-System V2** design — a staged end-to-end ticket-commerce flow (orders
+with 8-minute inventory holds, a mock payment gateway, refunds, QR check-in,
+organizer/admin roles) modelled on the V1 database design. Infrastructure did not
+change: the same one RDS instance, the same EKS cluster, one more service and one
+more logical database.
 
 ### Required AWS services and where each is used
 
 | Service | Use |
 |---|---|
-| **EKS** | Runs the three application services. Managed node group, 2 × `t3.medium`. |
-| **RDS (PostgreSQL)** | One `db.t3.micro` instance hosting three isolated databases. |
-| **S3** | Event cover images (presigned upload/read) **and** the static frontend bundle. |
-| **Secrets Manager** | Per-service DB credentials and the JWT signing key. |
-| ECR | Container image registry. |
-| CloudFront | CDN in front of the static frontend. |
+| **EKS** | Runs the four application services + the static SPA pod. Managed node group, 2 × `t3.small` (`t3.medium` for the week-4 HPA-to-8 load test). |
+| **RDS (PostgreSQL)** | One `db.t3.micro` instance hosting four isolated databases (`auth_db`, `event_db`, `registration_db`, `payment_db`). |
+| **S3** | Event images (presigned upload/read). The SPA bundle is served from an nginx pod in-cluster, not S3 (no CloudFront). |
+| **Secrets Manager** | Per-service DB credentials, `BETTER_AUTH_SECRET`, the internal service-to-service token, and the ticket-signing secret. |
+| ECR | Container image registry (5 repos: auth, event, registration, payment, web + db-bootstrap tool image). |
 | CloudWatch | Container Insights for pod CPU/memory metrics. |
 
 ---
@@ -37,46 +43,51 @@ microservice topology and exercises every required AWS service.
 ## 2. Architecture
 
 ```
-                          Browser (React SPA)
+                          Browser (React SPA — TanStack Router/Query/Form + shadcn)
                                   │
-                 ┌────────────────┴────────────────┐
-                 │ GET /                           │ /api/*
-                 ▼                                 ▼
-        CloudFront + S3                  Network Load Balancer
-        (static bundle)                  (created by Terraform)
-                                                   │
-                                                   │ NodePort
-┌──────────────────────────────────────────────────┼──────────────────────────┐
-│ EKS 1.33 · 2 × t3.medium · default VPC public subnets (us-east-1a/b/c)      │
-│                                                   ▼                          │
-│                                            ingress-nginx                     │
-│                    ┌──────────────────┬───────────┴────────┬───────────────┐ │
-│                    ▼                  ▼                    ▼               │ │
-│              /api/auth/*        /api/events/*     /api/registrations/*     │ │
-│                 [auth]             [event]           [registration]        │ │
-│                    │                  │                    │               │ │
-│                    │                  │      HTTP (in-cluster enrichment)  │ │
-│                    │                  └◄───────────────────┘               │ │
-│                                                                             │ │
-│   Secrets Manager ─(deploy.sh)─► Kubernetes Secrets ──► process.env         │ │
-└──────────────────────────────────────────────────┬──────────────────────────┘
-                                                   │
-              ┌────────────────────┬───────────────┴────────┐
-              ▼                    ▼                        ▼
-      RDS PostgreSQL              S3                  Secrets Manager
-   auth_db │ event_db │        presigned            3 secrets, one per
-      registration_db          PUT / GET                 service
+                                  │  https://events.<domain>   (one origin, no CORS)
+                                  ▼
+                         Network Load Balancer  (TLS listener, created by Terraform)
+                                  │  NodePort
+┌─────────────────────────────────┼───────────────────────────────────────────────┐
+│ EKS 1.33 · 2 × t3.small · default VPC public subnets (us-east-1a/b/c)           │
+│                                 ▼                                                │
+│                          ingress-nginx  (longest-prefix path routing)           │
+│   /  ┌────────┬────────────┬─────────────────┬──────────────┬──────────────┐     │
+│      ▼        ▼            ▼                 ▼              ▼              │     │
+│   [web]   /api/auth    /api/events      /api/orders     /api/payments     │     │
+│          /api/users    /api/categories  /api/tickets                      │     │
+│          /api/admin/*  /api/venues      /api/check-ins                    │     │
+│            [auth]      /api/ticket-types  /api/admin/events               │     │
+│               │        /api/organizer/*      [registration] ──► [payment] │     │
+│               │           [event]                 │   ▲    internal (token)│     │
+│               │              ▲                    │   │                    │     │
+│               │      internal checkout-summary ───┘   └── confirm/refund ──┘     │
+│               │      + JWKS (event/registration/payment verify locally)          │
+│   Secrets Manager ─(deploy.sh)─► Kubernetes Secrets ──► process.env              │
+└─────────────────────────────────┬───────────────────────────────────────────────┘
+                                  │
+              ┌───────────────────┼──────────────────────┐
+              ▼                   ▼                       ▼
+      RDS PostgreSQL             S3               Secrets Manager
+   auth_db │ event_db          presigned         eventide/{rds-master,
+   registration_db │ payment_db PUT / GET          auth,event,registration,payment}
 ```
+
+A reservation-expiry **CronJob** runs every minute alongside these
+(`concurrencyPolicy: Forbid`), releasing inventory held by orders that were never paid.
 
 ### 2.1 Why one frontend, not three
 
 Microservices is a **backend** decomposition pattern; it says nothing about the frontend.
 Micro-frontends (Module Federation, single-spa) exist to let many frontend *teams* deploy
-independently — a problem this project does not have. One SPA calls all three services
+independently — a problem this project does not have. One SPA calls all four services
 through path-based ingress routing and is unaware there is more than one backend.
 
-The SPA is **not a microservice**. It is a static bundle: no pod, no container, no
-deployment. It lives in S3 behind CloudFront.
+The SPA is a static bundle (Vite build), but it **is** deployed here as a pod: an
+`nginx-unprivileged` container serving the built assets, because CloudFront is
+denied in the lab and an in-cluster nginx is the smallest thing that fronts a
+single-origin `/` + `/api/*` without CORS. It has no database and no business logic.
 
 ### 2.2 Why the load balancer is built by Terraform
 
@@ -98,13 +109,21 @@ Terraform** targeting the node group. This solves two problems at once:
 
 | Service | Owns | Talks to |
 |---|---|---|
-| **auth** | Users, login, JWT issuance | `auth_db` |
-| **event** | Event metadata, cover images, `capacity` as a static number | `event_db`, S3 |
-| **registration** | Tickets, signups, **enforcement** of capacity | `registration_db`, `event` (HTTP) |
+| **auth** | Users, login, JWT issuance, roles (attendee/organizer/admin), organizer approval, ban, audit log | `auth_db` |
+| **event** | Categories, venues, events + lifecycle (DRAFT→PUBLISHED→CLOSED/SUSPENDED), ticket types, event images | `event_db`, S3 |
+| **registration** | Ticket inventory, orders + 8-minute holds, **capacity enforcement**, signed tickets, check-in | `registration_db`, `event` (HTTP, internal) |
+| **payment** | Mock payment gateway, payment attempts, reconciliation state, refunds | `payment_db`, `registration` (HTTP, internal) |
 
-Three is both the ceiling and the minimum. Two services demonstrate a service-to-service
-call; three demonstrate a topology with a real reason to split. Beyond three, a solo
-developer ends the term with several half-finished services and nothing deployed.
+The original V1 scope kept `registration` thin (one `tickets` row per user) so
+three services were the ceiling for a solo developer. **Full-System V2** adds a
+fourth, `payment`, because a real checkout flow — reserve inventory, hold it,
+take payment, confirm or release — is the smallest thing that justifies a
+payment boundary and an idempotent, compensating cross-service transaction. The
+boundary matters: `payment` never trusts a browser-supplied amount, and a
+payment that succeeds while confirmation fails leaves both sides
+`PENDING_VERIFICATION` with an idempotent reconcile, never a double charge
+(§4.5). Queues, a real gateway, waitlists and a mail worker are still out of
+scope and named in the report's deferred list.
 
 ### 3.1 API surface
 
@@ -119,18 +138,55 @@ GET    /api/auth/token                 → JWT              (jwt plugin)
 GET    /api/auth/jwks                  → public keys      (jwt plugin)
 ```
 
-`/api/auth/jwks` is the important one: it is how `event` and `registration` verify
-callers without ever talking to `auth` or to `auth_db`. See §5.
+`/api/auth/jwks` is the important one: it is how `event`, `registration` and
+`payment` verify callers without ever talking to `auth` or to `auth_db`. See §5.
+The JWT carries `sub`, `email`, `role` and `organizerApprovalStatus`.
+
+**`auth` also owns** (session-token guarded, every privileged action writes `user_audit_logs`):
 
 ```
-GET    /api/events                     → list
-POST   /api/events                     (auth)
-GET    /api/events/:id
-POST   /api/events/:id/cover-upload    (auth) → { uploadUrl, key }   presigned PUT
+GET/PATCH /api/users/me
+POST      /api/users/me/organizer-application
+GET       /api/admin/users
+GET       /api/admin/audit-logs
+POST      /api/admin/organizers/:userId/{approve,reject}
+POST      /api/admin/users/:userId/{ban,unban}          → also revokes the user's sessions
+```
 
-POST   /api/registrations              (auth) { eventId }
-GET    /api/registrations/me           (auth) → tickets enriched with event titles
-GET    /api/registrations/event/:id/count
+**`event`** (JWT-guarded where marked; list responses are `{ items, total, page, pageSize }`):
+
+```
+GET    /api/categories · /api/venues
+GET    /api/events                       validated search/category/province/date/status/page
+GET    /api/events/:id · /api/events/:id/ticket-types
+POST   /api/events (auth) · PATCH /api/events/:id (auth)
+POST   /api/events/:id/{publish,close} (auth)
+POST   /api/admin/events/:id/suspend (auth, admin)
+GET    /api/organizer/events (auth, approved organizer)
+POST   /api/ticket-types (auth)
+POST   /api/events/:id/images/presign (auth) → presigned PUT
+GET    /internal/events/:id/checkout-summary          x-eventide-internal-token
+```
+
+**`registration`** (JWT-guarded; `POST /api/orders` requires an `Idempotency-Key` header):
+
+```
+POST   /api/orders                       { eventId, items:[{ticketTypeId, quantity}] }
+GET    /api/orders/me · /api/orders/:id · POST /api/orders/:id/cancel
+GET    /api/tickets/me · /api/tickets/:id           → each carries a signed JWS qrToken
+POST   /api/check-ins                     { eventId, qrToken }   (organizer/admin)
+GET    /api/check-ins/events/:id                    (organizer/admin)
+/internal/orders/:id · :id/confirm · :id/pending-verification · :id/refund
+```
+
+**`payment`** (JWT-guarded; `POST /checkout` requires an `Idempotency-Key`):
+
+```
+POST   /api/payments/checkout            { orderId }
+GET    /api/payments/order/:orderId
+POST   /api/payments/order/:orderId/refund
+POST   /api/payments/:id/reconcile        (admin)
+GET    /api/payments/admin                (admin)
 ```
 
 Every service exposes:
@@ -152,7 +208,8 @@ Every service exposes:
 RDS db.t3.micro
 ├── auth_db          owner: auth_svc          (no grants on the others)
 ├── event_db         owner: event_svc
-└── registration_db  owner: registration_svc
+├── registration_db  owner: registration_svc
+└── payment_db       owner: payment_svc
 ```
 
 **Why database-per-service rather than schema-per-service:** PostgreSQL **cannot** join
@@ -160,51 +217,68 @@ across databases — not "should not", *cannot*, without a foreign data wrapper.
 boundary is enforced by the engine rather than by developer discipline. Schemas rely on
 grants staying correct forever.
 
-**Why not three RDS instances:** three times the cost and three times the provisioning
-time, for identical pedagogical value. The chosen design is documented in the report as
-*logical isolation on a shared instance, with a migration path to physical isolation.*
+**Why not four RDS instances:** four times the cost and provisioning time for
+identical pedagogical value. The chosen design is documented in the report as
+*logical isolation on a shared instance, with a migration path to physical
+isolation* — and the report's deferred list names moving `payment_db` and the
+high-write `registration_db` to their own Multi-AZ instances as the first real
+step, since those are the two that would need it under load.
 
 **Consequence, accepted deliberately:** no cross-service foreign keys and no cross-service
 joins.
 
 ### 4.2 Schemas
 
-**`auth_db` is owned entirely by better-auth.** Do not hand-write its schema. The Drizzle
-adapter generates `user`, `session`, `account`, `verification`, and — from the JWT plugin —
-`jwks`. Generate migrations with the better-auth CLI and run them through the same
-migration Job as the other two services.
+**`auth_db` is owned entirely by better-auth.** Do not hand-write its schema. The
+Drizzle adapter generates `user` (extended via `user.additionalFields` — `phone`,
+the `organizer*` fields, `organizerApprovalStatus`), `session`, `account`,
+`verification`, `rate_limit`, and — from the JWT plugin — `jwks`. The **admin
+plugin** adds `role`, `banned`, `ban_reason`, `ban_expires`. Generate the schema
+with the better-auth CLI (`bun run --filter @eventide/auth generate:auth-schema`,
+drift-checked by `check:auth-schema`); run migrations through the same
+db-bootstrap Job as the other services. Two **application-owned** tables sit
+beside the generated schema in `packages/db/src/auth/app-schema.ts`:
+`login_attempts` and `user_audit_logs`.
 
 > **Identifier type.** better-auth generates `id` as **`text`**, not `uuid`. Every
-> cross-service reference to a user is therefore `text`. Do not "fix" this to `uuid`
-> without also setting `advanced.database.generateId` — mismatched id types across
-> services is a slow, confusing bug.
+> cross-service reference to a user is therefore `text` (`events.owner_id`,
+> `orders.user_id`, `tickets.user_id`, `payments.user_id`, `check_ins.scanner_id`).
+> Do not "fix" this to `uuid`. A `schema.test.ts` case asserts it.
 
-```sql
--- event_db
-CREATE TABLE events (
-  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  title        text NOT NULL,
-  description  text NOT NULL DEFAULT '',
-  venue        text NOT NULL,
-  starts_at    timestamptz NOT NULL,
-  capacity     integer NOT NULL CHECK (capacity > 0),
-  cover_key    text,                      -- S3 object key, not a URL
-  owner_id     text NOT NULL,             -- better-auth user.id — NO FK, different DB
-  created_at   timestamptz NOT NULL DEFAULT now()
-);
+Each service database holds the V1 domain, ID references across a database
+boundary carry **no foreign key** (`schema.test.ts` asserts zero cross-DB FKs),
+and DB `CHECK` constraints back every counter/money invariant:
 
--- registration_db
-CREATE TABLE tickets (
-  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  event_id       uuid NOT NULL,           -- events.id — NO foreign key, different DB
-  user_id        text NOT NULL,           -- better-auth user.id — NO FK, different DB
-  event_title    text NOT NULL,           -- denormalised at booking time
-  event_capacity integer NOT NULL,        -- copied at booking time
-  created_at     timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (event_id, user_id)
-);
-CREATE INDEX ON tickets (event_id);
 ```
+event_db
+  categories, venues
+  events            DRAFT | PUBLISHED | CLOSED | SUSPENDED ; owner_id text
+                    CHECK ends_at > starts_at, sales_end_at > sales_start_at,
+                          capacity > 0, refund_percent 0..100
+  ticket_types      price >= 0, quota > 0, max_per_order > 0 ; UNIQUE (event_id, name)
+  event_images      UNIQUE (event_id, position)
+  event_change_logs append-only lifecycle/ownership audit
+
+registration_db
+  ticket_inventory  ticket_type_id PK, total_quota, reserved_count, sold_count
+                    CHECK reserved_count + sold_count <= total_quota  (the oversell guard)
+  orders            PENDING | CONFIRMED | CANCELLED | EXPIRED | PENDING_VERIFICATION | REFUNDED
+                    expires_at = created_at + 8 min ; subtotal/total server-calculated
+  order_items       UNIQUE (order_id, ticket_type_id) ; one event per order
+  order_audit_logs, idempotency_keys  UNIQUE (scope, key)
+  tickets           VALID | USED | CANCELLED | REFUNDED ; one row per purchased unit
+  check_ins         result SUCCESS|DUPLICATE|INVALID|CANCELLED|REFUNDED|WRONG_EVENT ;
+                    ticket_id/event_id nullable for invalid scans ; stores payload hash
+
+payment_db
+  payments          PROCESSING | SUCCEEDED | PENDING_VERIFICATION | FAILED | REFUNDED
+                    UNIQUE (order_id) — one payment per order ; amount from registration, never the browser
+  payment_attempts  UNIQUE (idempotency_key)
+  refunds           UNIQUE (order_id)
+```
+
+The corrected V2 ER model lives in `database/schema/DBML/ER_Diagram.dbml` and
+`database/schema/DrawIO/brief_er.drawio` (the V1 versions are in git history).
 
 ### 4.3 Capacity ownership — the boundary that avoids a distributed transaction
 
@@ -212,19 +286,29 @@ Capacity is **enforced by `registration`**, not by `event`.
 
 If `event` owned "seats remaining", booking a ticket would write to two databases — a
 distributed transaction requiring sagas or two-phase commit. Because `registration` owns
-the ticket rows, it enforces capacity by counting its own table inside a single local
-transaction:
+the inventory rows, it enforces capacity inside a single local transaction. V2 does this
+per **ticket type** against a `ticket_inventory` row, under a **per-ticket-type advisory
+lock** so concurrent buyers serialise on exactly the contended row:
 
 ```sql
 BEGIN;
-SELECT count(*) FROM tickets WHERE event_id = $1 FOR UPDATE;
--- compare against event_capacity copied at booking time
-INSERT INTO tickets (...) VALUES (...);
+SELECT pg_advisory_xact_lock(hashtextextended($ticket_type_id, 0));
+INSERT INTO ticket_inventory (ticket_type_id, event_id, total_quota)
+  VALUES ($ticket_type_id, $event_id, $quota) ON CONFLICT DO NOTHING;
+-- reserved_count + sold_count + $qty <= total_quota  ? reserve : raise CapacityFull (409)
+UPDATE ticket_inventory SET reserved_count = reserved_count + $qty WHERE ticket_type_id = $ttid;
+INSERT INTO orders (..., expires_at = now() + interval '8 minutes');
 COMMIT;
 ```
 
-`event` remains the source of truth for the capacity *number*; `registration` reads it
-once over HTTP and stores it alongside the ticket.
+`event` remains the source of truth for the quota *number*; `registration` reads it once
+over the internal `checkout-summary` endpoint at order time. A reservation is a **hold**,
+not a sale: payment confirmation moves `reserved_count → sold_count` and emits one
+`tickets` row per unit; expiry, cancellation or refund moves it back. The
+`reserved_count + sold_count <= total_quota` CHECK is a second line of defence — the
+database rejects an oversell even if the application logic is wrong. Both the
+concurrent-oversell and the expiry-releases-inventory paths have automated tests
+(`apps/registration/test/orders.*.test.ts`).
 
 > **Report note:** state explicitly that the service boundary was placed to avoid a
 > distributed transaction. That single sentence demonstrates more understanding than a
@@ -236,10 +320,39 @@ once over HTTP and stores it alongside the ticket.
 and returning enriched rows — one frontend request, one in-cluster hop. The browser never
 performs N+1 fan-out.
 
-This is the inter-service communication demonstrated in the demo. A dedicated
-BFF/API-gateway service would be the pattern at scale; it is deliberately **not** built
-here (a fourth service to deploy and debug for no marks) and is named in the report as the
-next step.
+This is one of two inter-service calls demonstrated in the demo (the other is
+`payment → registration`, §4.5). A dedicated BFF/API-gateway service would be the
+pattern at scale; it is deliberately **not** built here and is named in the report
+as the next step.
+
+### 4.5 Payment — a mock gateway with a compensating transaction
+
+`payment` is a **mock**: `POST /api/payments/checkout` takes an order ID and an
+`Idempotency-Key` — **no card number, CVV or billing details**. It:
+
+1. reads the trusted amount from `registration`'s `/internal/orders/:id` (never
+   from the browser),
+2. records a `SUCCEEDED` `payment_attempts` row and a `payments` row under an
+   advisory lock keyed on the idempotency key (so a double-clicked "Pay" produces
+   one payment),
+3. calls `registration`'s `/internal/orders/:id/confirm`, which — idempotently —
+   moves inventory `reserved → sold`, issues the signed tickets, and marks the
+   order `CONFIRMED`.
+
+**If step 3 fails after step 2 succeeded** (the classic dual-write problem), the
+payment and order are both set `PENDING_VERIFICATION` and an **idempotent
+reconcile** operation (`POST /api/payments/:id/reconcile`, admin, or an automatic
+retry) re-runs the confirm. The payment is never taken twice; the reconcile is a
+no-op once the order is `CONFIRMED`. This path has an automated test.
+
+Refunds are the same shape in reverse: `payment` writes a `refunds` row, calls
+`registration`'s `/internal/orders/:id/refund` (releases `sold_count`, marks
+tickets `REFUNDED`), and marks the payment `REFUNDED` — idempotent, one refund
+row per order.
+
+`gateway_webhooks` and a real provider are on the deferred list. The service
+boundary and the compensating-transaction shape are the point; a real Stripe
+integration would add marks for nothing the design doesn't already show.
 
 ---
 
@@ -278,6 +391,25 @@ the `jwks` table, encrypted with AES-256-GCM derived from `BETTER_AUTH_SECRET`. 
 keys can be rotated with `rotationInterval` and a `gracePeriod`, so existing sessions
 survive rotation.
 
+**Authorization is in the JWT.** The **admin plugin** + a `createAccessControl`
+role set (`attendee` | `organizer` | `admin`; organizers keep attendee rights)
+put `role` and `organizerApprovalStatus` into every token, so `event`,
+`registration` and `payment` make role decisions locally with no call back to
+`auth`. A **role or ban change revokes the user's sessions** (`auth` deletes the
+`session` rows), so a stale token cannot outlive the change past its short expiry.
+`auth`'s own privileged endpoints (`/api/admin/*`) resolve the better-auth
+*session* token, not the JWT, and every one writes `user_audit_logs`.
+
+**Two service-to-service secrets**, shared by all services and delivered the same
+way as the DB URLs (§5.2): `INTERNAL_SERVICE_TOKEN` guards the `/internal/*`
+endpoints (compared in constant time — `@eventide/shared/internal`), and
+`TICKET_SIGNING_SECRET` (+ `TICKET_SIGNING_KEY_ID`) is the HS256 key
+`registration` signs QR tickets with and verifies at check-in.
+
+**DB-backed rate limiting** (`rateLimit.storage: 'database'`, the `rate_limit`
+table) is on in production only — a talking point for the report, and off locally
+so `db:seed` can create the demo users in one pass.
+
 **Why the bearer plugin, and not cookies.** The SPA sends `Authorization: Bearer <token>`
 rather than relying on better-auth's cookie. This is forced by a constraint that has
 nothing to do with auth — see §5.5.
@@ -291,9 +423,10 @@ nothing to do with auth — see §5.5.
 The primary login is **Google OAuth** via better-auth's social provider. Email/password
 stays enabled alongside it, for two non-negotiable reasons:
 
-1. **The seed Job cannot create OAuth users.** It inserts 15 events with owners, and those
-   user rows must exist. With OAuth-only, every nightly rebuild would require hand-clicking
-   through Google before the data made sense.
+1. **The seed Job cannot create OAuth users.** It signs up the demo personas (admin,
+   approved + pending organizers, attendees, a banned user) and inserts 12 events with
+   owners, then drives sample purchases — every one of those user rows must exist. With
+   OAuth-only, each nightly rebuild would require hand-clicking through Google first.
 2. **Demo-day resilience.** OAuth depends on campus wifi, Google's availability and your
    account state. An OAuth-only system with any of those degraded has no way in. The
    fallback costs nothing and is never mentioned unless needed.
@@ -350,17 +483,21 @@ process.env.DATABASE_URL   the application knows nothing about AWS
 
 **As built:** `scripts/deploy.sh` is the delivery mechanism on EKS — it reads
 `eventide/rds-master` (the one secret Terraform maintains) and `kubectl create secret`s
-the three `eventide-<svc>` Secrets the pods read via `envFrom`. On k3d the same three
-Secrets come from `scripts/k3d-up.sh` reading a local file. **Identical app code,
-identical chart, one `eso.enabled` toggle** — see §5.2.1 for why ESO stays off here.
+the four `eventide-<svc>` Secrets the pods read via `envFrom`. On k3d the same Secrets
+come from `scripts/k3d-up.sh` reading a local file. **Identical app code, identical
+chart, one `eso.enabled` toggle** — see §5.2.1 for why ESO stays off here.
 
 Contents:
 
 | Secret | Holds |
 |---|---|
-| `eventide-auth` | `DATABASE_URL` (auth_db), **`BETTER_AUTH_SECRET`** (key-encryption key for the JWKS private keys). `BETTER_AUTH_URL` comes from the chart (`publicUrl`). `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are merged in by `deploy.sh` from the Terraform-managed `eventide/google-oauth` secret (`10-foundation/oauth.tf`) when it exists — absent, auth is email/password only. |
-| `eventide-event` | `DATABASE_URL` (event_db), `S3_BUCKET_NAME`, `S3_REGION`, and the session's `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` for presigning |
-| `eventide-registration` | `DATABASE_URL` (registration_db) |
+| `eventide-auth` | `DATABASE_URL` (auth_db), **`BETTER_AUTH_SECRET`**. `BETTER_AUTH_URL` comes from the chart (`publicUrl`). `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` merged in by `deploy.sh` from `eventide/google-oauth` (`10-foundation/oauth.tf`) when it exists. |
+| `eventide-event` | `DATABASE_URL` (event_db), `INTERNAL_SERVICE_TOKEN`, `S3_BUCKET_NAME`, `S3_REGION`, and the session's `AWS_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` / `_SESSION_TOKEN` for presigning |
+| `eventide-registration` | `DATABASE_URL` (registration_db), `INTERNAL_SERVICE_TOKEN`, `TICKET_SIGNING_SECRET`, `TICKET_SIGNING_KEY_ID` |
+| `eventide-payment` | `DATABASE_URL` (payment_db), `INTERNAL_SERVICE_TOKEN` |
+
+`INTERNAL_SERVICE_TOKEN` and `TICKET_SIGNING_SECRET` are generated by Terraform
+(`random_password`) and carried in `eventide/rds-master` alongside the DB passwords.
 
 Note what is **not** here: no shared JWT signing key. `event` and `registration` fetch
 public keys from `auth`'s JWKS endpoint at runtime, so there is no signing material to
@@ -616,14 +753,14 @@ keeps working in later sessions even though session credentials change.
 
 | | Local | AWS |
 |---|---|---|
-| Cluster | k3d (k3s in Docker), Traefik disabled | EKS 1.33, 2 × t3.medium |
+| Cluster | k3d (k3s in Docker), Traefik disabled | EKS 1.33, 2 × t3.small (t3.medium for the HPA load test) |
 | Ingress | ingress-nginx | ingress-nginx (NodePort) + Terraform NLB |
-| Database | Postgres container, 3 databases via init script | RDS, 3 databases |
+| Database | Postgres container, 4 databases via `bootstrap.ts` (`make bootstrap` / `db-reset`) | RDS, 4 databases via the in-cluster db-bootstrap Job |
 | Secrets | `kubectl create secret` from a local file (`k3d-up.sh`) | `kubectl create secret` from `eventide/rds-master` (`deploy.sh`); ESO templates present but off (§5.2.1) |
 | Object storage | real S3 (cheap) or MinIO | S3 |
-| Images | local registry `eventide-registry:5000` | ECR |
-| Frontend | `vite dev` on `localhost:5173` → NLB or k3d over HTTP | Static bundle in S3, served by CloudFront (wired up in week 4 only) |
-| Auth transport | `Authorization: Bearer` + CORS allowlist | `Authorization: Bearer`, same origin via CloudFront |
+| Images | k3d managed registry `eventide-registry:5111` | ECR (5 repos) |
+| Frontend | `vite --port 5173`, proxying `/api/*` to the four service ports | nginx pod behind the ingress at `/` |
+| Auth transport | `Authorization: Bearer` (JWT) + same-origin session token | `Authorization: Bearer`, one origin `https://events.<domain>`, no CORS |
 
 Create the local cluster so both environments run the same ingress controller:
 
@@ -642,10 +779,12 @@ required IRSA.
 ### 8.1 Development loop
 
 ```
-make dev        bun --watch × 3 + postgres container        ~1 s     inner loop
-make k3d        build → k3d image import → kubectl apply    ~30 s    outer loop, daily
-make deploy     build → ECR → helm upgrade                  ~2 min   AWS
-make teardown   kubectl delete ingress → destroy → verify
+make dev        bun --watch × 4 + postgres container        ~1 s     inner loop
+make seed       demo personas + 12 events + sample purchases
+make smoke      27-assertion end-to-end persona check (needs dev + seed)
+make k3d        build → k3d image push → helm upgrade        ~30 s    outer loop, daily
+make deploy     build → ECR → helm upgrade → rollout         ~2 min   AWS
+make down       kubectl delete ingress → destroy → verify
 ```
 
 Skaffold and Tilt were evaluated and rejected: at a 30-second outer loop they earn little,
@@ -663,9 +802,13 @@ provider that cannot be created here, and static lab credentials expire every fo
 
 | Stage | Where |
 |---|---|
-| Build, test, lint, type-check, image build | GitHub Actions, on every push |
+| Lint, type-check, build, unit + integration tests (against a `postgres:16` service), and an `e2e` job that boots the four services and runs `scripts/smoke.ts` | GitHub Actions, on every push / PR |
 | Push to ECR, `helm upgrade` | Local `./scripts/deploy.sh` with fresh session credentials |
 
+The transaction guarantees (concurrent oversell, idempotent order + payment,
+hold expiry, payment reconciliation, QR-scan outcomes, ban/session-revocation)
+are covered by `bun test` component suites that run against a real Postgres in
+CI — see `docs/FULL-SYSTEM-IMPLEMENTATION-PLAN.md` §"Test and Acceptance Plan".
 Turborepo's affected-package filtering means only changed services rebuild.
 
 This limitation belongs in the report **as** a limitation, with the note that in an
@@ -680,8 +823,10 @@ automatically.
 Prometheus and Grafana were **cut** — 1–2 days of Helm values and dashboard work for
 metrics that Container Insights already provides adequately for the report.
 
-**Autoscaling:** metrics-server plus an HPA on `event`, driven by CPU. Every service
-declares resource requests and limits (required for HPA to work at all).
+**Autoscaling:** metrics-server plus an HPA on `event` (the read-heavy service the
+load test hits), driven by CPU, 2→8 replicas. `auth`/`registration` run 2
+replicas, `payment`/`web` run 1. Every service declares resource requests and
+limits (required for HPA to work at all).
 
 **Load test:** k6 against `/api/events` while projecting `kubectl get hpa -w` and
 `kubectl get pods -w`.
@@ -746,12 +891,12 @@ demo day the infrastructure will have been rebuilt from zero twenty times.
 | ORM | Drizzle | TypeScript-native, emits real SQL migration files to show in the report. Also the better-auth adapter. |
 | Request validation | **Elysia `t` (TypeBox)** | Elysia best practice: models are `t.Object` schemas registered via `.model()`, the single source of truth for validation *and* types. **Not** Zod — a parallel schema system would break Eden's inference. |
 | Env validation | Zod | Boot-time only, outside the request path. A missing injected secret fails loudly instead of crashing mysteriously. |
-| Auth | **better-auth** + JWT plugin + bearer plugin | Sessions, hashing and account tables solved; the JWT plugin makes stateless cross-service verification possible without violating the DB boundary (§5.1). |
+| Auth | **better-auth** + JWT + bearer + **admin** plugins | Sessions, hashing, account tables, roles, ban and organizer-approval fields solved; the JWT plugin carries `role`/`organizerApprovalStatus` so cross-service authz needs no call back to `auth` (§5.1). |
 | API client | **Eden Treaty** | End-to-end types from each Elysia server to the SPA, with no codegen step. |
-| Frontend | **Vite + React + Tailwind + shadcn/ui** | Static bundle, no SSR. shadcn is copy-in components, so the 2-day frontend cap stays realistic. |
+| Frontend | **Vite + React + TanStack Router/Query/Form + shadcn/ui** (preset `bfEjlVBAI`) | Static bundle, no SSR. File-based routing with `beforeLoad` guards for the authenticated/organizer/admin layouts; TanStack Query owns server state; official shadcn components. |
 | Repo | Turborepo monorepo | Shared types prevent JWT-shape drift. Services remain independently deployed containers — a delivery choice, not an architectural one. |
 | Local cluster | k3d | Real Kubernetes in ~20 s; same manifests as EKS. |
-| Packaging | Helm, one chart, three releases | `values-local.yaml` / `values-aws.yaml`. |
+| Packaging | Helm, one chart, one release (5 Deployments + a CronJob) | `values.yaml` + `values.local.yaml` overlay. |
 | IaC | Terraform (raw `aws_eks_*`, not the community module) | The `terraform-aws-modules/eks` module `iam:GetRole`s the `voclabs` session role, which `Pvoclabs2` denies (§7.1). Raw resources for a lab cluster are ~50 lines, not the "week" a production cluster would take. |
 | Secrets | Secrets Manager → `deploy.sh` → k8s Secret (ESO templates present, off — §5.2.1) | App only ever reads `process.env`. |
 | Monitoring | CloudWatch Container Insights | Terraform add-on vs. two days of Helm. |
@@ -809,12 +954,14 @@ Four rules taken directly from the guide:
 > silently degrades the frontend's types to `any` with no error anywhere. Elysia's best
 > practices and the Eden choice are the same requirement.
 
-### 12.3 Eden across three services
+### 12.3 Eden across the services
 
-The SPA holds three clients — `edenAuth`, `edenEvent`, `edenReg` — each importing its
-server's exported `App` type.
+The SPA holds one Eden client per Elysia server (`edenEvent`, `edenReg`,
+`edenPayment`; `auth` is reached through better-auth's own client), each importing
+its server's exported `App` type. Eden calls live inside TanStack Query
+query/mutation functions so response types stay inferred.
 
-This makes `apps/web` type-depend on all three backends **at build time**, so `turbo build`
+This makes `apps/web` type-depend on the backends **at build time**, so `turbo build`
 ordering matters and a type error in `registration` breaks the frontend build.
 
 > **Report note:** build-time type coupling, **zero runtime coupling**. The deployed
@@ -827,32 +974,36 @@ ordering matters and a type error in `registration` breaks the frontend build.
 ```
 cloud-project/
 ├── apps/
-│   ├── auth/              Elysia · better-auth (Drizzle + jwt + bearer plugins)
-│   ├── event/             Elysia · events, S3 presigning
-│   ├── registration/      Elysia · tickets, capacity
-│   └── web/               Vite + React + Tailwind + shadcn/ui · Eden clients
+│   ├── auth/              Elysia · better-auth (Drizzle + jwt + bearer + admin) · /api/users, /api/admin
+│   ├── event/             Elysia · catalog, lifecycle, S3 presigning
+│   ├── registration/      Elysia · inventory, orders, holds, tickets, check-in + src/expire.ts
+│   ├── payment/           Elysia · mock gateway, reconciliation, refunds
+│   └── web/               Vite · React · TanStack Router/Query/Form · shadcn/ui · Eden clients
 ├── packages/
-│   ├── shared/            t.Object models shared across services, JWKS verifier
-│   └── db/                Drizzle schema + migrations, per service
+│   ├── shared/            t.Object models, JWKS bearer guard, internal-token check, src/testing/
+│   └── db/                Drizzle schema + 0000 migrations per DB, bootstrap.ts, seed.ts
+├── database/schema/        DBML + DrawIO V2 ER model
 ├── docs/
-│   ├── SYSTEM-DESIGN.md           this file
-│   └── PROJECT-KNOWLEDGE-BASE.md  decisions, constraints, rationale
+│   ├── SYSTEM-DESIGN.md                  this file
+│   ├── PROJECT-KNOWLEDGE-BASE.md         decisions, constraints, rationale
+│   └── FULL-SYSTEM-IMPLEMENTATION-PLAN.md  the V2 milestone checklist + test plan
 ├── infra/
 │   ├── terraform/
 │   │   ├── 00-bootstrap/   README only — state bucket by hand
-│   │   ├── 10-foundation/  ECR ×3, uploads S3, Secrets Manager ×3
+│   │   ├── 10-foundation/  ECR ×5, uploads S3, Secrets Manager (services incl. payment)
 │   │   └── 20-platform/    raw aws_eks_* + node group, RDS, NLB, addons.tf (ingress-nginx helm_release)
 │   ├── helm/
-│   │   ├── ingress-nginx.values.yaml   NodePort 30080/30443, read by 20-platform/addons.tf
-│   │   └── eventide/       (week 2) one chart · values-local.yaml · values-aws.yaml
-│   └── k8s/               event.yaml (ns/Deploy/Svc/Ingress); (week 2) ESO, migration Job
+│   │   ├── ingress-nginx.values.yaml + .local.yaml overlay
+│   │   └── eventide/       one chart · values.yaml + values.local.yaml · 5 Deployments + expiry CronJob
+│   └── k8s/               db-bootstrap.job.yaml + legacy event.yaml (Day-3, chart supersedes)
 ├── scripts/
 │   ├── check-lab.sh       probe Learner Lab capabilities
-│   ├── lab-creds.sh       (week 2) pull session credentials into the cluster Secret
-│   ├── deploy.sh          build → ECR → kubectl apply infra/k8s → set image → rollout
+│   ├── deploy.sh          build → ECR → helm upgrade → rollout (injects the 4 Secrets)
+│   ├── db-bootstrap.sh    the in-cluster 4-database bootstrap Job
+│   ├── smoke.ts           27-assertion end-to-end persona test (`make smoke`, CI e2e job)
 │   └── teardown.sh        the one that protects the $50
-├── .github/workflows/     build · test · lint only
-└── Makefile               dev · up · deploy · down · k3d
+├── .github/workflows/ci.yml  lint · check-types · test (w/ postgres) · build · e2e smoke
+└── Makefile               dev · seed · smoke · bootstrap · db-reset · up · deploy · down · k3d
 ```
 
 ---
@@ -862,13 +1013,21 @@ cloud-project/
 1. **Apply from nothing.** Start `terraform apply` at the beginning and talk over it.
 2. **Show the boundary.** Connect as `event_svc`, try to read `registration_db`, Postgres
    refuses. The architecture is enforced, not merely described.
-3. **Use the app.** Log in, create an event, upload a cover image, register a ticket —
-   noting the image bytes went straight to S3 and never entered the cluster.
-4. **Show secrets are external.** `helm get manifest` and the container image carry no
-   secret material; `kubectl get secret eventide-auth -o yaml` is populated by
-   `scripts/deploy.sh` from Secrets Manager `eventide/rds-master`. Rotate one value there
-   and redeploy that one service to show the chain is live. (Exact mechanic finalised at
-   rehearsal — see `docs/DEMO-RUNSHEET.md`.)
-5. **Scale under load.** k6 on one side, `kubectl get hpa -w` and `kubectl get pods -w` on
-   the other. Replicas climb 2 → 8, then settle.
-6. **Destroy it,** on purpose, in front of the room.
+3. **Buy a ticket.** As an attendee: browse, pick an event, reserve tickets (watch the
+   8-minute countdown), click **Pay now** — the mock payment confirms, the order flips to
+   `CONFIRMED`, tickets appear with a QR code. Note the payment pod pulled the amount from
+   `registration`, not the browser.
+4. **Sell it out.** A second attendee tries the last ticket → `409 capacity_full`, "Sold
+   out", no queue. Then show the reserved/sold counts and the `reserved + sold <= quota`
+   CHECK.
+5. **Check in.** As the organizer, scan the attendee's QR → SUCCESS; scan again →
+   DUPLICATE.
+6. **Moderate.** As admin, suspend the event (drops from the public list) and show the
+   `user_audit_logs` / payment-reconciliation views.
+7. **Show secrets are external.** `helm get manifest` and the image carry no secret
+   material; `kubectl get secret eventide-auth -o yaml` is populated by `deploy.sh` from
+   `eventide/rds-master`. Rotate one value and redeploy that service. (Finalised at
+   rehearsal — `docs/DEMO-RUNSHEET.md`.)
+8. **Scale under load.** k6 on `/api/events`, `kubectl get hpa -w` / `get pods -w` on the
+   other screen. Replicas climb 2 → 8, then settle.
+9. **Destroy it,** on purpose, in front of the room.

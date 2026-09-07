@@ -12,13 +12,48 @@ can slip. If a day runs long, cut from the *bottom* of that day, never from a GA
 ## 0. Blockers — resolve first
 
 - [ ] **Get the assignment brief as plain text.** Four image attempts have failed. Every
-      scope decision (3 services, cutting Prometheus, frontend priority) is inference until
-      this is read.
+      scope decision is inference until this is read.
 - [ ] Confirm the **exact checkpoint day** and what it requires — proposal, design
       presentation, or working code.
 - [ ] Confirm the **final demo date**. Week 4 below assumes ~2 October.
-- [x] `shadcn --preset bfEjlVBAI` → **Tailwind v4** (confirmed by the user 2026-09-07).
-      `apps/web` is set up for v4; the preset itself was not run (components hand-rolled).
+- [x] `shadcn --preset bfEjlVBAI` → **Tailwind v4**. Now initialised properly with the
+      official CLI (V2); `bun run build` green, no v3/v4 mismatch.
+
+---
+
+## 0.5 Full-System V2 — the current build (2026-09-07 →)
+
+The three-service MVP and every Week-1 infra GATE passed on real EKS (see Weeks 1–3
+below — kept as the historical record). Scope then expanded to **Full-System V2**:
+payment service + `payment_db`, orders/inventory/8-min holds/refunds, QR check-in,
+`attendee`/`organizer`/`admin` roles + organizer approval + ban + audit, and a
+TanStack + shadcn SPA.
+
+**The living checklist is `docs/FULL-SYSTEM-IMPLEMENTATION-PLAN.md`** (8 milestones
++ a Test & Acceptance matrix, each item marked `[x]`/`[~]`/`[ ]`). Summary:
+
+- [x] **M0–M5** — schema (4 clean `0000` migrations), Better Auth membership, catalog,
+      inventory/orders, mock payment + reconcile + refunds + check-in, TanStack/shadcn
+      frontend foundation. Committed on branch `feat/full-system-v2`.
+- [x] **`GATE`** — `bun run lint / check-types / test / build` all green.
+- [x] **`GATE`** — backend transaction matrix automated (concurrent oversell, idempotent
+      order + payment, hold expiry, payment `PENDING_VERIFICATION` + reconcile, QR-scan
+      outcomes, ban/session-revocation) — CI runs it against a real `postgres:16`.
+- [x] **`GATE`** — `scripts/smoke.ts` (`make smoke`, CI `e2e` job): organizer publish →
+      attendee buy + pay → CONFIRMED + tickets → sold-out 409 → check-in SUCCESS/DUPLICATE
+      → admin suspend + ban, audit + payment views reflect it. 27 assertions.
+- [x] **`GATE`** — `make db-reset` bootstraps all four databases from zero, `make seed`
+      + `make smoke` pass locally.
+- [~] **M6 frontend product flows** — public listing/detail, attendee
+      checkout/countdown/pay/orders/tickets, organizer editor + manual check-in, admin
+      user management all built. **Left:** QR rendered as a scannable code, camera
+      scanner, organizer image manager + sales summary, admin
+      moderation/audit/reconcile screens (+ 3 supporting backend endpoints).
+- [ ] **M7 docs** — SYSTEM-DESIGN, this file and the knowledge-base decision log updated
+      for V2 (2026-09-08). **Left:** `REPORT.md` and `DEMO-RUNSHEET.md` V2 pass.
+- [ ] **`GATE`** — one k3d rebuild and one EKS destroy/rebuild rehearsal on the V2 chart
+      (needs a lab session — `deploy.sh` / `k3d-up.sh` already handle the 4th service).
+- [x] Branch `feat/full-system-v2` merged to `main` and pushed (2026-09-08).
 
 ---
 
@@ -35,9 +70,9 @@ can slip. If a day runs long, cut from the *bottom* of that day, never from a GA
       describe-certificate` to read `ISSUED`.
 - [ ] `make up` — `terraform apply 20-platform` (~17 min) + kubeconfig + `get nodes`.
       Add `NODE_INSTANCE_TYPE=t3.medium` for the week-4 HPA load test.
-- [ ] `make db-bootstrap` — build+push the db-bootstrap image, run the Job.
-- [ ] `make deploy` (Helm, all 4 services incl. `web`) then `make seed-eks` (in-cluster —
-      RDS is private).
+- [ ] `make db-bootstrap` — build+push the db-bootstrap image, run the Job (4 DBs).
+- [ ] `make deploy` (Helm — `auth`, `event`, `registration`, `payment`, `web` + the
+      expiry CronJob) then `make seed-eks` (in-cluster — RDS is private).
 - [ ] `scripts/lab-creds.sh` is **not needed** — `deploy.sh` builds the k8s Secrets from
       `eventide/rds-master` (+ `eventide/google-oauth` if present) and no app code calls
       the AWS SDK except `event`'s S3 presign (which gets injected session creds).
@@ -448,10 +483,13 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 
 ## 6. Cut list — in this order, if time runs out
 
-1. Frontend polish → ship shadcn defaults.
-2. CloudFront/custom domain → demo via `port-forward` over `localhost`.
-3. The whole frontend → demo via Swagger.
-4. `registration` service → 2 services still demonstrate an inter-service call.
+1. The remaining M6 frontend screens (QR image, scanner, admin moderation/audit/reconcile)
+   → the flows exist via API + Swagger and the smoke test proves them.
+2. Frontend polish → ship the shadcn preset defaults.
+3. Custom domain → demo via `kubectl port-forward` over `localhost`.
+4. The whole frontend → demo via Swagger + `scripts/smoke.ts`.
+5. `payment` service → the other three still demonstrate an inter-service call and the
+   database boundary.
 
 **Never cut:** Terraform IaC, working EKS deployment, Secrets Manager integration, HPA
 autoscaling demo. Those four are what the rubric measures.
@@ -463,6 +501,11 @@ autoscaling demo. Those four are what the rubric measures.
 - [ ] BFF / API gateway for aggregation
 - [ ] Prometheus + Grafana
 - [ ] GitHub Actions deploying via OIDC (impossible in this lab)
-- [ ] Separate RDS instance per service
+- [ ] Separate RDS instance for `payment_db` / high-write `registration_db`
 - [ ] IRSA instead of static credentials
 - [ ] cert-manager + Let's Encrypt
+- [ ] Waiting room + waitlists; Redis/Valkey seat locks
+- [ ] Order/ticket transactional outbox → EventBridge/SQS with DLQs
+- [ ] Mail worker (verification, password reset, purchase/refund/ticket emails)
+- [ ] Real payment gateway + signed webhook ingestion + `gateway_webhooks`
+- [ ] Formal PCI scope review before any real card workflow
