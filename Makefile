@@ -18,7 +18,7 @@ bootstrap: db ## create the 3 service DBs + roles, run drizzle migrations
 dev: bootstrap ## postgres + the 3 services in watch mode
 	bun run dev
 
-seed: ## demo seed LOCAL (organisers via auth + ~15 events) — needs `make dev` up
+seed: ## demo seed LOCAL (4 organisers + 15 events + 5 attendees w/ tickets) — needs `make dev` up
 	bun run --filter @eventide/db db:seed
 
 seed-eks: ## demo seed the DEPLOYED cluster (in-cluster one-off pod — RDS is private)

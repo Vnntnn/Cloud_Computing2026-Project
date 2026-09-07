@@ -186,12 +186,14 @@ Goal: **a hello-world pod answering HTTP on real EKS, deployed by Terraform.** N
 - [x] Migration path: `packages/db/scripts/bootstrap.ts` creates **all three** roles + DBs
       and runs `drizzle-kit migrate` for all three (auth_db included). `make bootstrap` → 3
       DBs migrated clean.
-- [x] Seed: `packages/db/scripts/seed.ts` (`make seed` / `db:seed`) — idempotent, creates 4
-      organiser accounts **through the auth service** (better-auth owns password hashing,
-      §5.1.1) and 15 events into `event_db` owned by them. `SEED_FORCE=1` re-seeds. Runs
-      against the live services (local after `make dev`, in-cluster as a Job). Verified
-      locally: 15 events / 4 owners. *(Registrations not seeded — needs the registration
-      service, week 3.)*
+- [x] Seed: `packages/db/scripts/seed.ts` (`make seed` / `db:seed`) — idempotent, 3 phases:
+      4 organiser accounts + 15 events into `event_db`; then **5 attendee accounts + a
+      spread of ~15 tickets booked through the `registration` service** (real capacity +
+      denormalisation, not a raw insert — §4.3). `SEED_FORCE=1` re-seeds and clears tickets.
+      Phase 3 skips with a warning (not an error) if `registration` is unreachable. Runs
+      against the live services (local after `make dev`, in-cluster via `scripts/seed.sh`).
+      Events phase verified locally earlier (15 events / 4 owners). *(Ticket phase added
+      2026-09-07 — `bun build` clean; not yet run against live services.)*
 - [x] **`GATE`** — teardown, rebuild, and the seeded app looks demo-ready with no manual
       steps. **PASSED 2026-09-07** as part of the Week-1 rebuild-from-zero: `make down` →
       `make up` → `db-bootstrap.sh` → `deploy.sh` → `seed.sh` → 15 events + the full app
