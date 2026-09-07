@@ -1,4 +1,4 @@
-.PHONY: dev db bootstrap db-reset seed seed-eks up deploy down k3d k3d-down load help
+.PHONY: dev db bootstrap db-reset seed smoke seed-eks up deploy down k3d k3d-down load help
 
 TF_PLATFORM := terraform -chdir=infra/terraform/20-platform
 
@@ -22,8 +22,11 @@ db-reset: ## discard local database data, recreate all 4 databases, and migrate
 dev: bootstrap ## postgres + the 4 services in watch mode
 	bun run dev
 
-seed: ## demo seed LOCAL (4 organisers + 15 events + 5 attendees w/ tickets) — needs `make dev` up
+seed: ## demo seed LOCAL (admin + organisers + attendees, 12 events, sample purchases) — needs `make dev` up
 	bun run --filter @eventide/db db:seed
+
+smoke: ## end-to-end persona smoke test — needs `make dev` up and `make seed` run
+	bun scripts/smoke.ts
 
 seed-eks: ## demo seed the DEPLOYED cluster (in-cluster one-off pod — RDS is private)
 	bash scripts/seed.sh
