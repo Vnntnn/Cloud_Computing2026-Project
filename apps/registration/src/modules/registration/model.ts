@@ -80,6 +80,18 @@ export const RegistrationModel = {
     eventId: t.String({ format: 'uuid' }),
     qrToken: t.String({ minLength: 20 }),
   }),
+  salesSummary: t.Object({
+    eventId: t.String({ format: 'uuid' }),
+    totalOrders: t.Integer(),
+    pendingOrders: t.Integer(),
+    confirmedOrders: t.Integer(),
+    refundedOrders: t.Integer(),
+    totalQuota: t.Integer(),
+    reservedTickets: t.Integer(),
+    soldTickets: t.Integer(),
+    successfulCheckIns: t.Integer(),
+    netRevenue: money,
+  }),
 }
 
 export type CreateOrder = typeof RegistrationModel.createOrder.static

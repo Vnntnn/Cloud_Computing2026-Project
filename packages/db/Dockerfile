@@ -27,6 +27,7 @@ COPY --from=deps /app/package.json ./package.json
 
 # Just the db package's runtime surface — schemas, configs, migrations, script.
 COPY packages/db/src ./src
+COPY packages/db/assets ./assets
 COPY packages/db/migrations ./migrations
 COPY packages/db/drizzle.auth.config.ts packages/db/drizzle.event.config.ts packages/db/drizzle.registration.config.ts ./
 COPY packages/db/scripts ./scripts

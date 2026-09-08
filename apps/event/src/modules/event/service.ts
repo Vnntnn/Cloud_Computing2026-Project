@@ -8,7 +8,14 @@ import {
 } from '@eventide/db/event'
 import { and, asc, count, desc, eq, gte, ilike, lte, sql } from 'drizzle-orm'
 import { db } from '../../lib/db.ts'
-import { coverKeyFor, presignGet, presignPut, s3Enabled } from '../../lib/s3.ts'
+import {
+  coverKeyFor,
+  deleteObject,
+  imageKeyFor,
+  presignGet,
+  presignPut,
+  s3Enabled,
+} from '../../lib/s3.ts'
 import type { EventInput, EventShape, TicketTypeInput } from './model.ts'
 
 export class NotFound extends Error {}
@@ -18,6 +25,14 @@ export class S3Disabled extends Error {}
 
 type EventRow = typeof events.$inferSelect
 type TicketTypeRow = typeof ticketTypes.$inferSelect
+type EventImageRow = typeof eventImages.$inferSelect
+
+const imageUrl = (row: EventImageRow) =>
+  row.objectKey.startsWith('/')
+    ? Promise.resolve(row.objectKey)
+    : s3Enabled
+      ? presignGet(row.objectKey)
+      : null
 
 const ticketTypeDTO = (row: TicketTypeRow) => ({
   ...row,
@@ -42,9 +57,19 @@ async function eventDTO(row: EventRow): Promise<EventShape> {
     endsAt: row.endsAt.toISOString(),
     salesStartAt: row.salesStartAt.toISOString(),
     salesEndAt: row.salesEndAt.toISOString(),
-    coverUrl: image && s3Enabled ? await presignGet(image.objectKey) : null,
+    coverUrl: image ? await imageUrl(image) : null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+  }
+}
+
+async function imageDTO(row: EventImageRow) {
+  return {
+    id: row.id,
+    eventId: row.eventId,
+    altText: row.altText,
+    position: row.position,
+    url: await imageUrl(row),
   }
 }
 
@@ -137,6 +162,21 @@ export abstract class EventService {
       .where(eq(ticketTypes.eventId, id))
       .orderBy(asc(ticketTypes.price))
     return { ...(await eventDTO(row)), ticketTypes: types.map(ticketTypeDTO) }
+  }
+
+  static async images(id: string) {
+    const [event] = await db
+      .select({ id: events.id })
+      .from(events)
+      .where(eq(events.id, id))
+      .limit(1)
+    if (!event) return null
+    const rows = await db
+      .select()
+      .from(eventImages)
+      .where(eq(eventImages.eventId, id))
+      .orderBy(asc(eventImages.position))
+    return Promise.all(rows.map(imageDTO))
   }
 
   static async checkoutSummary(id: string) {
@@ -257,6 +297,7 @@ export abstract class EventService {
         ...input,
         description: input.description ?? '',
         maxPerOrder: input.maxPerOrder ?? 10,
+        maxPerUser: input.maxPerUser ?? 20,
         salesStartAt: input.salesStartAt ? new Date(input.salesStartAt) : null,
         salesEndAt: input.salesEndAt ? new Date(input.salesEndAt) : null,
       })
@@ -264,24 +305,130 @@ export abstract class EventService {
     return ticketTypeDTO(row!)
   }
 
-  static async coverUpload(
+  static async prepareImageUpload(
     id: string,
     user: { id: string; role: string; organizerApprovalStatus: string },
     contentType: string,
+    altText = '',
+    append = false,
   ) {
     if (!s3Enabled) throw new S3Disabled()
     const [event] = await db.select().from(events).where(eq(events.id, id)).limit(1)
     if (!event) throw new NotFound()
     assertManager(event, user)
-    const key = coverKeyFor(id, contentType)
-    if (!key) throw new Error('unsupported content type')
-    await db
-      .insert(eventImages)
-      .values({ eventId: id, objectKey: key, position: 0 })
-      .onConflictDoUpdate({
-        target: [eventImages.eventId, eventImages.position],
-        set: { objectKey: key },
+    const image = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${id}, 0))`)
+      const [last] = await tx
+        .select({ position: eventImages.position })
+        .from(eventImages)
+        .where(eq(eventImages.eventId, id))
+        .orderBy(desc(eventImages.position))
+        .limit(1)
+      if (append && last && last.position >= 7)
+        throw new InvalidTransition('an event can have at most eight images')
+
+      const imageId = crypto.randomUUID()
+      const position = append ? (last?.position ?? -1) + 1 : 0
+      const key = append ? imageKeyFor(id, imageId, contentType) : coverKeyFor(id, contentType)
+      if (!key) throw new Error('unsupported content type')
+      const [row] = await tx
+        .insert(eventImages)
+        .values({ id: imageId, eventId: id, objectKey: key, altText, position })
+        .onConflictDoUpdate({
+          target: [eventImages.eventId, eventImages.position],
+          set: { objectKey: key, altText },
+        })
+        .returning()
+      if (!row) throw new Error('image metadata was not created')
+      await tx.insert(eventChangeLogs).values({
+        eventId: id,
+        actorId: user.id,
+        action: append ? 'IMAGE_ADDED' : 'COVER_UPDATED',
+        details: JSON.stringify({ imageId: row.id, position: row.position }),
       })
-    return { uploadUrl: await presignPut(key, contentType), key }
+      return row
+    })
+    return {
+      uploadUrl: await presignPut(image.objectKey, contentType),
+      key: image.objectKey,
+      imageId: image.id,
+      position: image.position,
+    }
+  }
+
+  static async reorderImages(
+    id: string,
+    imageIds: string[],
+    user: { id: string; role: string; organizerApprovalStatus: string },
+  ) {
+    const [event] = await db.select().from(events).where(eq(events.id, id)).limit(1)
+    if (!event) throw new NotFound()
+    assertManager(event, user)
+    if (new Set(imageIds).size !== imageIds.length)
+      throw new InvalidTransition('image order contains duplicates')
+
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${id}, 0))`)
+      const current = await tx
+        .select({ id: eventImages.id })
+        .from(eventImages)
+        .where(eq(eventImages.eventId, id))
+      const currentIds = new Set(current.map((image) => image.id))
+      if (
+        current.length !== imageIds.length ||
+        imageIds.some((imageId) => !currentIds.has(imageId))
+      )
+        throw new InvalidTransition('image order must include every event image exactly once')
+
+      await tx
+        .update(eventImages)
+        .set({ position: sql`${eventImages.position} + 1000000` })
+        .where(eq(eventImages.eventId, id))
+      for (const [position, imageId] of imageIds.entries())
+        await tx
+          .update(eventImages)
+          .set({ position })
+          .where(and(eq(eventImages.eventId, id), eq(eventImages.id, imageId)))
+      await tx.insert(eventChangeLogs).values({
+        eventId: id,
+        actorId: user.id,
+        action: 'IMAGES_REORDERED',
+        details: JSON.stringify({ imageIds }),
+      })
+    })
+    const reordered = await EventService.images(id)
+    if (!reordered) throw new NotFound()
+    return reordered
+  }
+
+  static async deleteImage(
+    id: string,
+    imageId: string,
+    user: { id: string; role: string; organizerApprovalStatus: string },
+  ) {
+    const [event] = await db.select().from(events).where(eq(events.id, id)).limit(1)
+    if (!event) throw new NotFound()
+    assertManager(event, user)
+    const deleted = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${id}, 0))`)
+      const [image] = await tx
+        .select()
+        .from(eventImages)
+        .where(and(eq(eventImages.eventId, id), eq(eventImages.id, imageId)))
+        .limit(1)
+      if (!image) throw new NotFound('event image not found')
+      await tx.delete(eventImages).where(eq(eventImages.id, image.id))
+      await tx.insert(eventChangeLogs).values({
+        eventId: id,
+        actorId: user.id,
+        action: 'IMAGE_DELETED',
+        details: JSON.stringify({ imageId }),
+      })
+      return image
+    })
+    if (s3Enabled)
+      await deleteObject(deleted.objectKey).catch((cause) => {
+        console.error('[event] failed to remove deleted image object', { imageId, cause })
+      })
   }
 }

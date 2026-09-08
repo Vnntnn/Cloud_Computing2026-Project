@@ -174,21 +174,20 @@
 
   Legend: `[x]` done · `[~]` partial (note explains the gap) · `[ ]` not started.
 
-  Milestones 0–5 are substantially complete and committed on branch
-  `feat/full-system-v2`. `bun run lint / check-types / test / build` all pass;
+  Milestones 0–5 are complete on `main`. `bun run lint / check-types / test / build` all pass;
   the backend transaction & authorization matrix is now automated (oversell,
   idempotency, hold expiry, payment reconciliation, QR scans, membership/ban)
   and CI runs it against a real Postgres plus a `scripts/smoke.ts` persona
   `e2e` job. Not yet done: doc updates (M0/M7 — SYSTEM-DESIGN, decision log,
   TODO, REPORT, DEMO-RUNSHEET still describe the 3-service MVP), k3d/EKS
-  rehearsals, and the Phase 4 frontend screens (QR rendering, camera scanner,
-  organizer image manager + sales summary, admin moderation/audit/reconcile).
+  rehearsals, broader frontend regression tests, richer attendee refund status,
+  and refund-failure reconciliation controls.
 
   ## Staged Implementation Checklist
 
   ### Milestone 0 — Baseline and schema reset
 
-  - [x] Pin Better Auth runtime packages to 1.7.3; invoke the current official CLI explicitly and add a generated-schema drift check. `apps/auth` runtime `better-auth`/`@better-auth/drizzle-adapter` = 1.7.3; `generate:auth-schema` + `check:auth-schema` (drift) scripts added. Stale `@better-auth/cli` 1.4.21 devDep is now unused — remove.
+  - [x] Pin Better Auth runtime packages to 1.7.3; invoke the current official CLI explicitly and add a generated-schema drift check. `apps/auth` runtime `better-auth`/`@better-auth/drizzle-adapter` = 1.7.3; `generate:auth-schema` + `check:auth-schema` (drift) scripts added; the stale 1.4.21 CLI dependency was removed.
   - [x] Replace active V1 DBML and DrawIO documents with the corrected V2 architecture; retain V1 through Git history. `database/schema/DBML/ER_Diagram.dbml` + `DrawIO/brief_er.drawio` rewritten to `Eventide_V2` (4 logical DBs, identifier-only cross-DB refs).
   - [x] Regenerate clean 0000 migrations for all four databases. New `0000_*` for auth/event/registration/payment; old ones deleted. `make bootstrap` applies all four clean.
   - [x] Add payment_svc role/database to bootstrap, Terraform credentials, Docker builds, and deployment scripts. `bootstrap.ts`, `10-foundation` (`var.services` incl. `payment`), `20-platform/rds.tf`, `deploy.sh`, `apps/payment/Dockerfile`.
@@ -208,14 +207,14 @@
   - [x] Add category, venue, event, ticket-type, image, and change-log schemas. `packages/db/src/event/schema.ts`: categories, venues, events, ticket_types, event_images, event_change_logs + CHECK constraints (positive quota/price, valid windows, `ends_at > starts_at`).
   - [x] Implement public filtering/pagination and organizer-owned CRUD. `GET /api/events` (search/category/province/date/status/page/pageSize), `/api/organizer/events`, `POST|PATCH /api/events`, `/api/ticket-types`.
   - [x] Implement draft, publish, close, and admin-suspend transitions. `/api/events/:id/{publish,close}`, `/api/admin/events/:id/suspend`.
-  - [~] Preserve direct-to-S3 uploads; expand from one cover key to ordered event images. `event_images` table + `/api/events/:id/images/presign` exist; **reorder + delete endpoints not added**.
+  - [x] Preserve direct-to-S3 uploads; expand from one cover key to ordered event images. The organizer manager supports up to eight images with append uploads, cover ordering, and deletion through `/api/events/:id/images/{presign,reorder,:imageId}`; public/detail/dashboard thumbnails use the first image.
   - [x] Add checkout summaries and quota-validation internal endpoints. `/internal/events/:id/checkout-summary` (token-guarded).
 
   ### Milestone 3 — Inventory and orders
 
   - [x] Add inventory, order, item, audit, and idempotency schemas. `ticket_inventory, orders, order_items, order_audit_logs, tickets, check_ins, idempotency_keys` + `inventory_within_quota` CHECK.
   - [x] Implement atomic reservations and concurrent oversell protection. One transaction + `pg_advisory_xact_lock(hashtextextended(ticketTypeId))` per ticket type.
-  - [~] Enforce ticket sales windows, per-user limits, one-event-per-order, and server-calculated totals. Sales windows (event + per-ticket-type), `maxPerOrder`, one `eventId` per order, server-side totals — all enforced. **Per-user purchase limit is per-order (`maxPerOrder`), not a cumulative per-user cap.**
+  - [x] Enforce ticket sales windows, per-user limits, one-event-per-order, and server-calculated totals. `maxPerOrder` and cumulative `maxPerUser` are enforced under the ticket-type advisory lock; cancelled, expired, and refunded orders release the attendee allowance.
   - [x] Implement eight-minute holds and the expiry CronJob. `expiresAt = now + 8min`; `apps/registration/src/expire.ts` (now exits explicitly) run by `infra/helm/eventide/templates/registration-expiry-cronjob.yaml` (`* * * * *`, `concurrencyPolicy: Forbid`). Expiry verified locally.
   - [x] Return 409 capacity_full when inventory is exhausted; do not expose a queue action. `CapacityFull` → 409, no queue path.
 
@@ -226,7 +225,7 @@
   - [x] Implement pending-order cancellation and confirmed-order mock refunds. `POST /api/orders/:id/cancel`; `/internal/orders/:id/refund` releases sold inventory, marks tickets REFUNDED.
   - [x] Add QR retrieval and organizer/admin check-in APIs. `GET /api/tickets/:id` (qrToken), `POST /api/check-ins`, `GET /api/check-ins/events/:id` (moved from `/api/events/:id/check-ins` to avoid the event-service ingress prefix collision).
   - [x] Record successful, duplicate, cancelled, wrong-event, and invalid-signature scans. `check_ins.result` ∈ {SUCCESS, DUPLICATE, WRONG_EVENT, …}; payload hash stored; ticket_id/event_id nullable for invalid QR.
-  - [~] Add manual retry/reconciliation controls for uncertain payment/refund states. API (`/api/payments/:id/reconcile`) exists; **no UI control wired**.
+  - [~] Add manual retry/reconciliation controls for uncertain payment/refund states. Payment reconciliation is available in the admin UI through `/api/payments/:id/reconcile`; **failed-refund reconciliation still has no dedicated operation.**
 
   ### Milestone 5 — Frontend foundation
 
@@ -240,11 +239,11 @@
   ### Milestone 6 — Frontend product flows
 
   - [x] Public: searchable event listing, filters, event detail, ticket-type quantities, and sold-out state. `routes/index.tsx`, `routes/events.$eventId.tsx`.
-  - [~] Authenticated attendee: profile, checkout, eight-minute countdown, mock Pay button, order history, tickets, QR view, cancellation, and refund status. Profile / checkout / countdown / Pay / orders / tickets present. **QR is shown as the raw JWS string, not rendered as a scannable code; refund-status display is thin.**
-  - [~] Organizer: application/status, dashboard, event editor, ticket types, images, sales summary, and camera/manual check-in. Application, event list/editor, ticket types, manual check-in present. **No image manager, no sales summary, no camera scanner.**
-  - [~] Admin: user management, organizer approvals, event moderation, audit views, and payment reconciliation. `routes/_admin.admin.users.tsx` does users + organizer approve/reject + ban/unban. **No event-moderation, audit-log, or payment-reconciliation screens.**
+  - [x] Authenticated attendee: profile, checkout, eight-minute countdown, mock Pay button, order history, tickets, QR view, cancellation, and refund status. Tickets render scannable QR codes; order cards explain pending verification, cancellation, expiry, and completed refunds without exposing the signed token.
+  - [x] Organizer: application/status, dashboard, event editor, ticket types, ordered image manager, sales summary, and camera/manual check-in. The scanner loads the camera decoder only when activated and retains manual entry.
+  - [x] Admin: user management, organizer approvals, event moderation, membership audit view, payment reconciliation, and camera/manual check-in screens.
   - [x] Implement pathless authenticated, organizer, and admin layouts with TanStack Router beforeLoad guards. `_authenticated.tsx`, `_organizer.tsx`, `_admin.tsx` with `beforeLoad`.
-  - [~] Route-code-split admin pages and dynamically import the camera scanner and QR renderer. Auto code-splitting on; **no camera scanner / QR renderer to import yet**.
+  - [x] Route-code-split admin pages and defer heavy scanner/QR code. TanStack auto code-splitting isolates route code; the ZXing camera decoder is dynamically imported only when scanning starts, and QR rendering ships only with the tickets route.
 
   ### Milestone 7 — Deployment, seed, and documentation
 
@@ -269,9 +268,9 @@
   - [~] Repeated requests with one idempotency key produce one order, one payment, and one set of tickets. Order side: `orders.idempotency.test.ts` (3 concurrent → one order/one item set). Payment side: `checkout.test.ts` (one payment/one attempt). Not asserted as a single cross-service chain outside the smoke.
   - [x] Expired holds release inventory; paid holds cannot expire. `orders.idempotency.test.ts` › "hold expiry".
   - [x] Payment confirmation failure produces PENDING_VERIFICATION and reconciliation completes without double payment. `checkout.test.ts` › "goes PENDING_VERIFICATION … then reconciles once".
-  - [~] Refunds cancel the correct tickets and restore inventory once. Payment-side refund (one refund row, idempotent) is tested; the registration-side inventory/ticket restore has no dedicated test yet (exercised only via `/internal`).
+  - [x] Refunds cancel the correct tickets and restore inventory once. `refund.test.ts` confirms a repeated refund restores each inventory row once, marks every ticket REFUNDED, and writes one audit entry.
   - [x] QR tests cover valid, tampered, duplicate, cancelled, and wrong-event scans. `checkin.test.ts` (5 outcomes + payload hash + one row per scan).
-  - [ ] Frontend tests cover route guards, validated search parameters, loading/error/empty states, form errors, query invalidation, and retry behavior. **Phase 4.**
+  - [~] Frontend tests cover route guards, validated search parameters, loading/error/empty states, form errors, query invalidation, and retry behavior. Route-access decisions, search coercion, thumbnails, QR rendering, and direct-upload success/failure have Bun coverage; **route-level loading/error states, form errors, invalidation, and retry behavior still need focused tests.**
   - [x] E2E personas cover attendee purchase, organizer approval/event publication/check-in, and admin moderation. `scripts/smoke.ts` (CI `e2e` job) — 27 assertions.
   - [x] A sold-out event returns 409 and exposes no queue action. `scripts/smoke.ts` + `orders.oversell.test.ts`. (The "Sold out" label is Phase 4 frontend.)
   - [x] bun run lint, bun run check-types, bun run test, and bun run build pass.

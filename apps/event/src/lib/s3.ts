@@ -1,4 +1,9 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { env } from '../env.ts'
 
@@ -26,6 +31,11 @@ export function coverKeyFor(eventId: string, contentType: string): string | null
   return `events/${eventId}/cover.${EXT[contentType]}`
 }
 
+export function imageKeyFor(eventId: string, imageId: string, contentType: string): string | null {
+  if (!ALLOWED.has(contentType)) return null
+  return `events/${eventId}/${imageId}.${EXT[contentType]}`
+}
+
 /** 5-minute URL the browser uses to upload one cover image. */
 export function presignPut(key: string, contentType: string): Promise<string> {
   if (!client) throw new Error('S3 not configured')
@@ -42,4 +52,9 @@ export function presignGet(key: string): Promise<string> {
   return getSignedUrl(client, new GetObjectCommand({ Bucket: env.S3_BUCKET_NAME, Key: key }), {
     expiresIn: 3600,
   })
+}
+
+export async function deleteObject(key: string): Promise<void> {
+  if (!client) throw new Error('S3 not configured')
+  await client.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET_NAME, Key: key }))
 }

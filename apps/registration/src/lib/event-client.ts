@@ -8,6 +8,7 @@ export interface TicketTypeSummary {
   price: string
   quota: number
   maxPerOrder: number
+  maxPerUser: number
   salesStartAt: string | null
   salesEndAt: string | null
 }

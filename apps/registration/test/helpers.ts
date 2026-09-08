@@ -22,6 +22,7 @@ export function ticketType(over: Partial<TicketTypeSummary> = {}): TicketTypeSum
     price: '500.00',
     quota: 100,
     maxPerOrder: 10,
+    maxPerUser: 20,
     salesStartAt: null,
     salesEndAt: null,
     ...over,

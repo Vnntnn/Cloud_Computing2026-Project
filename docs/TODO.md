@@ -45,10 +45,9 @@ TanStack + shadcn SPA.
 - [x] **`GATE`** — `make db-reset` bootstraps all four databases from zero, `make seed`
       + `make smoke` pass locally.
 - [~] **M6 frontend product flows** — public listing/detail, attendee
-      checkout/countdown/pay/orders/tickets, organizer editor + manual check-in, admin
-      user management all built. **Left:** QR rendered as a scannable code, camera
-      scanner, organizer image manager + sales summary, admin
-      moderation/audit/reconcile screens (+ 3 supporting backend endpoints).
+      checkout/countdown/pay/orders/scannable tickets, organizer editor + ordered image manager +
+      sales summary + camera/manual check-in, and admin moderation/audit/reconciliation are built.
+      **Left:** failed-refund reconciliation and broader route/form regression tests.
 - [ ] **M7 docs** — SYSTEM-DESIGN, this file and the knowledge-base decision log updated
       for V2 (2026-09-08). **Left:** `REPORT.md` and `DEMO-RUNSHEET.md` V2 pass.
 - [ ] **`GATE`** — one k3d rebuild and one EKS destroy/rebuild rehearsal on the V2 chart

@@ -1,20 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
+import { EventThumbnail } from '@/components/event-thumbnail'
+import { PageHeader } from '@/components/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { edenEvent } from '@/lib/eden'
-
-const managedEventsQuery = {
-  queryKey: ['events', 'managed'] as const,
-  queryFn: async () => {
-    const result = await edenEvent.api.organizer.events.get({ query: { page: 1, pageSize: 100 } })
-    if (result.error || !result.data || result.data instanceof Response)
-      throw new Error('Unable to load managed events')
-    return result.data
-  },
-}
+import { managedEventsQuery } from '@/lib/queries'
 
 export const Route = createFileRoute('/_organizer/organizer/events/')({
   loader: ({ context }) => context.queryClient.ensureQueryData(managedEventsQuery),
@@ -36,16 +29,15 @@ function OrganizerEventsPage() {
   })
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-heading text-3xl font-semibold">Organizer dashboard</h1>
-          <p className="text-muted-foreground">Manage your event lifecycle and check-ins.</p>
-        </div>
-        <Button render={<Link to="/organizer/events/new" />}>Create event</Button>
-      </div>
+      <PageHeader
+        title="My events"
+        description="Manage your event lifecycle and check-ins."
+        actions={<Button render={<Link to="/organizer/events/new" />}>Create event</Button>}
+      />
       <div className="grid gap-4 md:grid-cols-2">
         {data?.items.map((event) => (
-          <Card key={event.id}>
+          <Card key={event.id} className="pt-0">
+            <EventThumbnail src={event.coverUrl} title={event.title} className="rounded-t-4xl" />
             <CardHeader>
               <CardTitle>{event.title}</CardTitle>
               <Badge>{event.status}</Badge>
@@ -70,8 +62,27 @@ function OrganizerEventsPage() {
                   Close
                 </Button>
               ) : null}
-              <Button variant="outline" render={<Link to="/organizer/check-in" />}>
+              <Button
+                variant="outline"
+                render={<Link to="/organizer/check-in" search={{ eventId: event.id }} />}
+              >
                 Check in
+              </Button>
+              <Button
+                variant="outline"
+                render={
+                  <Link to="/organizer/events/$eventId/images" params={{ eventId: event.id }} />
+                }
+              >
+                Images
+              </Button>
+              <Button
+                variant="outline"
+                render={
+                  <Link to="/organizer/events/$eventId/sales" params={{ eventId: event.id }} />
+                }
+              >
+                Sales
               </Button>
             </CardFooter>
           </Card>

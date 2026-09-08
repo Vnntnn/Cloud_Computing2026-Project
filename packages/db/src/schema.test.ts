@@ -101,6 +101,7 @@ describe('database CHECK constraints protect the invariants', () => {
         'ticket_types_price_nonnegative',
         'ticket_types_quota_positive',
         'ticket_types_max_per_order_positive',
+        'ticket_types_max_per_user_positive',
       ]),
     )
     expect(checkNames(venues)).toContain('venues_capacity_positive')

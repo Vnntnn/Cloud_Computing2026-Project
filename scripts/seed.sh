@@ -34,6 +34,7 @@ kubectl -n eventide run seed --restart=Never --attach --rm \
   --image="$REG/eventide/db-bootstrap:$TAG" \
   --overrides='{"apiVersion":"v1","spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":1000,"seccompProfile":{"type":"RuntimeDefault"}}}}' \
   --env="AUTH_URL=http://auth.eventide.svc.cluster.local" \
+  --env="EVENT_URL=http://event.eventide.svc.cluster.local" \
   --env="REGISTRATION_URL=http://registration.eventide.svc.cluster.local" \
   --env="PAYMENT_URL=http://payment.eventide.svc.cluster.local" \
   --env="AUTH_DATABASE_URL=$AUTH_DB_URL" \

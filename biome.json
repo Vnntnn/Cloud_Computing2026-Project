@@ -40,6 +40,15 @@
     {
       "includes": ["**/*.config.ts"],
       "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } }
+    },
+    {
+      "includes": ["apps/web/src/components/ui/**"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noDocumentCookie": "off" },
+          "correctness": { "useExhaustiveDependencies": "off" }
+        }
+      }
     }
   ]
 }

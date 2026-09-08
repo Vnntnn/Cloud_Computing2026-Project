@@ -165,6 +165,9 @@ POST   /api/admin/events/:id/suspend (auth, admin)
 GET    /api/organizer/events (auth, approved organizer)
 POST   /api/ticket-types (auth)
 POST   /api/events/:id/images/presign (auth) → presigned PUT
+GET    /api/events/:id/images
+PATCH  /api/events/:id/images/reorder (auth)
+DELETE /api/events/:id/images/:imageId (auth)
 GET    /internal/events/:id/checkout-summary          x-eventide-internal-token
 ```
 
@@ -176,6 +179,7 @@ GET    /api/orders/me · /api/orders/:id · POST /api/orders/:id/cancel
 GET    /api/tickets/me · /api/tickets/:id           → each carries a signed JWS qrToken
 POST   /api/check-ins                     { eventId, qrToken }   (organizer/admin)
 GET    /api/check-ins/events/:id                    (organizer/admin)
+GET    /api/orders/events/:id/sales-summary         (organizer/admin)
 /internal/orders/:id · :id/confirm · :id/pending-verification · :id/refund
 ```
 
@@ -255,7 +259,8 @@ event_db
   events            DRAFT | PUBLISHED | CLOSED | SUSPENDED ; owner_id text
                     CHECK ends_at > starts_at, sales_end_at > sales_start_at,
                           capacity > 0, refund_percent 0..100
-  ticket_types      price >= 0, quota > 0, max_per_order > 0 ; UNIQUE (event_id, name)
+  ticket_types      price >= 0, quota > 0, max_per_order > 0, max_per_user > 0 ;
+                    UNIQUE (event_id, name)
   event_images      UNIQUE (event_id, position)
   event_change_logs append-only lifecycle/ownership audit
 

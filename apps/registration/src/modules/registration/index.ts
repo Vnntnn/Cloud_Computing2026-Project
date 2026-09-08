@@ -147,6 +147,38 @@ export const registration = new Elysia({ tags: ['orders'] })
     { auth: true, params: t.Object({ id: t.String({ format: 'uuid' }) }) },
   )
   .get(
+    '/api/orders/events/:id/sales-summary',
+    async ({ params, user, status }) => {
+      if (user.role !== 'organizer' && user.role !== 'admin')
+        return status(403, { error: 'forbidden', message: 'organizer role required' })
+      if (user.role === 'organizer' && user.organizerApprovalStatus !== 'APPROVED')
+        return status(403, { error: 'forbidden', message: 'organizer approval required' })
+      try {
+        const event = await fetchCheckoutSummary(params.id)
+        if (user.role !== 'admin' && event.ownerId !== user.id)
+          return status(403, { error: 'forbidden', message: 'event ownership required' })
+        return RegistrationService.salesSummary(params.id)
+      } catch (err) {
+        if (err instanceof EventNotFound)
+          return status(404, { error: 'event_not_found', message: err.message })
+        if (err instanceof EventServiceUnavailable)
+          return status(502, { error: 'event_unavailable', message: err.message })
+        throw err
+      }
+    },
+    {
+      auth: true,
+      params: t.Object({ id: t.String({ format: 'uuid' }) }),
+      response: {
+        200: RegistrationModel.salesSummary,
+        401: ErrorResponse,
+        403: ErrorResponse,
+        404: ErrorResponse,
+        502: ErrorResponse,
+      },
+    },
+  )
+  .get(
     '/internal/orders/:id',
     async ({ params, headers, status }) => {
       if (!internalTokenMatches(headers['x-eventide-internal-token'], env.INTERNAL_SERVICE_TOKEN))

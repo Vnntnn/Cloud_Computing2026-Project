@@ -26,6 +26,7 @@ const ticketType = t.Object({
   price: money,
   quota: t.Integer(),
   maxPerOrder: t.Integer(),
+  maxPerUser: t.Integer(),
   salesStartAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
   salesEndAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
 })
@@ -55,6 +56,13 @@ const event = t.Object({
 })
 
 const eventDetail = t.Composite([event, t.Object({ ticketTypes: t.Array(ticketType) })])
+const eventImage = t.Object({
+  id: t.String({ format: 'uuid' }),
+  eventId: t.String({ format: 'uuid' }),
+  altText: t.String(),
+  position: t.Integer(),
+  url: t.Union([t.String(), t.Null()]),
+})
 const paginatedEvents = t.Object({
   items: t.Array(event),
   total: t.Integer(),
@@ -82,6 +90,7 @@ const ticketTypeInput = t.Object({
   price: money,
   quota: t.Integer({ minimum: 1 }),
   maxPerOrder: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
+  maxPerUser: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
   salesStartAt: t.Optional(t.String({ format: 'date-time' })),
   salesEndAt: t.Optional(t.String({ format: 'date-time' })),
 })
@@ -103,6 +112,7 @@ export const EventModel = {
   ticketType,
   event,
   eventDetail,
+  eventImage,
   paginatedEvents,
   eventInput,
   ticketTypeInput,
@@ -113,8 +123,16 @@ export const EventModel = {
       t.Literal('image/png'),
       t.Literal('image/webp'),
     ]),
+    altText: t.Optional(t.String({ maxLength: 300 })),
+    append: t.Optional(t.Boolean()),
   }),
-  coverUpload: t.Object({ uploadUrl: t.String(), key: t.String() }),
+  coverUpload: t.Object({
+    uploadUrl: t.String(),
+    key: t.String(),
+    imageId: t.String({ format: 'uuid' }),
+    position: t.Integer(),
+  }),
+  imageOrder: t.Object({ imageIds: t.Array(t.String({ format: 'uuid' }), { maxItems: 8 }) }),
 }
 
 export type EventShape = typeof event.static

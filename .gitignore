@@ -5,6 +5,7 @@ node_modules/
 # build output
 dist/
 .turbo/
+.tanstack/
 *.tsbuildinfo
 
 # env
@@ -29,4 +30,3 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
-

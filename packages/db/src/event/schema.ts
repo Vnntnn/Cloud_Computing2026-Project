@@ -77,6 +77,7 @@ export const ticketTypes = pgTable(
     price: numeric('price', { precision: 12, scale: 2 }).notNull(),
     quota: integer('quota').notNull(),
     maxPerOrder: integer('max_per_order').notNull().default(10),
+    maxPerUser: integer('max_per_user').notNull().default(20),
     salesStartAt: timestamp('sales_start_at', { withTimezone: true }),
     salesEndAt: timestamp('sales_end_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -87,6 +88,7 @@ export const ticketTypes = pgTable(
     check('ticket_types_price_nonnegative', sql`${table.price} >= 0`),
     check('ticket_types_quota_positive', sql`${table.quota} > 0`),
     check('ticket_types_max_per_order_positive', sql`${table.maxPerOrder} > 0`),
+    check('ticket_types_max_per_user_positive', sql`${table.maxPerUser} > 0`),
     check(
       'ticket_types_sales_window_valid',
       sql`${table.salesStartAt} is null or ${table.salesEndAt} is null or ${table.salesEndAt} > ${table.salesStartAt}`,

@@ -7,7 +7,7 @@ import {
   ticketInventory,
   tickets,
 } from '@eventide/db/registration'
-import { and, asc, desc, eq, lt, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm'
 import { jwtVerify, SignJWT } from 'jose'
 import { env } from '../../env.ts'
 import { db } from '../../lib/db.ts'
@@ -143,6 +143,19 @@ export abstract class RegistrationService {
           .where(eq(ticketInventory.ticketTypeId, type.id))
           .limit(1)
         const quantity = requested.get(type.id)!
+        const [{ total: purchased = 0 } = {}] = await tx
+          .select({ total: sql<number>`coalesce(sum(${orderItems.quantity}), 0)::int` })
+          .from(orderItems)
+          .innerJoin(orders, eq(orderItems.orderId, orders.id))
+          .where(
+            and(
+              eq(orderItems.ticketTypeId, type.id),
+              eq(orders.userId, userId),
+              inArray(orders.status, ['PENDING', 'PENDING_VERIFICATION', 'CONFIRMED']),
+            ),
+          )
+        if (purchased + quantity > type.maxPerUser)
+          throw new InvalidOrder(`${type.name} has a ${type.maxPerUser}-ticket limit per attendee`)
         if (
           !inventory ||
           inventory.totalQuota !== type.quota ||
@@ -433,5 +446,46 @@ export abstract class RegistrationService {
       .from(checkIns)
       .where(eq(checkIns.eventId, eventId))
       .orderBy(desc(checkIns.createdAt))
+  }
+
+  static async salesSummary(eventId: string) {
+    const [orderStats, inventoryStats, checkInStats] = await Promise.all([
+      db
+        .select({
+          totalOrders: sql<number>`count(*)::int`,
+          pendingOrders: sql<number>`count(*) filter (where ${orders.status} in ('PENDING', 'PENDING_VERIFICATION'))::int`,
+          confirmedOrders: sql<number>`count(*) filter (where ${orders.status} = 'CONFIRMED')::int`,
+          refundedOrders: sql<number>`count(*) filter (where ${orders.status} = 'REFUNDED')::int`,
+          netRevenue: sql<string>`coalesce(sum(${orders.total}) filter (where ${orders.status} = 'CONFIRMED'), 0)::numeric(12,2)::text`,
+        })
+        .from(orders)
+        .where(eq(orders.eventId, eventId)),
+      db
+        .select({
+          totalQuota: sql<number>`coalesce(sum(${ticketInventory.totalQuota}), 0)::int`,
+          reservedTickets: sql<number>`coalesce(sum(${ticketInventory.reservedCount}), 0)::int`,
+          soldTickets: sql<number>`coalesce(sum(${ticketInventory.soldCount}), 0)::int`,
+        })
+        .from(ticketInventory)
+        .where(eq(ticketInventory.eventId, eventId)),
+      db
+        .select({
+          successfulCheckIns: sql<number>`count(*) filter (where ${checkIns.result} = 'SUCCESS')::int`,
+        })
+        .from(checkIns)
+        .where(eq(checkIns.eventId, eventId)),
+    ])
+    return {
+      eventId,
+      totalOrders: orderStats[0]?.totalOrders ?? 0,
+      pendingOrders: orderStats[0]?.pendingOrders ?? 0,
+      confirmedOrders: orderStats[0]?.confirmedOrders ?? 0,
+      refundedOrders: orderStats[0]?.refundedOrders ?? 0,
+      totalQuota: inventoryStats[0]?.totalQuota ?? 0,
+      reservedTickets: inventoryStats[0]?.reservedTickets ?? 0,
+      soldTickets: inventoryStats[0]?.soldTickets ?? 0,
+      successfulCheckIns: checkInStats[0]?.successfulCheckIns ?? 0,
+      netRevenue: orderStats[0]?.netRevenue ?? '0.00',
+    }
   }
 }

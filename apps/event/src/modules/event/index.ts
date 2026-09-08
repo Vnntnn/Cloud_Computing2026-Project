@@ -100,6 +100,16 @@ export const event = new Elysia({ tags: ['catalog'] })
     },
   )
   .get(
+    '/api/events/:id/images',
+    async ({ params, status }) =>
+      (await EventService.images(params.id)) ??
+      status(404, { error: 'not_found', message: 'event not found' }),
+    {
+      params: t.Object({ id: t.String({ format: 'uuid' }) }),
+      response: { 200: t.Array(EventModel.eventImage), 404: ErrorResponse },
+    },
+  )
+  .get(
     '/internal/events/:id/checkout-summary',
     async ({ params, headers, status }) => {
       if (!internalTokenMatches(headers['x-eventide-internal-token'], env.INTERNAL_SERVICE_TOKEN))
@@ -191,7 +201,13 @@ export const event = new Elysia({ tags: ['catalog'] })
     '/api/events/:id/images/presign',
     async ({ params, body, user }) => {
       try {
-        return await EventService.coverUpload(params.id, user, body.contentType)
+        return await EventService.prepareImageUpload(
+          params.id,
+          user,
+          body.contentType,
+          body.altText,
+          body.append,
+        )
       } catch (err) {
         return error(err)
       }
@@ -200,5 +216,38 @@ export const event = new Elysia({ tags: ['catalog'] })
       auth: true,
       params: t.Object({ id: t.String({ format: 'uuid' }) }),
       body: EventModel.coverUploadBody,
+    },
+  )
+  .patch(
+    '/api/events/:id/images/reorder',
+    async ({ params, body, user }) => {
+      try {
+        return await EventService.reorderImages(params.id, body.imageIds, user)
+      } catch (err) {
+        return error(err)
+      }
+    },
+    {
+      auth: true,
+      params: t.Object({ id: t.String({ format: 'uuid' }) }),
+      body: EventModel.imageOrder,
+    },
+  )
+  .delete(
+    '/api/events/:id/images/:imageId',
+    async ({ params, user }) => {
+      try {
+        await EventService.deleteImage(params.id, params.imageId, user)
+        return { ok: true }
+      } catch (err) {
+        return error(err)
+      }
+    },
+    {
+      auth: true,
+      params: t.Object({
+        id: t.String({ format: 'uuid' }),
+        imageId: t.String({ format: 'uuid' }),
+      }),
     },
   )

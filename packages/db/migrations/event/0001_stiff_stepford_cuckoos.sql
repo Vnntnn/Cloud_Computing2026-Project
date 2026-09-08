@@ -1,0 +1,2 @@
+ALTER TABLE "ticket_types" ADD COLUMN "max_per_user" integer DEFAULT 20 NOT NULL;--> statement-breakpoint
+ALTER TABLE "ticket_types" ADD CONSTRAINT "ticket_types_max_per_user_positive" CHECK ("ticket_types"."max_per_user" > 0);

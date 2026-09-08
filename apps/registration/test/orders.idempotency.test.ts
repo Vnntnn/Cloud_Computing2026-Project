@@ -127,3 +127,40 @@ describe('orders — hold expiry', () => {
     expect(inv?.reservedCount).toBe(0)
   })
 })
+
+describe('orders — cumulative attendee limit', () => {
+  beforeEach(resetRegistrationDb)
+
+  it('counts active orders across idempotency keys without limiting another attendee', async () => {
+    const tt = ticketType({ quota: 20, maxPerOrder: 3, maxPerUser: 4 })
+    const summary = stubEvent(checkoutSummary({ ticketTypes: [tt] }))
+    const firstBuyer = await authHeader({ id: 'buyer-limit' })
+
+    expect(
+      (
+        await post(firstBuyer, 'limit-first', {
+          eventId: summary.id,
+          items: [{ ticketTypeId: tt.id, quantity: 3 }],
+        })
+      ).status,
+    ).toBe(200)
+    expect(
+      (
+        await post(firstBuyer, 'limit-second', {
+          eventId: summary.id,
+          items: [{ ticketTypeId: tt.id, quantity: 2 }],
+        })
+      ).status,
+    ).toBe(409)
+
+    const otherBuyer = await authHeader({ id: 'buyer-limit-other' })
+    expect(
+      (
+        await post(otherBuyer, 'limit-other', {
+          eventId: summary.id,
+          items: [{ ticketTypeId: tt.id, quantity: 2 }],
+        })
+      ).status,
+    ).toBe(200)
+  })
+})

@@ -126,6 +126,7 @@ Table event_db.ticket_types {
   price decimal(12,2) [not null]
   quota int [not null]
   max_per_order int [not null]
+  max_per_user int [not null]
   sales_start_at timestamp
   sales_end_at timestamp
   created_at timestamp

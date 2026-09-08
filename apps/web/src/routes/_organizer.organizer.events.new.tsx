@@ -1,4 +1,5 @@
 import { useForm } from '@tanstack/react-form'
+import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -14,18 +15,45 @@ import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { edenEvent } from '@/lib/eden'
+import {
+  type CoverContentType,
+  coverContentTypes,
+  coverFileError,
+  uploadEventCover,
+} from '@/lib/event-cover'
 
 const localTime = (offsetHours: number) => {
   const date = new Date(Date.now() + offsetHours * 3_600_000)
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
 }
 
+const textFields = [
+  { name: 'title', label: 'Event title', type: 'text' },
+  { name: 'ticketName', label: 'Ticket name', type: 'text' },
+  { name: 'price', label: 'Price (THB)', type: 'text' },
+  { name: 'startsAt', label: 'Starts', type: 'datetime-local' },
+  { name: 'endsAt', label: 'Ends', type: 'datetime-local' },
+  { name: 'salesStartAt', label: 'Sales start', type: 'datetime-local' },
+  { name: 'salesEndAt', label: 'Sales end', type: 'datetime-local' },
+] as const
+
 export const Route = createFileRoute('/_organizer/organizer/events/new')({
   component: CreateEventPage,
 })
 function CreateEventPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [error, setError] = useState('')
+  const [coverFile, setCoverFile] = useState<File | null>(null)
+  const [createdEventId, setCreatedEventId] = useState<string | null>(null)
+  const [ticketReady, setTicketReady] = useState(false)
+  const [thumbnailFailed, setThumbnailFailed] = useState(false)
+
+  const finish = async (eventId: string) => {
+    await queryClient.invalidateQueries({ queryKey: ['events'] })
+    await navigate({ to: '/events/$eventId', params: { eventId } })
+  }
+
   const form = useForm({
     defaultValues: {
       title: '',
@@ -41,38 +69,65 @@ function CreateEventPage() {
     },
     onSubmit: async ({ value }) => {
       setError('')
-      const created = await edenEvent.api.events.post({
-        title: value.title,
-        description: value.description,
-        startsAt: new Date(value.startsAt).toISOString(),
-        endsAt: new Date(value.endsAt).toISOString(),
-        salesStartAt: new Date(value.salesStartAt).toISOString(),
-        salesEndAt: new Date(value.salesEndAt).toISOString(),
-        capacity: value.capacity,
-        refundPercent: value.refundPercent,
-      })
-      if (created.error || !created.data || created.data instanceof Response)
-        return setError('Could not create event. Confirm organizer approval and dates.')
-      const ticket = await edenEvent.api['ticket-types'].post({
-        eventId: created.data.id,
-        name: value.ticketName,
-        price: value.price,
-        quota: value.capacity,
-        maxPerOrder: 10,
-      })
-      if (ticket.error) return setError('Event created, but its ticket type needs attention.')
-      await navigate({ to: '/events/$eventId', params: { eventId: created.data.id } })
+      setThumbnailFailed(false)
+
+      const validationError = coverFileError(coverFile)
+      if (validationError) return setError(validationError)
+
+      let eventId = createdEventId
+      if (!eventId) {
+        const created = await edenEvent.api.events.post({
+          title: value.title,
+          description: value.description,
+          startsAt: new Date(value.startsAt).toISOString(),
+          endsAt: new Date(value.endsAt).toISOString(),
+          salesStartAt: new Date(value.salesStartAt).toISOString(),
+          salesEndAt: new Date(value.salesEndAt).toISOString(),
+          capacity: value.capacity,
+          refundPercent: value.refundPercent,
+        })
+        if (created.error || !created.data || created.data instanceof Response)
+          return setError('Could not create event. Confirm organizer approval and dates.')
+        eventId = created.data.id
+        setCreatedEventId(eventId)
+      }
+
+      if (!ticketReady) {
+        const ticket = await edenEvent.api['ticket-types'].post({
+          eventId,
+          name: value.ticketName,
+          price: value.price,
+          quota: value.capacity,
+          maxPerOrder: 10,
+          maxPerUser: 20,
+        })
+        if (ticket.error)
+          return setError('The draft was saved, but its ticket type could not be created. Retry.')
+        setTicketReady(true)
+      }
+
+      if (coverFile) {
+        try {
+          await uploadEventCover(coverFile, async (contentType: CoverContentType) => {
+            const prepared = await edenEvent.api
+              .events({ id: eventId })
+              .images.presign.post({ contentType })
+            if (prepared.error || !prepared.data || prepared.data instanceof Response) return null
+            return prepared.data
+          })
+        } catch (uploadError) {
+          setThumbnailFailed(true)
+          return setError(
+            `The draft and ticket type were saved. ${
+              uploadError instanceof Error ? uploadError.message : 'The thumbnail upload failed.'
+            }`,
+          )
+        }
+      }
+
+      await finish(eventId)
     },
   })
-  const textFields = [
-    { name: 'title', label: 'Event title', type: 'text' },
-    { name: 'ticketName', label: 'Ticket name', type: 'text' },
-    { name: 'price', label: 'Price (THB)', type: 'text' },
-    { name: 'startsAt', label: 'Starts', type: 'datetime-local' },
-    { name: 'endsAt', label: 'Ends', type: 'datetime-local' },
-    { name: 'salesStartAt', label: 'Sales start', type: 'datetime-local' },
-    { name: 'salesEndAt', label: 'Sales end', type: 'datetime-local' },
-  ] as const
   return (
     <Card className="mx-auto max-w-2xl">
       <CardHeader>
@@ -140,18 +195,44 @@ function CreateEventPage() {
                 </Field>
               )}
             </form.Field>
+            <Field data-invalid={Boolean(coverFileError(coverFile))}>
+              <FieldLabel htmlFor="cover">Event thumbnail</FieldLabel>
+              <Input
+                id="cover"
+                type="file"
+                accept={coverContentTypes.join(',')}
+                onChange={(event) => {
+                  setCoverFile(event.target.files?.[0] ?? null)
+                  setThumbnailFailed(false)
+                  setError('')
+                }}
+                aria-invalid={Boolean(coverFileError(coverFile))}
+              />
+              <p className="text-sm text-muted-foreground">Optional JPEG, PNG, or WebP cover.</p>
+            </Field>
             {error ? <FieldError>{error}</FieldError> : null}
           </FieldGroup>
         </form>
       </CardContent>
-      <CardFooter>
+      <CardFooter className="gap-3">
         <form.Subscribe selector={(state) => state.isSubmitting}>
           {(submitting) => (
             <Button form="event-form" type="submit" disabled={submitting}>
-              {submitting ? 'Creating…' : 'Create draft'}
+              {submitting
+                ? 'Saving…'
+                : createdEventId
+                  ? ticketReady
+                    ? 'Retry thumbnail upload'
+                    : 'Retry ticket type'
+                  : 'Create draft'}
             </Button>
           )}
         </form.Subscribe>
+        {thumbnailFailed && createdEventId ? (
+          <Button variant="outline" onClick={() => void finish(createdEventId)}>
+            Continue without thumbnail
+          </Button>
+        ) : null}
       </CardFooter>
     </Card>
   )
