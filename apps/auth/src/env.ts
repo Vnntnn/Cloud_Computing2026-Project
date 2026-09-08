@@ -25,8 +25,10 @@ export const env = defineEnv(
     BETTER_AUTH_URL: z.url().default('http://localhost:3000'),
 
     // Extra origins allowed to call /api/auth (CSRF check), comma-separated.
-    // Deployed, the SPA is same-origin so BETTER_AUTH_URL covers it and this stays
-    // empty; the auth `dev` script sets it to the Vite origin (localhost:5173).
+    // Supports wildcards (e.g. `http://localhost:*`). Deployed, the SPA is
+    // same-origin so BETTER_AUTH_URL covers it and this stays empty; the auth
+    // `dev` script sets it to `http://localhost:*,http://127.0.0.1:*` so the SPA
+    // works whether opened as localhost or 127.0.0.1 and on a bumped Vite port.
     TRUSTED_ORIGINS: z.string().default(''),
 
     // Google OAuth — optional. Email/password works without it, which is what
