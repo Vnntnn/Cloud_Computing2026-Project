@@ -2,6 +2,7 @@ import { useForm } from '@tanstack/react-form'
 import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
+import { DateTimePicker } from '@/components/date-time-picker'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -11,7 +12,15 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { edenEvent } from '@/lib/eden'
@@ -21,20 +30,28 @@ import {
   coverFileError,
   uploadEventCover,
 } from '@/lib/event-cover'
+import {
+  bangkokDateTimeInputToIso,
+  isDateTimeInput,
+  toBangkokDateTimeInput,
+} from '@/lib/event-dates'
 
 const localTime = (offsetHours: number) => {
   const date = new Date(Date.now() + offsetHours * 3_600_000)
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+  return toBangkokDateTimeInput(date)
 }
 
 const textFields = [
   { name: 'title', label: 'Event title', type: 'text' },
   { name: 'ticketName', label: 'Ticket name', type: 'text' },
   { name: 'price', label: 'Price (THB)', type: 'text' },
-  { name: 'startsAt', label: 'Starts', type: 'datetime-local' },
-  { name: 'endsAt', label: 'Ends', type: 'datetime-local' },
-  { name: 'salesStartAt', label: 'Sales start', type: 'datetime-local' },
-  { name: 'salesEndAt', label: 'Sales end', type: 'datetime-local' },
+] as const
+
+const dateFields = [
+  { name: 'startsAt', label: 'Starts' },
+  { name: 'endsAt', label: 'Ends' },
+  { name: 'salesStartAt', label: 'Sales start' },
+  { name: 'salesEndAt', label: 'Sales end' },
 ] as const
 
 export const Route = createFileRoute('/_organizer/organizer/events/new')({
@@ -79,10 +96,10 @@ function CreateEventPage() {
         const created = await edenEvent.api.events.post({
           title: value.title,
           description: value.description,
-          startsAt: new Date(value.startsAt).toISOString(),
-          endsAt: new Date(value.endsAt).toISOString(),
-          salesStartAt: new Date(value.salesStartAt).toISOString(),
-          salesEndAt: new Date(value.salesEndAt).toISOString(),
+          startsAt: bangkokDateTimeInputToIso(value.startsAt),
+          endsAt: bangkokDateTimeInputToIso(value.endsAt),
+          salesStartAt: bangkokDateTimeInputToIso(value.salesStartAt),
+          salesEndAt: bangkokDateTimeInputToIso(value.salesEndAt),
           capacity: value.capacity,
           refundPercent: value.refundPercent,
         })
@@ -129,7 +146,7 @@ function CreateEventPage() {
     },
   })
   return (
-    <Card className="mx-auto max-w-2xl">
+    <Card className="mx-auto w-full max-w-2xl">
       <CardHeader>
         <CardTitle>Create an event</CardTitle>
         <CardDescription>
@@ -169,6 +186,40 @@ function CreateEventPage() {
                 )}
               </form.Field>
             ))}
+            <FieldSet>
+              <FieldLegend>Schedule</FieldLegend>
+              <FieldDescription>Dates and times use Bangkok time (ICT).</FieldDescription>
+              <FieldGroup className="grid gap-5 md:grid-cols-2">
+                {dateFields.map(({ name, label }) => (
+                  <form.Field
+                    key={name}
+                    name={name}
+                    validators={{
+                      onChange: ({ value }) =>
+                        isDateTimeInput(value) ? undefined : `${label} is required`,
+                    }}
+                  >
+                    {(field) => (
+                      <Field data-invalid={!field.state.meta.isValid}>
+                        <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
+                        <DateTimePicker
+                          id={field.name}
+                          label={label}
+                          value={field.state.value}
+                          required
+                          invalid={!field.state.meta.isValid}
+                          onBlur={field.handleBlur}
+                          onChange={field.handleChange}
+                        />
+                        <FieldError
+                          errors={field.state.meta.errors.map((message) => ({ message }))}
+                        />
+                      </Field>
+                    )}
+                  </form.Field>
+                ))}
+              </FieldGroup>
+            </FieldSet>
             <form.Field name="description">
               {(field) => (
                 <Field>

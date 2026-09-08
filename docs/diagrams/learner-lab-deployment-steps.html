@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eventide Learner Lab Deployment Steps</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&amp;family=Noto+Sans:wght@400;600;700;800&amp;display=swap">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --paper: #fafaf7;
+      --ink: #0c0a09;
+      --muted: #7c6d67;
+      --soft: #8f817b;
+      --rule: rgba(12, 10, 9, 0.12);
+      --accent: #bb4d00;
+      --accent-tint: rgba(187, 77, 0, 0.08);
+      --link: #2e5aa8;
+      --sans: 'Noto Sans', system-ui, sans-serif;
+      --mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      min-height: 100vh;
+      padding: 48px 32px;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+    }
+    main { width: min(1200px, 100%); margin: 0 auto; }
+    .eyebrow {
+      margin-bottom: 8px;
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin-bottom: 8px;
+      font-size: 32px;
+      font-weight: 800;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+    .lede {
+      max-width: 760px;
+      margin-bottom: 32px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .diagram { overflow-x: auto; }
+    svg { display: block; width: 100%; min-width: 960px; height: auto; }
+    footer {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--rule);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 8px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Flowchart · AWS Academy Learner Lab</p>
+    <h1>Deploy Eventide without leaving billable resources behind</h1>
+    <p class="lede">A repeatable session runbook grounded in the repository Make targets and deployment scripts. The orange path is the mandatory teardown.</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 1200 840" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="learner-lab-deployment-steps-title learner-lab-deployment-steps-desc">
+        <title id="learner-lab-deployment-steps-title">Eventide Learner Lab deployment steps</title>
+        <desc id="learner-lab-deployment-steps-desc">Flowchart showing a fresh AWS lab session progressing through preflight, infrastructure creation, database bootstrap, application deployment, testing, and mandatory verified teardown.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#7c6d67"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bb4d00"/></marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+        </defs>
+
+        <rect width="1200" height="840" fill="#fafaf7"/>
+
+        <!-- Connectors: paint before nodes. -->
+        <line x1="520" y1="72" x2="520" y2="104" stroke="#7c6d67" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="520" y1="168" x2="520" y2="200" stroke="#7c6d67" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="520" y1="264" x2="520" y2="296" stroke="#7c6d67" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="520" y1="360" x2="520" y2="392" stroke="#7c6d67" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="520" y1="456" x2="520" y2="488" stroke="#7c6d67" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="520" y1="552" x2="520" y2="584" stroke="#7c6d67" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="520" y1="672" x2="520" y2="712" stroke="#bb4d00" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+        <line x1="668" y1="628" x2="760" y2="628" stroke="#7c6d67" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 760 628 H 724 Q 716 628 716 620 V 528 Q 716 520 708 520 H 680" fill="none" stroke="#7c6d67" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+
+        <!-- Connector labels with clear masks. -->
+        <rect x="528" y="680" width="40" height="12" rx="2" fill="#fafaf7"/>
+        <text x="548" y="688" fill="#bb4d00" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">YES</text>
+        <rect x="696" y="608" width="32" height="12" rx="2" fill="#fafaf7"/>
+        <text x="712" y="616" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">NO</text>
+        <rect x="648" y="560" width="64" height="12" rx="2" fill="#fafaf7"/>
+        <text x="680" y="568" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">RE-TEST</text>
+
+        <!-- Start. -->
+        <rect x="400" y="16" width="240" height="56" rx="20" fill="#ffffff" stroke="#0c0a09" stroke-width="1.2"/>
+        <text x="520" y="40" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Start a fresh lab session</text>
+        <text x="520" y="56" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">before hour 3</text>
+
+        <!-- Step 1. -->
+        <rect x="360" y="104" width="320" height="64" rx="6" fill="#ffffff" stroke="#0c0a09" stroke-width="1"/>
+        <rect x="372" y="112" width="40" height="12" rx="2" fill="none" stroke="rgba(12,10,9,0.35)" stroke-width="0.8"/>
+        <text x="392" y="120" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">01</text>
+        <text x="520" y="132" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Refresh AWS session credentials</text>
+        <text x="520" y="152" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">aws sts get-caller-identity</text>
+
+        <!-- Step 2. -->
+        <rect x="360" y="200" width="320" height="64" rx="6" fill="#ffffff" stroke="#0c0a09" stroke-width="1"/>
+        <rect x="372" y="208" width="40" height="12" rx="2" fill="none" stroke="rgba(12,10,9,0.35)" stroke-width="0.8"/>
+        <text x="392" y="216" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">02</text>
+        <text x="520" y="228" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Run the lab capability preflight</text>
+        <text x="520" y="248" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">bash scripts/check-lab.sh</text>
+
+        <!-- Step 3. -->
+        <rect x="360" y="296" width="320" height="64" rx="6" fill="#ffffff" stroke="#0c0a09" stroke-width="1"/>
+        <rect x="372" y="304" width="40" height="12" rx="2" fill="none" stroke="rgba(12,10,9,0.35)" stroke-width="0.8"/>
+        <text x="392" y="312" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">03</text>
+        <text x="520" y="324" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Confirm the foundation layer exists</text>
+        <text x="520" y="344" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">ECR · S3 · Secrets Manager · DNS/ACM</text>
+
+        <!-- Step 4. -->
+        <rect x="360" y="392" width="320" height="64" rx="6" fill="#ffffff" stroke="#0c0a09" stroke-width="1"/>
+        <rect x="372" y="400" width="40" height="12" rx="2" fill="none" stroke="rgba(12,10,9,0.35)" stroke-width="0.8"/>
+        <text x="392" y="408" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">04</text>
+        <text x="520" y="420" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Create the disposable platform</text>
+        <text x="520" y="440" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">make up  # EKS + RDS + NLB + add-ons</text>
+
+        <!-- Step 5. -->
+        <rect x="360" y="488" width="320" height="64" rx="6" fill="#ffffff" stroke="#0c0a09" stroke-width="1"/>
+        <rect x="372" y="496" width="40" height="12" rx="2" fill="none" stroke="rgba(12,10,9,0.35)" stroke-width="0.8"/>
+        <text x="392" y="504" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">05</text>
+        <text x="520" y="516" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Migrate, deploy, seed, then smoke-test</text>
+        <text x="520" y="536" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">make db-bootstrap · make deploy · make seed-eks</text>
+
+        <!-- Decision. -->
+        <polygon points="520,584 668,628 520,672 372,628" fill="#ffffff" stroke="#0c0a09" stroke-width="1.2"/>
+        <text x="520" y="624" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Finished this lab session?</text>
+        <text x="520" y="644" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">capture evidence before teardown</text>
+
+        <!-- Loop step. -->
+        <rect x="760" y="596" width="240" height="64" rx="6" fill="rgba(12,10,9,0.03)" stroke="rgba(12,10,9,0.28)" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="880" y="624" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Continue testing or demo work</text>
+        <text x="880" y="644" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">kubectl · curl · k6 · screenshots</text>
+
+        <!-- End / mandatory teardown. -->
+        <rect x="344" y="712" width="352" height="56" rx="20" fill="rgba(187,77,0,0.08)" stroke="#bb4d00" stroke-width="1.2"/>
+        <text x="520" y="736" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Run make down and verify every list is empty</text>
+        <text x="520" y="752" fill="#bb4d00" font-size="8" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle">EKS · RDS · ELB · EC2 · target groups</text>
+
+        <!-- Legend outside the diagram field. -->
+        <line x1="32" y1="792" x2="1168" y2="792" stroke="rgba(12,10,9,0.12)" stroke-width="0.8"/>
+        <text x="32" y="812" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LEGEND</text>
+        <rect x="160" y="800" width="64" height="24" rx="6" fill="#ffffff" stroke="#0c0a09" stroke-width="1"/>
+        <text x="240" y="816" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace">ACTION</text>
+        <polygon points="376,800 416,812 376,824 336,812" fill="#ffffff" stroke="#0c0a09" stroke-width="1"/>
+        <text x="436" y="816" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace">DECISION</text>
+        <line x1="584" y1="812" x2="648" y2="812" stroke="#bb4d00" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+        <text x="668" y="816" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace">MANDATORY TEARDOWN</text>
+      </svg>
+    </div>
+
+    <footer>Source of truth: Makefile · scripts/deploy.sh · scripts/teardown.sh · docs/PROJECT-KNOWLEDGE-BASE.md</footer>
+  </main>
+</body>
+</html>

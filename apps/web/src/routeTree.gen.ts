@@ -27,6 +27,7 @@ import { Route as AdminAdminUsersRouteImport } from './routes/_admin.admin.users
 import { Route as OrganizerOrganizerCheckInRouteImport } from './routes/_organizer.organizer.check-in'
 import { Route as OrganizerOrganizerEventsIndexRouteImport } from './routes/_organizer.organizer.events.index'
 import { Route as OrganizerOrganizerEventsNewRouteImport } from './routes/_organizer.organizer.events.new'
+import { Route as OrganizerOrganizerEventsEventIdEditRouteImport } from './routes/_organizer.organizer.events.$eventId.edit'
 import { Route as OrganizerOrganizerEventsEventIdImagesRouteImport } from './routes/_organizer.organizer.events.$eventId.images'
 import { Route as OrganizerOrganizerEventsEventIdSalesRouteImport } from './routes/_organizer.organizer.events.$eventId.sales'
 
@@ -120,6 +121,12 @@ const OrganizerOrganizerEventsNewRoute =
     path: '/organizer/events/new',
     getParentRoute: () => OrganizerRoute,
   } as any)
+const OrganizerOrganizerEventsEventIdEditRoute =
+  OrganizerOrganizerEventsEventIdEditRouteImport.update({
+    id: '/organizer/events/$eventId/edit',
+    path: '/organizer/events/$eventId/edit',
+    getParentRoute: () => OrganizerRoute,
+  } as any)
 const OrganizerOrganizerEventsEventIdImagesRoute =
   OrganizerOrganizerEventsEventIdImagesRouteImport.update({
     id: '/organizer/events/$eventId/images',
@@ -149,6 +156,7 @@ export interface FileRoutesByFullPath {
   '/organizer/check-in': typeof OrganizerOrganizerCheckInRoute
   '/organizer/events/new': typeof OrganizerOrganizerEventsNewRoute
   '/organizer/events/': typeof OrganizerOrganizerEventsIndexRoute
+  '/organizer/events/$eventId/edit': typeof OrganizerOrganizerEventsEventIdEditRoute
   '/organizer/events/$eventId/images': typeof OrganizerOrganizerEventsEventIdImagesRoute
   '/organizer/events/$eventId/sales': typeof OrganizerOrganizerEventsEventIdSalesRoute
 }
@@ -168,6 +176,7 @@ export interface FileRoutesByTo {
   '/organizer/check-in': typeof OrganizerOrganizerCheckInRoute
   '/organizer/events/new': typeof OrganizerOrganizerEventsNewRoute
   '/organizer/events': typeof OrganizerOrganizerEventsIndexRoute
+  '/organizer/events/$eventId/edit': typeof OrganizerOrganizerEventsEventIdEditRoute
   '/organizer/events/$eventId/images': typeof OrganizerOrganizerEventsEventIdImagesRoute
   '/organizer/events/$eventId/sales': typeof OrganizerOrganizerEventsEventIdSalesRoute
 }
@@ -191,6 +200,7 @@ export interface FileRoutesById {
   '/_organizer/organizer/check-in': typeof OrganizerOrganizerCheckInRoute
   '/_organizer/organizer/events/new': typeof OrganizerOrganizerEventsNewRoute
   '/_organizer/organizer/events/': typeof OrganizerOrganizerEventsIndexRoute
+  '/_organizer/organizer/events/$eventId/edit': typeof OrganizerOrganizerEventsEventIdEditRoute
   '/_organizer/organizer/events/$eventId/images': typeof OrganizerOrganizerEventsEventIdImagesRoute
   '/_organizer/organizer/events/$eventId/sales': typeof OrganizerOrganizerEventsEventIdSalesRoute
 }
@@ -212,6 +222,7 @@ export interface FileRouteTypes {
     | '/organizer/check-in'
     | '/organizer/events/new'
     | '/organizer/events/'
+    | '/organizer/events/$eventId/edit'
     | '/organizer/events/$eventId/images'
     | '/organizer/events/$eventId/sales'
   fileRoutesByTo: FileRoutesByTo
@@ -231,6 +242,7 @@ export interface FileRouteTypes {
     | '/organizer/check-in'
     | '/organizer/events/new'
     | '/organizer/events'
+    | '/organizer/events/$eventId/edit'
     | '/organizer/events/$eventId/images'
     | '/organizer/events/$eventId/sales'
   id:
@@ -253,6 +265,7 @@ export interface FileRouteTypes {
     | '/_organizer/organizer/check-in'
     | '/_organizer/organizer/events/new'
     | '/_organizer/organizer/events/'
+    | '/_organizer/organizer/events/$eventId/edit'
     | '/_organizer/organizer/events/$eventId/images'
     | '/_organizer/organizer/events/$eventId/sales'
   fileRoutesById: FileRoutesById
@@ -395,6 +408,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrganizerOrganizerEventsNewRouteImport
       parentRoute: typeof OrganizerRoute
     }
+    '/_organizer/organizer/events/$eventId/edit': {
+      id: '/_organizer/organizer/events/$eventId/edit'
+      path: '/organizer/events/$eventId/edit'
+      fullPath: '/organizer/events/$eventId/edit'
+      preLoaderRoute: typeof OrganizerOrganizerEventsEventIdEditRouteImport
+      parentRoute: typeof OrganizerRoute
+    }
     '/_organizer/organizer/events/$eventId/images': {
       id: '/_organizer/organizer/events/$eventId/images'
       path: '/organizer/events/$eventId/images'
@@ -450,6 +470,7 @@ interface OrganizerRouteChildren {
   OrganizerOrganizerCheckInRoute: typeof OrganizerOrganizerCheckInRoute
   OrganizerOrganizerEventsNewRoute: typeof OrganizerOrganizerEventsNewRoute
   OrganizerOrganizerEventsIndexRoute: typeof OrganizerOrganizerEventsIndexRoute
+  OrganizerOrganizerEventsEventIdEditRoute: typeof OrganizerOrganizerEventsEventIdEditRoute
   OrganizerOrganizerEventsEventIdImagesRoute: typeof OrganizerOrganizerEventsEventIdImagesRoute
   OrganizerOrganizerEventsEventIdSalesRoute: typeof OrganizerOrganizerEventsEventIdSalesRoute
 }
@@ -458,6 +479,8 @@ const OrganizerRouteChildren: OrganizerRouteChildren = {
   OrganizerOrganizerCheckInRoute: OrganizerOrganizerCheckInRoute,
   OrganizerOrganizerEventsNewRoute: OrganizerOrganizerEventsNewRoute,
   OrganizerOrganizerEventsIndexRoute: OrganizerOrganizerEventsIndexRoute,
+  OrganizerOrganizerEventsEventIdEditRoute:
+    OrganizerOrganizerEventsEventIdEditRoute,
   OrganizerOrganizerEventsEventIdImagesRoute:
     OrganizerOrganizerEventsEventIdImagesRoute,
   OrganizerOrganizerEventsEventIdSalesRoute:

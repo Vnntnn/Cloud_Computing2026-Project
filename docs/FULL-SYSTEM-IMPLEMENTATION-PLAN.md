@@ -73,7 +73,10 @@
   DRAFT → PUBLISHED → CLOSED
               └────→ SUSPENDED by admin
 
-  Only approved organizers may create or publish events. Owners may edit their own draft events; admin actions and organizer changes append to event_change_logs.
+  Only approved organizers may create or publish events. Owners may edit their own draft or
+  published events; closed and suspended events remain immutable for organizers. Event capacity
+  cannot be reduced below the existing ticket quota. Admin actions and organizer changes append to
+  event_change_logs.
 
   ### Registration database
 

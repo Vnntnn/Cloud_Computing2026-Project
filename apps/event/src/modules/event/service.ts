@@ -27,6 +27,14 @@ type EventRow = typeof events.$inferSelect
 type TicketTypeRow = typeof ticketTypes.$inferSelect
 type EventImageRow = typeof eventImages.$inferSelect
 
+async function ticketQuota(eventId: string) {
+  const [{ total = 0 } = {}] = await db
+    .select({ total: sql<number>`coalesce(sum(${ticketTypes.quota}), 0)::int` })
+    .from(ticketTypes)
+    .where(eq(ticketTypes.eventId, eventId))
+  return total
+}
+
 const imageUrl = (row: EventImageRow) =>
   row.objectKey.startsWith('/')
     ? Promise.resolve(row.objectKey)
@@ -230,7 +238,11 @@ export abstract class EventService {
     const [current] = await db.select().from(events).where(eq(events.id, id)).limit(1)
     if (!current) throw new NotFound()
     assertManager(current, user)
-    if (current.status !== 'DRAFT' && user.role !== 'admin') throw new InvalidTransition()
+    if (current.status !== 'DRAFT' && current.status !== 'PUBLISHED' && user.role !== 'admin')
+      throw new InvalidTransition()
+    const totalQuota = await ticketQuota(id)
+    if (input.capacity < totalQuota)
+      throw new InvalidTransition('event capacity cannot be below ticket quota')
     const [row] = await db
       .update(events)
       .set({
@@ -262,10 +274,7 @@ export abstract class EventService {
       (current.status === 'PUBLISHED' && next === 'SUSPENDED' && user.role === 'admin')
     if (!allowed) throw new InvalidTransition()
     if (next === 'PUBLISHED') {
-      const [{ total = 0 } = {}] = await db
-        .select({ total: sql<number>`coalesce(sum(${ticketTypes.quota}), 0)::int` })
-        .from(ticketTypes)
-        .where(eq(ticketTypes.eventId, id))
+      const total = await ticketQuota(id)
       if (total <= 0 || total > current.capacity)
         throw new InvalidTransition('ticket quota must be within event capacity')
     }

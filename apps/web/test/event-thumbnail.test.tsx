@@ -20,4 +20,18 @@ describe('EventThumbnail', () => {
     expect(markup).toContain('aria-label="No cover image for Kubernetes Workshop"')
     expect(markup).toContain('Kubernetes Workshop')
   })
+
+  it('renders a compact thumbnail for table rows', () => {
+    const markup = renderToStaticMarkup(
+      <EventThumbnail
+        src="https://uploads.example/cover.webp"
+        title="Cloud Native Bangkok"
+        variant="compact"
+      />,
+    )
+
+    expect(markup).toContain('size-12')
+    expect(markup).toContain('sizes="48px"')
+    expect(markup).toContain('rounded-xl')
+  })
 })

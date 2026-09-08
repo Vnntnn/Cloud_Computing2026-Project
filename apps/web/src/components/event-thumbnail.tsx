@@ -7,16 +7,25 @@ type EventThumbnailProps = {
   title: string
   eager?: boolean
   className?: string
+  variant?: 'card' | 'compact'
 }
 
-export function EventThumbnail({ src, title, eager = false, className }: EventThumbnailProps) {
+export function EventThumbnail({
+  src,
+  title,
+  eager = false,
+  className,
+  variant = 'card',
+}: EventThumbnailProps) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null)
   const imageSrc = src && src !== failedSrc ? src : null
+  const isCompact = variant === 'compact'
 
   return (
     <div
       className={cn(
         'relative aspect-video w-full overflow-hidden bg-primary/10 text-primary',
+        isCompact && 'size-12 shrink-0 rounded-xl',
         className,
       )}
     >
@@ -26,7 +35,13 @@ export function EventThumbnail({ src, title, eager = false, className }: EventTh
           alt={`Cover for ${title}`}
           loading={eager ? 'eager' : 'lazy'}
           fetchPriority={eager ? 'high' : 'auto'}
-          sizes={eager ? '(min-width: 1024px) 60vw, 100vw' : '(min-width: 1024px) 33vw, 100vw'}
+          sizes={
+            isCompact
+              ? '48px'
+              : eager
+                ? '(min-width: 1024px) 60vw, 100vw'
+                : '(min-width: 1024px) 33vw, 100vw'
+          }
           className="h-full w-full object-cover"
           onError={() => setFailedSrc(imageSrc)}
         />
@@ -34,14 +49,24 @@ export function EventThumbnail({ src, title, eager = false, className }: EventTh
         <div
           role="img"
           aria-label={`No cover image for ${title}`}
-          className="flex h-full flex-col justify-between p-5"
+          className={cn(
+            'flex h-full flex-col justify-between p-5',
+            isCompact && 'items-center justify-center p-0',
+          )}
         >
-          <span className="flex size-10 items-center justify-center rounded-full bg-background/80 ring-1 ring-primary/15">
-            <CalendarDays aria-hidden="true" className="size-5" />
+          <span
+            className={cn(
+              'flex size-10 items-center justify-center rounded-full bg-background/80 ring-1 ring-primary/15',
+              isCompact && 'size-8',
+            )}
+          >
+            <CalendarDays aria-hidden="true" className={cn('size-5', isCompact && 'size-4')} />
           </span>
-          <span className="line-clamp-2 max-w-[24ch] font-heading text-lg font-semibold text-foreground">
-            {title}
-          </span>
+          {isCompact ? null : (
+            <span className="line-clamp-2 max-w-[24ch] font-heading text-lg font-semibold text-foreground">
+              {title}
+            </span>
+          )}
         </div>
       )}
     </div>
