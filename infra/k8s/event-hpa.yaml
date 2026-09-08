@@ -1,0 +1,57 @@
+# Week 4 autoscaling demo (SYSTEM-DESIGN.md §10, TODO.md §5).
+#
+# HPA on `event`, CPU-driven. `event` is the only service with a public read
+# path (`GET /api/events`) that k6 can hammer without auth, so it is the one
+# that scales in the demo.
+#
+#   kubectl apply -f infra/k8s/          # deploy.sh already applies the whole dir
+#   kubectl -n eventide get hpa -w       # project this during the k6 run
+#
+# Requires metrics-server (installed by Terraform — addons.tf). Without it the
+# HPA shows `<unknown>/60%` for the CPU metric and never scales.
+#
+# NOTE on replicas: event.yaml keeps `replicas: 2` so k3d parity still starts
+# two pods. On EKS every `kubectl apply` momentarily resets the count to 2 and
+# the HPA immediately reconciles back — a brief flap during `make deploy`, never
+# during the scaling demo itself. The demo runs k6, not a deploy.
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: event
+  namespace: eventide
+  labels: { app: event }
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: event
+  minReplicas: 2
+  # Hard ceiling. A t3.small gives ~11 pods/node via the VPC CNI; two nodes
+  # minus system + ingress pods leave enough for 8 `event` pods. Going higher
+  # sits pods Pending with an IP-exhaustion error that reads like a bug.
+  # (t3.medium raises the ceiling to ~17/node — see node_instance_type in
+  # 20-platform/variables.tf if the demo wants more headroom.)
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          # % of the 50m CPU request in event.yaml → scales at ~30m sustained.
+          averageUtilization: 60
+  behavior:
+    scaleUp:
+      # React fast so the demo doesn't stall waiting on the default 0s/15s.
+      stabilizationWindowSeconds: 0
+      policies:
+        - { type: Percent, value: 100, periodSeconds: 15 }
+        - { type: Pods, value: 4, periodSeconds: 15 }
+      selectPolicy: Max
+    scaleDown:
+      # Slow enough that a brief dip in the k6 profile doesn't thrash pods,
+      # fast enough to show scale-back within the demo window.
+      stabilizationWindowSeconds: 60
+      policies:
+        - { type: Pods, value: 2, periodSeconds: 30 }

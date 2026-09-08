@@ -1,0 +1,23 @@
+# EKS overlay — `helm ... -f values.yaml -f values.aws.yaml
+#   --set imageRegistry=$(terraform -chdir=infra/terraform/10-foundation output -raw ecr_registry)
+#   --set publicUrl=https://<domain>`
+#
+# ESO stays OFF on EKS: IRSA is unavailable (no iam:CreateOpenIDConnectProvider)
+# and the node role can't read Secrets Manager (iam:AttachRolePolicy denied), so
+# an ExternalSecret would need a static-credential secretRef that expires every
+# session — no better than deploy.sh doing `kubectl create secret` from
+# eventide/rds-master, which is what it does. The ESO templates remain in the
+# chart behind `eso.enabled` for a non-lab environment. See SYSTEM-DESIGN §5.2.1.
+eso:
+  enabled: false
+
+defaults:
+  replicas: 2
+
+services:
+  event:
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 60

@@ -1,0 +1,17 @@
+**/node_modules
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+**/test
+**/*.test.ts
+.git
+.github
+docs
+infra/terraform
+infra/helm
+infra/k8s
+scripts
+*.md
+!README.md
+.env
+.env.*

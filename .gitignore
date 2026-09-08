@@ -1,0 +1,32 @@
+node_modules/
+.DS_Store
+*.log
+
+# build output
+dist/
+.turbo/
+.tanstack/
+*.tsbuildinfo
+
+# env
+.env
+.env.*
+!.env.example
+
+# local tooling
+.claude/settings.local.json
+.claude/skills/
+
+# terraform (commit .terraform.lock.hcl — it pins provider versions)
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars.local
+# real variable values (custom domain, teammate account) — keep the .example
+*.auto.tfvars
+!*.auto.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

@@ -1,0 +1,22 @@
+{
+  "name": "eventide",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "check-types": "turbo run check-types",
+    "test": "turbo run test",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.4",
+    "@types/bun": "^1.2.23",
+    "puppeteer-core": "^25.10.0",
+    "turbo": "^2.5.8",
+    "typescript": "^5.9.2"
+  }
+}

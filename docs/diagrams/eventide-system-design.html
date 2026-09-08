@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eventide System Design</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&amp;family=Noto+Sans:wght@400;600;700;800&amp;display=swap">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --paper: #fafaf7;
+      --ink: #0c0a09;
+      --muted: #7c6d67;
+      --soft: #8f817b;
+      --rule: rgba(12, 10, 9, 0.12);
+      --accent: #bb4d00;
+      --accent-tint: rgba(187, 77, 0, 0.08);
+      --link: #2e5aa8;
+      --sans: 'Noto Sans', system-ui, sans-serif;
+      --mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      min-height: 100vh;
+      padding: 48px 32px;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+    }
+    main { width: min(1200px, 100%); margin: 0 auto; }
+    .eyebrow {
+      margin-bottom: 8px;
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin-bottom: 8px;
+      font-size: 32px;
+      font-weight: 800;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+    .lede {
+      max-width: 760px;
+      margin-bottom: 32px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .diagram { overflow-x: auto; }
+    svg { display: block; width: 100%; min-width: 960px; height: auto; }
+    footer {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--rule);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 8px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Architecture · Logical system view</p>
+    <h1>Eventide service boundaries and runtime communication</h1>
+    <p class="lede">One SPA reaches four independently deployed services through a single origin. Each service owns one database; event images use presigned S3 access.</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 1200 660" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="eventide-system-design-title eventide-system-design-desc">
+        <title id="eventide-system-design-title">Eventide system design</title>
+        <desc id="eventide-system-design-desc">Architecture diagram showing a browser entering through the Eventide delivery layer, four backend services with internal checkout calls, four isolated PostgreSQL databases, and S3 image storage.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#7c6d67"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bb4d00"/></marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+        </defs>
+
+        <rect width="1200" height="660" fill="#fafaf7"/>
+
+        <!-- Logical trust/tier zones. -->
+        <rect x="232" y="72" width="240" height="480" rx="8" fill="rgba(12,10,9,0.02)" stroke="rgba(12,10,9,0.12)" stroke-width="0.8" stroke-dasharray="4,4"/>
+        <rect x="248" y="76" width="112" height="12" rx="2" fill="#fafaf7"/>
+        <text x="304" y="84" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">DELIVERY TIER</text>
+
+        <rect x="496" y="72" width="328" height="480" rx="8" fill="rgba(12,10,9,0.02)" stroke="rgba(12,10,9,0.12)" stroke-width="0.8" stroke-dasharray="4,4"/>
+        <rect x="512" y="76" width="112" height="12" rx="2" fill="#fafaf7"/>
+        <text x="568" y="84" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">SERVICE TIER</text>
+
+        <rect x="848" y="72" width="328" height="480" rx="8" fill="rgba(12,10,9,0.02)" stroke="rgba(12,10,9,0.12)" stroke-width="0.8" stroke-dasharray="4,4"/>
+        <rect x="864" y="76" width="88" height="12" rx="2" fill="#fafaf7"/>
+        <text x="908" y="84" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">DATA TIER</text>
+
+        <!-- Connectors: paint before nodes. -->
+        <line x1="192" y1="284" x2="268" y2="284" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+
+        <path d="M 436 236 H 456 Q 464 236 464 228 V 152 Q 464 144 472 144 H 528" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <path d="M 436 268 H 464 Q 472 268 472 260 V 256 H 528" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <path d="M 436 300 H 472 Q 480 300 480 308 V 360 Q 480 368 488 368 H 528" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <path d="M 436 332 H 480 Q 488 332 488 340 V 472 Q 488 480 496 480 H 528" fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+
+        <path d="M 792 144 H 808 Q 816 144 816 152 V 160 H 888" fill="none" stroke="#7c6d67" stroke-width="1" marker-end="url(#arrow)"/>
+        <path d="M 792 256 H 816 Q 824 256 824 248 V 216 H 888" fill="none" stroke="#7c6d67" stroke-width="1" marker-end="url(#arrow)"/>
+        <path d="M 792 368 H 824 Q 832 368 832 360 V 264 Q 832 256 840 256 H 888" fill="none" stroke="#7c6d67" stroke-width="1" marker-end="url(#arrow)"/>
+        <path d="M 792 480 H 832 Q 840 480 840 472 V 312 Q 840 304 848 304 H 888" fill="none" stroke="#7c6d67" stroke-width="1" marker-end="url(#arrow)"/>
+
+        <line x1="660" y1="328" x2="660" y2="296" stroke="#7c6d67" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <line x1="660" y1="440" x2="660" y2="408" stroke="#7c6d67" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <path d="M 792 280 H 856 Q 864 280 864 288 V 296 a 8,8 0 0,0 0,16 V 432 Q 864 440 872 440 H 888" fill="none" stroke="#2e5aa8" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow-link)"/>
+
+        <!-- Connector labels. -->
+        <rect x="196" y="264" width="64" height="12" rx="2" fill="#fafaf7"/>
+        <text x="228" y="272" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">HTTPS:443</text>
+        <rect x="668" y="304" width="64" height="12" rx="2" fill="#fafaf7"/>
+        <text x="700" y="312" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">SUMMARY</text>
+        <rect x="668" y="416" width="64" height="12" rx="2" fill="#fafaf7"/>
+        <text x="700" y="424" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">CONFIRM</text>
+        <rect x="796" y="260" width="64" height="12" rx="2" fill="#fafaf7"/>
+        <text x="828" y="268" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">PRESIGN</text>
+
+        <!-- Browser. -->
+        <rect x="40" y="240" width="152" height="88" rx="6" fill="rgba(124,109,103,0.10)" stroke="#8f817b" stroke-width="1"/>
+        <rect x="52" y="248" width="56" height="12" rx="2" fill="none" stroke="rgba(124,109,103,0.55)" stroke-width="0.8"/>
+        <text x="80" y="256" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">CLIENT</text>
+        <text x="116" y="284" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Browser</text>
+        <text x="116" y="304" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">React SPA · bearer JWT</text>
+
+        <!-- Delivery. -->
+        <rect x="268" y="208" width="168" height="176" rx="6" fill="rgba(187,77,0,0.08)" stroke="#bb4d00" stroke-width="1.2"/>
+        <rect x="280" y="216" width="48" height="12" rx="2" fill="none" stroke="rgba(187,77,0,0.55)" stroke-width="0.8"/>
+        <text x="304" y="224" fill="#bb4d00" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">EDGE</text>
+        <text x="352" y="256" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Delivery layer</text>
+        <text x="352" y="280" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">Route 53 → NLB → ingress</text>
+        <text x="352" y="300" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">/ serves nginx SPA</text>
+        <text x="352" y="320" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">/api/* routes by prefix</text>
+        <text x="352" y="348" fill="#bb4d00" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">one origin · no CORS</text>
+
+        <!-- Auth service. -->
+        <rect x="528" y="104" width="264" height="80" rx="6" fill="#ffffff" stroke="#0c0a09" stroke-width="1"/>
+        <rect x="540" y="112" width="40" height="12" rx="2" fill="none" stroke="rgba(12,10,9,0.35)" stroke-width="0.8"/>
+        <text x="560" y="120" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">API</text>
+        <text x="660" y="136" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Auth service</text>
+        <text x="660" y="156" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">better-auth · roles · JWT issuance</text>
+        <text x="660" y="172" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">publishes JWKS; peers verify locally</text>
+
+        <!-- Event service. -->
+        <rect x="528" y="216" width="264" height="80" rx="6" fill="#ffffff" stroke="#0c0a09" stroke-width="1"/>
+        <rect x="540" y="224" width="40" height="12" rx="2" fill="none" stroke="rgba(12,10,9,0.35)" stroke-width="0.8"/>
+        <text x="560" y="232" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">API</text>
+        <text x="660" y="248" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Event service</text>
+        <text x="660" y="268" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">events · venues · ticket types</text>
+        <text x="660" y="284" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">presigned image access</text>
+
+        <!-- Registration service. -->
+        <rect x="528" y="328" width="264" height="80" rx="6" fill="#ffffff" stroke="#0c0a09" stroke-width="1"/>
+        <rect x="540" y="336" width="40" height="12" rx="2" fill="none" stroke="rgba(12,10,9,0.35)" stroke-width="0.8"/>
+        <text x="560" y="344" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">API</text>
+        <text x="660" y="360" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Registration service</text>
+        <text x="660" y="380" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">inventory · orders · tickets · check-in</text>
+        <text x="660" y="396" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">owns the capacity invariant</text>
+
+        <!-- Payment service. -->
+        <rect x="528" y="440" width="264" height="80" rx="6" fill="#ffffff" stroke="#0c0a09" stroke-width="1"/>
+        <rect x="540" y="448" width="40" height="12" rx="2" fill="none" stroke="rgba(12,10,9,0.35)" stroke-width="0.8"/>
+        <text x="560" y="456" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">API</text>
+        <text x="660" y="472" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">Payment service</text>
+        <text x="660" y="492" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">mock gateway · refunds · reconcile</text>
+        <text x="660" y="508" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">never trusts browser-supplied totals</text>
+
+        <!-- RDS store. -->
+        <rect x="888" y="120" width="248" height="208" rx="6" fill="rgba(187,77,0,0.08)" stroke="#bb4d00" stroke-width="1.2"/>
+        <rect x="900" y="128" width="48" height="12" rx="2" fill="none" stroke="rgba(187,77,0,0.55)" stroke-width="0.8"/>
+        <text x="924" y="136" fill="#bb4d00" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">STORE</text>
+        <text x="1012" y="164" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">One RDS PostgreSQL instance</text>
+        <text x="1012" y="184" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">logical isolation; no cross-DB joins</text>
+        <rect x="904" y="200" width="104" height="24" rx="4" fill="rgba(12,10,9,0.05)" stroke="#7c6d67" stroke-width="0.8"/>
+        <text x="956" y="216" fill="#0c0a09" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">auth_db</text>
+        <rect x="1016" y="200" width="104" height="24" rx="4" fill="rgba(12,10,9,0.05)" stroke="#7c6d67" stroke-width="0.8"/>
+        <text x="1068" y="216" fill="#0c0a09" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">event_db</text>
+        <rect x="904" y="232" width="104" height="24" rx="4" fill="rgba(12,10,9,0.05)" stroke="#7c6d67" stroke-width="0.8"/>
+        <text x="956" y="248" fill="#0c0a09" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">registration_db</text>
+        <rect x="1016" y="232" width="104" height="24" rx="4" fill="rgba(12,10,9,0.05)" stroke="#7c6d67" stroke-width="0.8"/>
+        <text x="1068" y="248" fill="#0c0a09" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">payment_db</text>
+        <text x="1012" y="288" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">TLS:5432 · db.t3.micro · private</text>
+
+        <!-- S3 store. -->
+        <rect x="888" y="392" width="248" height="96" rx="6" fill="rgba(12,10,9,0.05)" stroke="#7c6d67" stroke-width="1"/>
+        <rect x="900" y="400" width="48" height="12" rx="2" fill="none" stroke="rgba(124,109,103,0.55)" stroke-width="0.8"/>
+        <text x="924" y="408" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">STORE</text>
+        <text x="1012" y="436" fill="#0c0a09" font-size="12" font-weight="700" font-family="'Noto Sans', sans-serif" text-anchor="middle">S3 uploads</text>
+        <text x="1012" y="456" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">event cover images · private</text>
+        <text x="1012" y="472" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">presigned PUT / GET</text>
+
+        <!-- Legend strip. -->
+        <line x1="32" y1="584" x2="1168" y2="584" stroke="rgba(12,10,9,0.12)" stroke-width="0.8"/>
+        <text x="32" y="608" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LEGEND</text>
+        <rect x="160" y="596" width="64" height="24" rx="6" fill="#ffffff" stroke="#0c0a09" stroke-width="1"/>
+        <text x="240" y="612" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace">SERVICE</text>
+        <rect x="352" y="596" width="64" height="24" rx="6" fill="rgba(12,10,9,0.05)" stroke="#7c6d67" stroke-width="1"/>
+        <text x="432" y="612" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace">STORE</text>
+        <rect x="544" y="596" width="64" height="24" rx="6" fill="rgba(187,77,0,0.08)" stroke="#bb4d00" stroke-width="1.2"/>
+        <text x="624" y="612" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace">FOCAL BOUNDARY</text>
+        <line x1="792" y1="608" x2="856" y2="608" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <text x="872" y="612" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace">HTTP / EXTERNAL</text>
+        <line x1="1016" y1="608" x2="1080" y2="608" stroke="#7c6d67" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <text x="1096" y="612" fill="#7c6d67" font-size="8" font-family="'Geist Mono', monospace">INTERNAL</text>
+      </svg>
+    </div>
+
+    <footer>Architecture source: docs/SYSTEM-DESIGN.md · infra/helm/eventide/values.yaml · packages/db schemas</footer>
+  </main>
+</body>
+</html>

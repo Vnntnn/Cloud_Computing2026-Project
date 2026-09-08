@@ -1,0 +1,16 @@
+# Copy to `google.auto.tfvars` (gitignored, auto-loaded) and paste the OAuth
+# client credentials from Google Cloud Console → APIs & Services → Credentials.
+#
+#   cp google.auto.tfvars.example google.auto.tfvars
+#   # fill in the two values
+#   terraform -chdir=infra/terraform/10-foundation apply
+#
+# Redirect URI to register in the console (exact match, HTTPS, no wildcard):
+#   https://events.<domain>/api/auth/callback/google      (deployed)
+#   http://localhost:3000/api/auth/callback/google        (dev — localhost is allowed)
+#
+# Only 10-foundation reads this. scripts/deploy.sh picks the secret up on the
+# next `make deploy` and injects it into eventide-auth.
+
+google_client_id     = ""
+google_client_secret = ""

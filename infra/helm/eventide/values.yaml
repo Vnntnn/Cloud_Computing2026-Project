@@ -1,0 +1,138 @@
+# Defaults. Override with values.local.yaml (k3d) or values.aws.yaml (EKS);
+# image tags are pinned per deploy with `--set services.<x>.image.tag=...`.
+
+namespace: eventide
+
+# Public origin of the deployed system — the JWT `iss`/`aud` and better-auth's
+# BETTER_AUTH_URL. On k3d it is the k3d loadbalancer; on EKS the custom domain.
+publicUrl: http://localhost:8080
+
+# Prepended to every image repository. "" keeps the bare repo (the k3d in-cluster
+# registry rewrites it); on EKS this is the ECR registry host.
+imageRegistry: ""
+imagePullPolicy: IfNotPresent
+
+# NODE_ENV for the app containers. "production" turns on the env.ts guards that
+# refuse to boot without the injected secrets.
+nodeEnv: production
+
+ingress:
+  className: nginx
+  # "" = match any host (k3d). On EKS set the custom domain.
+  host: ""
+
+# External Secrets Operator. false → the eventide-<svc> Secrets are expected to
+# already exist (scripts create them from a local file / terraform output).
+eso:
+  enabled: false
+  # A ClusterSecretStore this chart also renders when eso.enabled.
+  createClusterSecretStore: true
+  storeName: eventide-secretstore
+  region: us-east-1
+  # ServiceAccount the store authenticates as. Empty → default (node role via
+  # IMDS — IRSA is unavailable in the lab, SYSTEM-DESIGN §5.3).
+  serviceAccount: ""
+  refreshInterval: 1h
+  # Secrets Manager secret name -> k8s Secret name. Keys are copied verbatim.
+  secrets:
+    eventide-auth: eventide/auth
+    eventide-event: eventide/event
+    eventide-registration: eventide/registration
+    eventide-payment: eventide/payment
+    eventide-rds-master: eventide/rds-master
+
+# One-shot Job: create the 3 databases + roles on RDS, run migrations. Disabled
+# by default — run it explicitly after the DB exists.
+dbBootstrap:
+  enabled: false
+  image:
+    repository: eventide/db-bootstrap
+    tag: latest
+  masterSecretName: eventide-rds-master
+
+defaults:
+  replicas: 2
+  resources:
+    requests: { cpu: 50m, memory: 96Mi }
+    limits: { cpu: 300m, memory: 256Mi }
+  # distroless :nonroot is uid/gid 65532 — must be numeric (SYSTEM-DESIGN §12.1).
+  runAsUser: 65532
+  readOnlyRootFs: true
+
+services:
+  auth:
+    port: 3000
+    # /api/admin/{users,organizers,audit-logs} are auth's; /api/admin/events is
+    # event's — ingress-nginx routes by longest-matching prefix, so the split works.
+    ingressPaths:
+      - /api/auth
+      - /api/users
+      - /api/admin/users
+      - /api/admin/organizers
+      - /api/admin/audit-logs
+    image: { repository: eventide/auth, tag: latest }
+    secretName: eventide-auth
+    env:
+      BETTER_AUTH_URL: "{{ .Values.publicUrl }}"
+
+  event:
+    port: 3000
+    # /health and /swagger at the root are event's smoke-test surfaces.
+    ingressPaths:
+      - /api/events
+      - /api/categories
+      - /api/venues
+      - /api/ticket-types
+      - /api/organizer/events
+      - /api/admin/events
+      - /health
+      - /swagger
+    image: { repository: eventide/event, tag: latest }
+    secretName: eventide-event
+    env:
+      AUTH_JWKS_URL: "http://auth.{{ .Values.namespace }}.svc.cluster.local/api/auth/jwks"
+      AUTH_BASE_URL: "{{ .Values.publicUrl }}"
+    hpa:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 60
+
+  registration:
+    port: 3000
+    ingressPaths: ["/api/orders", "/api/tickets", "/api/check-ins"]
+    image: { repository: eventide/registration, tag: latest }
+    secretName: eventide-registration
+    env:
+      AUTH_JWKS_URL: "http://auth.{{ .Values.namespace }}.svc.cluster.local/api/auth/jwks"
+      AUTH_BASE_URL: "{{ .Values.publicUrl }}"
+      EVENT_SERVICE_URL: "http://event.{{ .Values.namespace }}.svc.cluster.local"
+    expiry:
+      enabled: true
+      schedule: "* * * * *"
+
+  payment:
+    port: 3000
+    replicas: 1
+    ingressPaths: ["/api/payments"]
+    image: { repository: eventide/payment, tag: latest }
+    secretName: eventide-payment
+    env:
+      AUTH_JWKS_URL: "http://auth.{{ .Values.namespace }}.svc.cluster.local/api/auth/jwks"
+      AUTH_BASE_URL: "{{ .Values.publicUrl }}"
+      REGISTRATION_SERVICE_URL: "http://registration.{{ .Values.namespace }}.svc.cluster.local"
+
+  # Static React SPA on nginx-unprivileged (uid 101, :8080). Catches every path
+  # the API rules don't — one origin, no CORS, no CloudFront (denied in the lab).
+  web:
+    port: 8080
+    replicas: 1
+    runAsUser: 101
+    readOnlyRootFs: false # nginx writes /var/cache/nginx, /var/run
+    ingressPaths: ["/"]
+    image: { repository: eventide/web, tag: latest }
+    livePath: /
+    readyPath: /
+    resources:
+      requests: { cpu: 10m, memory: 24Mi }
+      limits: { cpu: 100m, memory: 64Mi }

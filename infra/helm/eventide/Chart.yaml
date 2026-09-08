@@ -1,0 +1,12 @@
+apiVersion: v2
+name: eventide
+description: >-
+  The three Eventide microservices (auth, event, registration) on Kubernetes —
+  one chart, one release, values-local.yaml for k3d and values-aws.yaml for EKS
+  (SYSTEM-DESIGN §12). ingress-nginx and the NLB are NOT here — they belong to
+  the cluster lifecycle (20-platform / scripts/k3d-up.sh).
+type: application
+version: 0.1.0
+# Application version tracks nothing meaningful yet — images are pinned per
+# deploy via --set, not here.
+appVersion: "0.0.0"

@@ -1,0 +1,91 @@
+AWS Academy Learner Lab capability probe
+Account : 735838417080   Role: voclabs   Region: us-east-1
+Date    : 2026-09-06
+Tool    : scripts/check-lab.sh (plus ad-hoc calls)
+
+RE-RUN AFTER ANY LAB RESET. Role name suffixes change, and they differ in
+each teammate's account. Never hardcode these ARNs — use data "aws_iam_roles"
+with a name_regex.
+
+=== ALLOWED ===
+eks              versions offered: 1.36 1.35 1.34 1.33 1.32 1.31
+rds              describe-db-instances OK (empty)
+secretsmanager   list-secrets OK (empty)
+ecr              describe-repositories OK (empty)
+s3               ls OK (empty)
+ec2              describe-vpcs / subnets / igw OK
+
+IAM roles pre-created by the lab (proof EKS is an intended service):
+  c219141a5531090l16607217t1w735838-LabEksClusterRole-SFJmM2qlQyLO
+    trusts eks.amazonaws.com
+    AmazonEKSClusterPolicy, AmazonEKSNetworkingPolicy, AmazonEKSComputePolicy,
+    AmazonEKSBlockStoragePolicy, AmazonEKSLoadBalancingPolicy
+  c219141a5531090l16607217t1w735838417-LabEksNodeRole-SCC8imJNOjRW
+    trusts ec2.amazonaws.com
+    AmazonEKS_CNI_Policy, AmazonEC2ContainerRegistryReadOnly, AmazonEKSWorkerNodePolicy
+
+LabRole attached policies:
+  VocLabPolicy1/2/3, AmazonSSMManagedInstanceCore, AmazonEKSClusterPolicy,
+  AmazonEC2ContainerRegistryReadOnly, AmazonEKSWorkerNodePolicy
+
+Default VPC: vpc-07338cd8d3c8022aa  (172.31.0.0/16)
+  igw-05c04c76e2fd72063 ; NO NAT gateways
+  subnet-0bef998fde081dd6c  us-east-1a  172.31.32.0/20  public
+  subnet-0507f266dd0e57bfc  us-east-1b  172.31.0.0/20   public
+  subnet-0f07a74caa058679c  us-east-1c  172.31.80.0/20  public
+  subnet-032c41d5bca717131  us-east-1d  172.31.16.0/20  public
+  subnet-0ab78b7c96dbac1a1  us-east-1e  172.31.48.0/20  public  <-- AVOID, capacity
+  subnet-09003315819a9ee9a  us-east-1f  172.31.64.0/20  public
+  USE 1a / 1b / 1c ONLY.
+
+=== DENIED ===
+iam:CreateRole                    -> reuse the lab roles, create_iam_role = false
+iam:CreateOpenIDConnectProvider   -> NO IRSA, and no GitHub Actions OIDC federation
+servicequotas:GetServiceQuota     -> vCPU ceiling unknown
+s3:GetBucketObjectLockConfiguration
+                                  -> org SCP p-lfgm2hv3 (arn:aws:organizations::
+                                     710377385000:policy/o-rdwfza28us/service_control_policy/
+                                     p-lfgm2hv3). EXPLICIT DENY. The AWS provider reads this
+                                     API on every `aws_s3_bucket` refresh, so an S3 bucket
+                                     CANNOT be a managed `aws_s3_bucket` resource. Probed
+                                     2026-09-07: it is the ONLY blocked S3 read. Every other
+                                     get-bucket-* call (versioning, encryption, PAB, tagging,
+                                     acl, ownership, cors, lifecycle, ...) is allowed.
+                                     Workaround in infra/terraform/10-foundation/s3.tf:
+                                     create the bucket via CLI (terraform_data + local-exec),
+                                     consume it as `data "aws_s3_bucket"`, manage all config
+                                     through the granular aws_s3_bucket_* resources.
+
+=== ALLOWED (added 2026-09-07, applying 10-foundation) ===
+ecr              create-repository, put-lifecycle-policy OK
+secretsmanager   create-secret (recovery_window_in_days=0), put-secret-value OK
+s3               create-bucket, put-bucket-{cors,encryption,lifecycle,ownership-controls},
+                 put-public-access-block OK ; S3 native tfstate locking (use_lockfile) OK
+
+=== DENIED (added 2026-09-07, applying 20-platform) ===
+iam:GetRole on role "voclabs"    -> EXPLICIT DENY in identity policy
+                                    arn:aws:iam::735838417080:policy/Pvoclabs2.
+                                    Breaks terraform-aws-modules/eks (ALL versions): it
+                                    reads `data "aws_iam_session_context" "current"` with
+                                    arn = caller ARN unconditionally, which GetRole's the
+                                    session's role. No module flag disables it.
+                                    FIX: raw aws_eks_cluster + aws_eks_node_group, with
+                                    access_config.bootstrap_cluster_creator_admin_permissions
+                                    = true (EKS resolves the creator server-side, no IAM
+                                    read). See infra/terraform/20-platform/eks.tf.
+                                    NB: `aws iam get-role --role-name LabRole` DOES work —
+                                    the deny is scoped to voclabs specifically.
+
+=== ALLOWED (added 2026-09-07, 20-platform applied clean, 19 resources) ===
+eks              create-cluster (1.33), create-addon (vpc-cni/kube-proxy/coredns),
+                 create-nodegroup (AL2023, t3.small), access_config API_AND_CONFIG_MAP OK
+rds              create-db-instance (db.t3.micro, gp3, storage_encrypted=true w/ aws/rds
+                 key), create-db-subnet-group OK
+elbv2            create NLB + target-groups + listeners + autoscaling attachment OK
+ec2              create security-group, vpc-security-group-ingress-rule OK
+kubectl          2 nodes Ready, cluster-creator has admin via access entry (no aws-auth edit)
+
+=== NOT YET PROBED ===
+iam:AttachRolePolicy   decides whether pods can get S3 + Secrets Manager from the
+                       node role via IMDS, deleting the per-session credential script
+route53 / acm / cloudfront   the entire TLS + custom-domain design depends on these

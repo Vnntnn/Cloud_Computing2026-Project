@@ -1,0 +1,31 @@
+{
+  "name": "@eventide/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./auth": "./src/auth/index.ts",
+    "./event": "./src/event/schema.ts",
+    "./registration": "./src/registration/schema.ts",
+    "./payment": "./src/payment/schema.ts"
+  },
+  "scripts": {
+    "lint": "biome check .",
+    "check-types": "tsc --noEmit",
+    "test": "bun test",
+    "generate:auth": "drizzle-kit generate --config drizzle.auth.config.ts",
+    "generate:event": "drizzle-kit generate --config drizzle.event.config.ts",
+    "generate:registration": "drizzle-kit generate --config drizzle.registration.config.ts",
+    "generate:payment": "drizzle-kit generate --config drizzle.payment.config.ts",
+    "db:bootstrap": "bun scripts/bootstrap.ts",
+    "db:seed": "bun scripts/seed.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "drizzle-kit": "^0.31.5"
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.2.4/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**",
+      "!.agents",
+      "!**/migrations",
+      "!**/dist",
+      "!**/.turbo",
+      "!**/*.gen.ts",
+      "!packages/db/src/auth/schema.ts",
+      "!apps/web/src/index.css",
+      "!apps/web/src/routeTree.gen.ts"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "assist": {
+    "actions": { "source": { "organizeImports": "on" } }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "complexity": {
+        "noStaticOnlyClass": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": { "quoteStyle": "single", "semicolons": "asNeeded" }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.config.ts"],
+      "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } }
+    },
+    {
+      "includes": ["apps/web/src/components/ui/**"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noDocumentCookie": "off" },
+          "correctness": { "useExhaustiveDependencies": "off" }
+        }
+      }
+    }
+  ]
+}

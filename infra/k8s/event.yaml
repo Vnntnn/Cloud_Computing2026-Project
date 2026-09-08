@@ -1,0 +1,104 @@
+# First service on real EKS (week 1 Day 3). Raw manifests — the single Helm chart
+# with values-local / values-aws lands in week 2. No DB yet: apps/event's
+# DATABASE_URL is optional until ESO is wired.
+#
+#   IMAGE=$(terraform -chdir=infra/terraform/10-foundation output -raw ecr_registry)/eventide/event:v1
+#   kubectl apply -f infra/k8s/event.yaml
+#   kubectl -n eventide set image deployment/event event=$IMAGE   # if tag changed
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: eventide
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event
+  namespace: eventide
+  labels: { app: event }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: event }
+  template:
+    metadata:
+      labels: { app: event }
+    spec:
+      # Spread across both nodes.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: event }
+      containers:
+        - name: event
+          # Overwritten by `kubectl set image` / the deploy script per build.
+          image: PLACEHOLDER_EVENT_IMAGE
+          ports:
+            - { name: http, containerPort: 3000 }
+          env:
+            - { name: PORT, value: "3000" }
+            - { name: NODE_ENV, value: "production" }
+          # Liveness never touches the DB (CLAUDE.md hard rule).
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 192Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+      # distroless :nonroot is uid/gid 65532 — must be given numerically or
+      # runAsNonRoot can't verify a *named* user and the kubelet refuses to start it.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: event
+  namespace: eventide
+  labels: { app: event }
+spec:
+  selector: { app: event }
+  ports:
+    - { name: http, port: 80, targetPort: http }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: event
+  namespace: eventide
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          # Design routing: /api/events/* → event.
+          - path: /api/events
+            pathType: Prefix
+            backend: { service: { name: event, port: { number: 80 } } }
+          # Day-3 smoke-test surfaces (event serves these at the root).
+          - path: /health
+            pathType: Prefix
+            backend: { service: { name: event, port: { number: 80 } } }
+          - path: /swagger
+            pathType: Prefix
+            backend: { service: { name: event, port: { number: 80 } } }

@@ -1,0 +1,219 @@
+@import 'tailwindcss';
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/noto-sans";
+
+/* Class-based dark variant is kept so shadcn primitives' internal `dark:`
+   utilities compile against a `.dark` ancestor — which the app never adds.
+   The build ships light-only and deterministically so (removing this line
+   would hand dark mode back to `prefers-color-scheme`). */
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.147 0.004 49.3);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.147 0.004 49.3);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.147 0.004 49.3);
+  --primary: oklch(0.555 0.163 48.998);
+  --primary-foreground: oklch(0.987 0.022 95.277);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.96 0.002 17.2);
+  --muted-foreground: oklch(0.547 0.021 43.1);
+  --accent: oklch(0.96 0.002 17.2);
+  --accent-foreground: oklch(0.214 0.009 43.1);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0.005 34.3);
+  --input: oklch(0.922 0.005 34.3);
+  --ring: oklch(0.714 0.014 41.2);
+  --chart-1: oklch(0.879 0.169 91.605);
+  --chart-2: oklch(0.769 0.188 70.08);
+  --chart-3: oklch(0.666 0.179 58.318);
+  --chart-4: oklch(0.555 0.163 48.998);
+  --chart-5: oklch(0.473 0.137 46.201);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.986 0.002 67.8);
+  --sidebar-foreground: oklch(0.147 0.004 49.3);
+  --sidebar-primary: oklch(0.666 0.179 58.318);
+  --sidebar-primary-foreground: oklch(0.987 0.022 95.277);
+  --sidebar-accent: oklch(0.96 0.002 17.2);
+  --sidebar-accent-foreground: oklch(0.214 0.009 43.1);
+  --sidebar-border: oklch(0.922 0.005 34.3);
+  --sidebar-ring: oklch(0.714 0.014 41.2);
+}
+
+@theme inline {
+  --font-mono: 'Geist Mono Variable', monospace;
+  --font-heading: 'Noto Sans Variable', sans-serif;
+  --animate-loading-sweep: loading-sweep 1.4s ease-in-out infinite;
+
+  @keyframes loading-sweep {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(350%);
+    }
+  }
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-mono;
+  }
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Minimal surface treatment.
+
+   Applied HERE, not by editing the shadcn primitives in components/ui, so that
+   re-running `shadcn add` or updating a component never clobbers it. These
+   rules hook the stable `data-slot` attributes every shadcn primitive renders.
+   They are unlayered, so they win over Tailwind's utility classes without
+   needing `!important`.
+
+   Direction: no elevation shadows, no glow rings. A card is one calm bordered
+   surface; a hairline (inset to the content, not the card edge) appears only
+   under a leading title block and above an action row — never a stack of
+   rules. Overlays get a single hairline border instead of a drop shadow.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Cards — one flat bordered surface, no shadow, no ring. shadcn's own
+   internal gap/padding is left intact. */
+[data-slot='card'] {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+/* Hairline under a leading title block (titled-panel look)... */
+[data-slot='card-header']:first-child:not(:last-child) {
+  position: relative;
+  padding-bottom: var(--card-spacing);
+}
+[data-slot='card-header']:first-child:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  inset-inline: var(--card-spacing);
+  bottom: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ...and above an action row. */
+[data-slot='card-footer']:not(:only-child) {
+  position: relative;
+  padding-top: var(--card-spacing);
+}
+[data-slot='card-footer']:not(:only-child)::before {
+  content: '';
+  position: absolute;
+  inset-inline: var(--card-spacing);
+  top: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* Overlays — swap the drop shadow / glow ring for one hairline border. */
+[data-slot='dialog-content'],
+[data-slot='alert-dialog-content'],
+[data-slot='select-content'],
+[data-slot='sheet-content'] {
+  box-shadow: none;
+}
+[data-slot='dialog-content'],
+[data-slot='alert-dialog-content'],
+[data-slot='select-content'] {
+  border: 1px solid var(--border);
+}
+
+/* Select menu — solid surface instead of the frosted-glass blur. */
+[data-slot='select-content'] {
+  background-color: var(--popover);
+}
+[data-slot='select-content']::before {
+  display: none;
+}
+
+/* Popover-y bits that lean on shadow elsewhere. */
+[data-slot='navigation-menu-content'],
+[data-slot='navigation-menu-viewport'] {
+  box-shadow: none;
+}
+
+/* Dropdown menu — same hairline-not-shadow treatment as the other overlays,
+   and a solid surface instead of the frosted-glass blur. */
+[data-slot='dropdown-menu-content'],
+[data-slot='dropdown-menu-sub-content'] {
+  box-shadow: none;
+  border: 1px solid var(--border);
+  background-color: var(--popover);
+}
+[data-slot='dropdown-menu-content']::before,
+[data-slot='dropdown-menu-sub-content']::before {
+  display: none;
+}
+
+/* Sidebar — the `inset` variant floats the content pane on a drop shadow and a
+   detached rounded card. Keep the calm bordered look: no shadow, a hairline
+   seam against the rail instead. */
+[data-slot='sidebar-inner'] {
+  box-shadow: none;
+}
+[data-slot='sidebar-inset'] {
+  box-shadow: none;
+}
+@media (min-width: 768px) {
+  [data-slot='sidebar-inset'] {
+    border: 1px solid var(--border);
+  }
+}

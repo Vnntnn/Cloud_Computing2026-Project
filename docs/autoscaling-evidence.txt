@@ -1,0 +1,41 @@
+### HPA event history (full 2->8->2 cycle)
+Events:
+  Type     Reason                        Age    From                       Message
+  ----     ------                        ----   ----                       -------
+  Warning  FailedGetResourceMetric       13m    horizontal-pod-autoscaler  failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+  Warning  FailedComputeMetricsReplicas  13m    horizontal-pod-autoscaler  invalid metrics (1 invalid out of 1), first error is: failed to get cpu resource metric value: failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)
+  Normal   SuccessfulRescale             10m    horizontal-pod-autoscaler  New size: 3; reason: cpu resource utilization (percentage of request) above target
+  Normal   SuccessfulRescale             10m    horizontal-pod-autoscaler  New size: 5; reason: cpu resource utilization (percentage of request) above target
+  Normal   SuccessfulRescale             10m    horizontal-pod-autoscaler  New size: 7; reason: cpu resource utilization (percentage of request) above target
+  Normal   SuccessfulRescale             10m    horizontal-pod-autoscaler  New size: 8; reason: cpu resource utilization (percentage of request) above target
+  Normal   SuccessfulRescale             3m13s  horizontal-pod-autoscaler  New size: 6; reason: All metrics below target
+  Normal   SuccessfulRescale             2m42s  horizontal-pod-autoscaler  New size: 4; reason: All metrics below target
+  Normal   SuccessfulRescale             2m12s  horizontal-pod-autoscaler  New size: 2; reason: All metrics below target
+
+### k6 summary
+  █ TOTAL RESULTS 
+
+    checks_total.......: 197000 452.737126/s
+    checks_succeeded...: 99.89% 196802 out of 197000
+    checks_failed......: 0.10%  198 out of 197000
+
+    ✗ status is 200
+      ↳  99% — ✓ 98401 / ✗ 99
+    ✗ body is a JSON array
+      ↳  99% — ✓ 98401 / ✗ 99
+
+    HTTP
+    http_req_duration..............: avg=316.74ms min=240.29ms med=261.56ms p(90)=393.53ms p(95)=430.56ms max=38.3s
+      { expected_response:true }...: avg=316.35ms min=240.29ms med=261.54ms p(90)=393.06ms p(95)=429.02ms max=38.3s
+    http_req_failed................: 0.10%  99 out of 98500
+    http_reqs......................: 98500  226.368563/s
+
+    EXECUTION
+    iteration_duration.............: avg=618ms    min=540.66ms med=562.38ms p(90)=695.6ms  p(95)=737.03ms max=38.6s
+    iterations.....................: 98500  226.368563/s
+    vus............................: 2      min=0           max=200
+    vus_max........................: 200    min=200         max=200
+
+    NETWORK
+    data_received..................: 559 MB 1.3 MB/s
+    data_sent......................: 13 MB  29 kB/s
