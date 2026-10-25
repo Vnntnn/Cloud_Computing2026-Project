@@ -61,6 +61,22 @@ variable "node_desired_size" {
   default = 2
 }
 
+variable "egress_node_min_size" {
+  description = "Nodes of the NAT-egress tier (auth, payment, mail-worker)."
+  type        = number
+  default     = 1
+}
+
+variable "egress_node_max_size" {
+  type    = number
+  default = 2
+}
+
+variable "egress_node_desired_size" {
+  type    = number
+  default = 1
+}
+
 variable "ingress_http_nodeport" {
   description = "NodePort ingress-nginx exposes for HTTP (infra/helm/ingress-nginx.values.yaml). The NLB forwards :80 here, and :443 after TLS termination."
   type        = number
@@ -106,4 +122,22 @@ variable "tool_images" {
   description = "Non-service images that get an ECR repo (the migrate Job, the static SPA)."
   type        = list(string)
   default     = ["db-bootstrap", "web"]
+}
+
+variable "waf_mode" {
+  description = "WAF on the ALB: \"count\" (log what would be blocked) or \"block\" (enforce). Counted for the first session (2026-10-26) and flipped once the real flows showed no false positives; use count again when adding a feature that posts unusual bodies."
+  type        = string
+  default     = "block"
+}
+
+variable "waf_rate_limit" {
+  description = "Requests per 5 minutes from one IP before the WAF rate rule acts. Raise it for a single-source load test."
+  type        = number
+  default     = 10000
+}
+
+variable "alert_email" {
+  description = "Email subscribed to the CloudWatch alarms' SNS topic (eventide-alerts). Empty = nobody; the topic and alarms still exist. AWS sends a confirmation mail first."
+  type        = string
+  default     = ""
 }

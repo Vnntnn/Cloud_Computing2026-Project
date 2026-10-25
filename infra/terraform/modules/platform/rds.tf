@@ -21,20 +21,28 @@ resource "random_password" "better_auth" {
 
 resource "aws_db_subnet_group" "main" {
   name       = "${var.project}-db"
-  subnet_ids = data.aws_subnets.abc.ids
+  subnet_ids = var.data_subnet_ids
 }
 
 resource "aws_security_group" "rds" {
   name        = "${var.project}-rds"
   description = "RDS PostgreSQL reachable only from the EKS node security group"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = var.vpc_id
 
   ingress {
-    description     = "PostgreSQL from EKS nodes"
+    description     = "PostgreSQL from EKS nodes (the migrate Job connects direct)"
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
     security_groups = [local.node_security_group_id]
+  }
+
+  ingress {
+    description     = "PostgreSQL from RDS Proxy"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.proxy.id]
   }
 
   egress {

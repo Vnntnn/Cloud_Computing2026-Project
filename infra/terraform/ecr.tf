@@ -49,3 +49,16 @@ resource "aws_ecr_lifecycle_policy" "service" {
     ]
   })
 }
+
+# Mirrors of the two public images Terraform's Helm releases install. The edge tier has
+# no route to the internet, so it can't pull from registry.k8s.io; scripts/mirror-images.sh
+# copies them here once (permanent repos, so once ever per tag). A pull-through cache is
+# not an option: its first pull needs ecr:CreateRepository on the node role, which the lab
+# won't let us grant.
+resource "aws_ecr_repository" "mirror" {
+  for_each = toset(["k8s/ingress-nginx-controller", "k8s/metrics-server"])
+
+  name                 = each.key
+  image_tag_mutability = "MUTABLE"
+  force_delete         = false
+}
