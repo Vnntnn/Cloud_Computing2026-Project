@@ -82,7 +82,7 @@ it (single DB, Redis pod, SQS mail worker, `/files` → S3, 4 k8s Secrets). Spec
       `/files/public/…` 200 from S3 (raw S3 URL 200, `/files/private/x` 403, 4.6 MiB passes
       the ingress and gets the app's 413), password-reset mail via real SQS → mail-worker
       dry-run log, `make admin` → role admin, HPA metrics live.
-- [ ] **Lab session (domain) — BLOCKED: no domain available (2026-10-25).** If one appears: `infra/terraform/dns.auto.tfvars` with the domain →
+- [x] **Domain live (2026-10-25): `https://eventide.creasy.club`** (Cloudflare NS → Route 53 → ACM → NLB TLS). After a lab reset repeat: `infra/terraform/dns.auto.tfvars` with the domain →
       `make up` → paste `terraform output route53_name_servers` into Cloudflare → wait for
       `ISSUED` → `make deploy` (BETTER_AUTH_URL becomes `https://<domain>`) → the same curls
       over HTTPS → `make down`. **`GATE`**

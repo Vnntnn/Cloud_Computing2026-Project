@@ -13,9 +13,9 @@ Learner Lab limits (see `docs/PROJECT-KNOWLEDGE-BASE.md` §2): CloudFront is den
 everything runs in the default VPC's public subnets; RDS Proxy and ElastiCache were left out for cost (Redis is a pod, losing it costs one
 slow request); no IRSA, so pods get the session credentials through a k8s Secret that `scripts/deploy.sh` creates each session and
 nothing reads Secrets Manager at runtime; uploads go through the services and `/files/*` is served by the ingress straight from S3
-(v2 app design). There is **no custom domain**, so Route 53, ACM and Cloudflare are not deployed (the diagram says so in a note): users
-open the NLB's own DNS name over http. Marked "pending" (orange dashed) = not live yet: Google sign-in (needs https), Stripe
-(keys not set; its webhook also needs https), the CI deploy job (needs `make ci-creds`).
+(v2 app design). The site is live at `https://eventide.creasy.club`: Cloudflare holds the apex and delegates `eventide` (4 NS records) to a Route 53
+zone; an ACM wildcard certificate terminates TLS on the NLB. Marked "pending" (orange dashed) = not live yet: the CI deploy job
+(needs `make ci-creds`).
 
 The arrows were derived from the code, not from memory: which workspaces import `@app/db`, use Redis, call `authGuard`, call
 `enqueueMail`, use `@app/storage`, and which hosts they talk to.

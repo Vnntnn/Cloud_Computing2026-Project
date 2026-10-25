@@ -148,7 +148,7 @@ def badge(text_, x, y, color):
 text("title", "<b style='font-size:26px'>Eventide — AWS infrastructure, as built</b>", 20, 14, 1400, 40, 26)
 text("subtitle",
      "AWS Academy Learner Lab · us-east-1 · default VPC, public subnets only (no NAT) · arrows point from the caller to the callee · "
-     "no custom domain: the site is reached through the NLB's own DNS name · orange dashed boxes = not live yet (needs https / keys / <code>make ci-creds</code>) · the target architecture is "
+     "live at <b>https://eventide.creasy.club</b> · orange dashed box = not live yet (needs <code>make ci-creds</code>) · the target architecture is "
      "<code>AWS_Diagram_Tool.jpg</code> (unchanged)", 20, 52, 2300, 40, 13, color="#555555")
 
 # =====================================================================================
@@ -159,7 +159,7 @@ group("region", "Region us-east-1", 235, 235, 2440, 1345, "mxgraph.aws4.group_re
 group("vpc", "Default VPC 172.31.0.0/16", 590, 275, 1480, 1280, "mxgraph.aws4.group_vpc2", "#8C4FFF")
 group("subnets", "Public subnets  us-east-1a / 1b / 1c  —  no NAT gateway", 605, 325, 1440, 1205, "mxgraph.aws4.group_security_group",
       "#7AA116", extra="strokeWidth=2;")
-group("nodes", "EKS managed node group (Auto Scaling) — 2 × t3.small, AL2023 · pods spread across the nodes · namespaces: eventide, ingress-nginx",
+group("nodes", "EKS managed node group (Auto Scaling) — 2 × t3.medium (default t3.small) · namespaces: eventide, ingress-nginx",
       840, 385, 900, 1115, "mxgraph.aws4.group_auto_scaling_group", "#ED7100", dashed=True, fill="#FFFBF5", z=1, valign="bottom")
 panel("api", "API services (Bun)", 1090, 515, 280, 545, "#546E7A", dashed=True, fill="#F5F7F8", z=1, fontsize=11)
 
@@ -167,19 +167,17 @@ panel("api", "API services (Bun)", 1090, 515, 280, 545, "#546E7A", dashed=True, 
 # Outside AWS (left): users, Cloudflare
 # =====================================================================================
 icon("users", "users", "Users", 90, 720, AWS_NAVY, size=64, sub="browser", where="above", lw=120, lh=40, dark=True)
+icon("cloudflare", "generic_application", "Cloudflare", 100, 1150, GENERIC, sub="apex creasy.club lives here<br>4 NS records for <i>eventide</i><br>(set once, by hand)",
+     where="below", lw=170, lh=60)
 
-
-# Not deployed: custom domain
-panel("nodomain", "<b>Not deployed: custom domain</b><br><font style='font-size:11px;font-weight:normal'>No Route 53, ACM or Cloudflare. "
-      "The site is opened through the NLB's own DNS name over <b>http</b>; :443 is only a TCP passthrough with a self-signed certificate. "
-      "Without https, Stripe's webhook cannot reach <code>/api/payment/webhook</code> and Google sign-in stays off "
-      "(Terraform for the domain exists in <code>infra/terraform/dns.tf</code>, opt-in).</font>",
-      255, 860, 305, 150, C_CFG, dashed=True, fill="#FAFAFA", z=1, fontsize=12, fcolor=AWS_NAVY, bold=0)
+# Region level: DNS + certificate
+icon("r53", "route_53", "Route 53", 290, 960, NETWORK, size=64, sub="zone eventide.creasy.club<br>ALIAS → NLB", where="right", lw=125, lh=44)
+icon("acm", "certificate_manager", "ACM", 535, 960, SECURITY, size=64, sub="wildcard cert", where="below", lw=100, lh=36)
 
 # VPC: NLB, pods, RDS
 # vertical positions of the service column (125 px apart so captions never touch the next icon)
 Y_WEB, Y_EVENT, Y_AUTH, Y_REG, Y_PAY, Y_MAIL = 430, 585, 710, 835, 960, 1225
-icon("nlb", "network_load_balancer", "NLB", 720, 720, NETWORK, size=64, sub=":80 → NodePort 30080<br>:443 TCP passthrough (self-signed)", where="below", lw=190, lh=56)
+icon("nlb", "network_load_balancer", "NLB", 720, 720, NETWORK, size=64, sub=":443 TLS (ACM)<br>:80 → :30080", where="above", lw=100, lh=46, dx=-60, dy=-12)
 icon("ingress", "eks", "ingress-nginx ×2", 945, 720, COMPUTE, sub="NodePort 30080 · body 20m", where="below", lw=190, lh=36)
 icon("web", "eks", "web ×1", 1230, Y_WEB, COMPUTE, sub="Bun server · SPA +<br>Open Graph head", where="right", lw=150, lh=52)
 icon("event", "eks", "event ×2", 1230, Y_EVENT, COMPUTE, sub="/api/events · HPA 2→8", where="below", lw=190, lh=36)
@@ -209,8 +207,8 @@ icon("ekscp", "eks", "EKS control plane", 2250, 1440, COMPUTE, sub="AWS-managed"
 icon("sm", "secrets_manager", "Secrets Manager", 2590, 1440, SECURITY, sub="rds-master · google<br>gmail · stripe", where="above", lw=150, lh=52)
 
 # External SaaS (outside AWS, right) — the original draws these as generic application icons
-icon("google", "generic_application", "Google OAuth", 2850, Y_AUTH + 2, GENERIC, sub="sign-in with Google<br>needs an https:// site", pending=True, where="below", lw=170, lh=54)
-icon("stripe", "generic_application", "Stripe", 2850, Y_PAY, GENERIC, sub="Checkout, refunds · keys not set<br>webhook needs an https:// site", pending=True, where="below", lw=170, lh=54)
+icon("google", "generic_application", "Google OAuth", 2850, Y_AUTH + 2, GENERIC, sub="sign-in with Google<br>on, because the site is https", where="below", lw=170, lh=54)
+icon("stripe", "generic_application", "Stripe", 2850, Y_PAY, GENERIC, sub="Checkout, refunds, webhook<br>keys in Secrets Manager", where="below", lw=170, lh=54)
 icon("gmail", "email", "Gmail SMTP", 2850, 1245, "#EA4335", sub="App Password", where="below", lw=170, lh=40)
 
 # Bottom band: developer + GitHub
@@ -226,9 +224,12 @@ X_IN, X_OUT = 1202, 1258        # left / right edge of the service icons
 X_STUB = 1415                   # vertical stub where event + auth join the S3 lane
 Y_S3, Y_REDIS, Y_DB = 470, 790, 860
 Y_SEND, Y_RECV, Y_GMAIL = 1040, 1200, 1245
-# 2  HTTP (Users -> NLB, by the NLB's own DNS name)
+# 1  DNS lookup (Users -> Route 53)
+edge("users", "r53", [(90, 752), (90, 960), (258, 960)], C_USER, dashed=True)
+badge("1 DNS", 90, 860, C_USER)
+# 2  HTTPS (Users -> NLB)
 edge("users", "nlb", [(122, 720), (688, 720)], C_USER)
-badge("2 HTTP :80", 400, 720, C_USER)
+badge("2 HTTPS :443", 400, 720, C_USER)
 # 3  NLB -> ingress
 edge("nlb", "ingress", [(752, 720), (917, 720)], C_USER)
 badge("3", 835, 720, C_USER)
@@ -274,7 +275,17 @@ badge("redrive", 2365, 1110, C_MAIL)
 # 12 Gmail (mail-worker)
 edge("mail", "gmail", [(X_OUT, Y_GMAIL), (2822, Y_GMAIL)], C_EXT)
 badge("12 SMTP", 1900, Y_GMAIL, C_EXT)
+# 14 Stripe webhook (outer loop over the top: Stripe -> NLB)
+edge("stripe", "nlb", [(2878, Y_PAY), (2985, Y_PAY), (2985, 130), (720, 130), (720, 688)], C_EXT, dashed=True)
+badge("14 webhook POST https://eventide.creasy.club/api/payment/webhook (via Route 53 → NLB → ingress → payment)", 1700, 130, C_EXT)
 
+# DNS / certificate configuration (set up once, then maintained by `make up`)
+edge("cloudflare", "r53", [(128, 1150), (290, 1150), (290, 992)], C_CFG, dashed=True, width=2.5)
+badge("NS (once)", 205, 1150, C_CFG)
+edge("r53", "nlb", [(290, 928), (290, 810), (705, 810), (705, 752)], C_CFG, dashed=True, width=2.5)
+badge("ALIAS", 470, 810, C_CFG)
+edge("acm", "nlb", [(535, 928), (535, 850), (735, 850), (735, 752)], C_CFG, dashed=True, width=2.5)
+badge("TLS cert", 640, 850, C_CFG)
 
 # Images and the control plane
 edge("ecr", "nodes", [(2392, 1340), (1740, 1340)], C_OPS, dashed=True, width=2.5)
@@ -300,8 +311,8 @@ badge("17b make secrets (.env → Secrets Manager)", 1400, 1890, C_OPS)
 # Legend
 # =====================================================================================
 legend_rows = [
-    (C_CFG, "1", "not deployed: DNS lookup of a custom domain via Route 53 (no domain; users use the NLB's own DNS name)"),
-    (C_USER, "2", "HTTP request on :80 to the NLB (:443 is a TCP passthrough with a self-signed certificate)"),
+    (C_USER, "1", "DNS lookup of eventide.creasy.club (Cloudflare delegates the name to Route 53, which answers with the NLB)"),
+    (C_USER, "2", "HTTPS request — TLS ends at the NLB with the ACM certificate"),
     (C_USER, "3", "NLB → ingress-nginx NodePort (the NLB is built by Terraform, not by Kubernetes)"),
     (C_USER, "4", "ingress routes by path: / → web · /api/auth · /api/events · /api/regis (+WebSocket) · /api/payment"),
     (C_DATA, "5", "/files/* is rewritten by the ingress straight to S3; only public/* is readable"),
@@ -313,8 +324,8 @@ legend_rows = [
     (C_MAIL, "11", "mail-worker long-polls, renders the React Email template, deletes; 5 failed receives → DLQ"),
     (C_EXT, "12", "mail-worker → Gmail SMTP (dry-run log when no App Password)"),
     (C_EXT, "13", "payment → Stripe (checkout, verify, refund)"),
-    (C_CFG, "14", "not live: Stripe webhook → /api/payment/webhook needs an https:// site (no domain)"),
-    (C_EXT, "15", "auth → Google (sign-in; enabled only when the site is https)"),
+    (C_EXT, "14", "Stripe → webhook, over the public https site (the endpoint registered in Stripe)"),
+    (C_EXT, "15", "auth → Google (sign-in; on because the site is https)"),
     (C_INT, "16", "web asks event for the page's title / image (Open Graph head)"),
     (C_OPS, "17", "make up/down = terraform apply, state in S3 (permanent: ECR, S3, SQS, secrets, DNS · nightly: EKS, RDS, NLB); make secrets"),
     (C_OPS, "18", "push to main: build + push images (a), helm upgrade + kubectl + db-migrate (b), read secrets (c)"),
@@ -331,9 +342,9 @@ left_html = "<b style='font-size:14px'>Flows (1/2)</b><br>" + "".join(row(c, n, 
 right_html = "<b style='font-size:14px'>Flows (2/2)</b><br>" + "".join(row(c, n, t) for c, n, t in legend_rows[half:])
 right_html += ("<br><b>Colours</b><br><font color='%s'><b>━ user request</b></font> · <font color='%s'><b>━ service call</b></font> · "
                "<font color='%s'><b>━ data store</b></font> · <font color='%s'><b>━ mail (SQS)</b></font> · <font color='%s'><b>━ external API</b></font><br>"
-               "<font color='%s'><b>┅ deploy / control</b></font> · <font color='%s'><b>▭ orange dashed box = not live yet</b></font> · "
-               "<font color='%s'><b>grey number = not deployed</b></font>"
-               % (C_USER, C_INT, C_DATA, C_MAIL, C_EXT, C_OPS, C_EXT, C_CFG))
+               "<font color='%s'><b>┅ deploy / control</b></font> · <font color='%s'><b>┅ DNS / certificate setup</b></font> · "
+               "<font color='%s'><b>▭ orange dashed box = not live yet</b></font>"
+               % (C_USER, C_INT, C_DATA, C_MAIL, C_EXT, C_OPS, C_CFG, C_EXT))
 panel("legend_l", left_html, 250, 1960, 1200, 235, "#9E9E9E", dashed=False, fill="#FAFAFA", z=1, fontsize=12, fcolor=AWS_NAVY, bold=0)
 panel("legend_r", right_html, 1470, 1960, 1200, 235, "#9E9E9E", dashed=False, fill="#FAFAFA", z=1, fontsize=12, fcolor=AWS_NAVY, bold=0)
 

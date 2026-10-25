@@ -302,7 +302,7 @@ These block nothing today, but two of them could invalidate scope decisions.
 
 ### Added 2026-10-24
 
-- ~~Which real domain goes into `dns.auto.tfvars`?~~ **Superseded 2026-10-25: there is no domain.** Route 53 / ACM / Cloudflare are not deployed; the site is served over `http://<NLB DNS name>` (:443 is a TCP passthrough with a self-signed cert). Consequences: Stripe's webhook and Google sign-in (both need https) stay off; the demo workaround for Stripe is `stripe listen --forward-to http://<nlb>/api/payment/webhook`. The IaC (`infra/terraform/dns.tf`) stays opt-in for if a domain appears.
+- ~~Which real domain goes into `dns.auto.tfvars`?~~ **Resolved later on 2026-10-25: `creasy.club`, site at `https://eventide.creasy.club`** (Cloudflare delegates `eventide` to Route 53; ACM cert on the NLB; Google sign-in on; Stripe webhook `https://eventide.creasy.club/api/payment/webhook`). The paragraph below describes the intermediate no-domain state and is kept as history. ~~Superseded 2026-10-25: there is no domain.~~ Route 53 / ACM / Cloudflare are not deployed; the site is served over `http://<NLB DNS name>` (:443 is a TCP passthrough with a self-signed cert). Consequences: Stripe's webhook and Google sign-in (both need https) stay off; the demo workaround for Stripe is `stripe listen --forward-to http://<nlb>/api/payment/webhook`. The IaC (`infra/terraform/dns.tf`) stays opt-in for if a domain appears.
 - Gmail App Password / Stripe sandbox key: **dry run for now** (mail logged, payment off) — `*.auto.tfvars` turn them on with no code change.
 
 ## 7. Immediate next actions
