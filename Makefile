@@ -1,4 +1,4 @@
-.PHONY: dev db-reset tf-init mirror up plan secrets ci-creds deploy admin load down k3d k3d-down help
+.PHONY: dev db-reset tf-init mirror up plan secrets ci-creds deploy redeploy admin load down k3d k3d-down help
 
 # Learner Lab credentials live in infra/aws.env (copy infra/aws.env.example).
 # Every AWS target sources it; Terraform and the AWS CLI read the same variables.
@@ -44,7 +44,10 @@ secrets: ## copy Google/Gmail/Stripe from .env into the gitignored tfvars, apply
 ci-creds: ## store this lab session's infra/aws.env credentials as GitHub secrets (CI/CD deploy); add DEPLOY=1 to deploy now
 	$(AWSENV) bash scripts/ci-creds.sh $(if $(DEPLOY),--deploy)
 
-deploy: ## build+push the 7 images to ECR, create the k8s Secrets, helm upgrade (migrates first), roll out
+deploy: ## ONE command: from an empty/reset lab (or a running platform) to the system serving traffic. Needs a fresh infra/aws.env
+	$(AWSENV) bash scripts/bootstrap.sh
+
+redeploy: ## app only, on a running platform: build+push the 7 images, k8s Secrets, helm upgrade (migrates first), roll out (what CI runs)
 	$(AWSENV) bash scripts/deploy.sh
 
 admin: ## promote a registered user to admin on the running cluster — make admin EMAIL=you@example.com

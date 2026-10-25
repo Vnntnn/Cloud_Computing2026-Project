@@ -203,15 +203,30 @@ make k3d          # k3d + ingress-nginx + chart ทั้งระบบ (ใช
 make k3d-down
 
 cp infra/aws.env.example infra/aws.env   # ครั้งเดียว แล้ววาง credential จาก Learner Lab (AWS Details → AWS CLI) ทุก session
-bash scripts/check-lab.sh   # หลัง Start Lab ทุกครั้ง
-make mirror       # ครั้งเดียวต่อ tag: คัดลอก image ของ ingress-nginx / metrics-server เข้า ECR (tier edge ไม่มี internet ดึงจาก registry.k8s.io ไม่ได้)
-make up           # terraform apply ทั้งหมด (VPC/ECR/S3/SQS/DNS + NAT, endpoints, EKS 2 tier, RDS + Proxy, ElastiCache, ALB + WAF, alarms) — root เดียว state เดียว
-make deploy       # build 7 images → ECR, สร้าง k8s Secrets, helm upgrade (migrate ก่อน), roll out
+make deploy       # คำสั่งเดียวจบ: จาก account ว่าง/ที่เพิ่ง reset จนระบบใช้งานได้ (ดูหัวข้อ "หลัง reset lab" ด้านล่าง)
+make redeploy     # เฉพาะแอป บน platform ที่รันอยู่แล้ว: build 7 images → ECR, k8s Secrets, helm upgrade (migrate ก่อน), roll out
 make admin EMAIL=you@example.com   # ตั้ง admin คนแรก หลังสมัครผ่านหน้าเว็บ
+# ทีละขั้น (make deploy เรียกให้เองตามลำดับ):
+make mirror       # คัดลอก image ของ ingress-nginx / metrics-server เข้า ECR (tier edge ไม่มี internet ดึงจาก registry.k8s.io ไม่ได้)
+make up           # terraform apply ทั้งหมด (VPC/ECR/S3/SQS/DNS + NAT, endpoints, EKS 2 tier, RDS + Proxy, ElastiCache, ALB + WAF, alarms) — root เดียว state เดียว
+bash scripts/check-lab.sh   # ตรวจสิทธิ์ของ lab (ไม่จำเป็นต่อ make deploy)
 make secrets      # คัดลอก Google/Gmail/Stripe จาก .env ไปเป็น Secrets Manager (รันซ้ำหลังเติม Stripe)
 make ci-creds DEPLOY=1   # เก็บ credential ของ session นี้เป็น GitHub secrets → push เข้า main แล้ว deploy ขึ้น AWS อัตโนมัติ
 make down         # terraform apply -var platform=false (ลบ EKS, NAT, endpoints, RDS + Proxy, ElastiCache, ALB, WAF, alarms; เก็บ VPC, ECR/S3/SQS/DNS) — ทำทุกครั้งก่อนจบ session
 ```
+
+### หลัง reset lab
+
+Start Lab → วาง credential ใหม่ใน `infra/aws.env` → `make deploy` เท่านั้น สคริปต์ `scripts/bootstrap.sh` ทำให้ตามลำดับ:
+ตรวจเครื่องมือ/Docker/credential → state ของ Terraform → ชั้นถาวร (VPC, ECR, S3, SQS, secrets, Route 53 zone, ขอ ACM cert) →
+ชี้ NS ที่ Cloudflare และรอ cert เป็น `ISSUED` → คัดลอก image ที่ tier edge ต้องใช้เข้า ECR → `terraform apply` ตัว platform →
+build/push/deploy แอป → ทดสอบ health ทั้ง 4 service ถ้าเริ่มจากศูนย์ใช้เวลาราว 30–40 นาที
+
+- **ขั้นเดียวที่อาจต้องทำมือ:** reset ลบ Route 53 zone จึงได้ name server ชุดใหม่ ต้องเปลี่ยน NS ที่ Cloudflare ตาม ใส่
+  `CLOUDFLARE_API_TOKEN` ใน `infra/aws.env` (สิทธิ์ Edit zone DNS เฉพาะ zone หลัก) แล้วสคริปต์เปลี่ยนให้เอง ถ้าไม่ใส่ สคริปต์จะพิมพ์ NS 4 ตัวให้
+  วางแล้วรอจนเปลี่ยนเสร็จ (หรือจบด้วย exit 3 ถ้าไม่ได้รันใน terminal ให้วางแล้วรัน `make deploy` ซ้ำ)
+- ฐานข้อมูลใหม่ทุก session: สมัครผ่านหน้าเว็บ แล้วรัน `make admin EMAIL=…`
+- ไม่ทำให้อัตโนมัติ: การวาง credential และ `make down` ตอนจบ session
 
 รายละเอียด: [docs/SYSTEM-DESIGN.md](docs/SYSTEM-DESIGN.md) (สถาปัตยกรรม, §1.1 สรุปสิ่งที่เปลี่ยนตอน merge v2),
 [docs/PROJECT-KNOWLEDGE-BASE.md](docs/PROJECT-KNOWLEDGE-BASE.md) (เหตุผลของการตัดสินใจ, ข้อจำกัดของ lab),

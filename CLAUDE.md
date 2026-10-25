@@ -385,8 +385,11 @@ These are hard and load-bearing — most odd design choices trace back to one of
 `make dev` (compose + migrate + every app in watch mode) · `make db-reset` · `make k3d` /
 `make k3d-down` (local parity: same chart, host compose stack) · `make mirror` (copy the
 ingress-nginx and metrics-server images into ECR, once per tag: the edge tier can't pull from
-public registries) · `make up` (`tf-init` + `terraform apply` + kubeconfig) · `make plan` · `make deploy` (`scripts/deploy.sh`: 7 images
-→ ECR, Secrets, helm upgrade with the migrate hook) · `make admin EMAIL=…` (first admin,
+public registries) · `make up` (`tf-init` + `terraform apply` + kubeconfig) · `make plan` ·
+**`make deploy` = the one command** (`scripts/bootstrap.sh`: from an empty or just-reset
+account to the system serving traffic; on a running platform it is a redeploy; see **After a
+lab reset** below) · `make redeploy` (`scripts/deploy.sh` alone: 7 images → ECR, Secrets,
+helm upgrade with the migrate hook; app only, what CI runs) · `make admin EMAIL=…` (first admin,
 after registering in the web) · `make load BASE_URL=…` (k6 vs `/api/events`) · `make down`
 (`teardown.sh`: `platform=false` + proof — every session end). Credentials: `infra/aws.env`.
 `bash scripts/check-lab.sh` after every lab reset. CI (`.github/
@@ -449,9 +452,37 @@ as the `AWS_*` GitHub secrets.
 1. The **assignment brief has never been seen** — every scope decision is inference.
 2. Exact **checkpoint date** and what it requires.
 3. **Final demo date.**
-4. **No domain** (2026-10-25): Route 53 / ACM / Cloudflare are not deployed. Without https,
-   Stripe's webhook and Google sign-in cannot work; the Stripe demo workaround is
-   `stripe listen --forward-to http://<nlb>/api/payment/webhook` from a laptop.
+4. The custom domain needs the Cloudflare delegation to follow the Route 53 zone: see **After a
+   lab reset** (automatic with `CLOUDFLARE_API_TOKEN`, otherwise one paste of 4 NS records).
+
+### After a lab reset
+
+Start Lab, paste the three values into `infra/aws.env`, run **`make deploy`**. Nothing else.
+`scripts/bootstrap.sh` does, in order: preflight (tools, Docker, credentials) → state
+(`tf-init`) → the permanent layer (VPC, ECR, S3, SQS, secrets, Route 53 zone, ACM request;
+skipped when the cluster already exists) → DNS delegation (`scripts/delegate-dns.sh`) and a
+wait for the certificate → the ECR image mirrors (`make mirror`) → `terraform apply` of the
+platform → `scripts/deploy.sh` → a smoke test of the four health endpoints. From zero it
+takes about 30-40 min. Things to know:
+
+- A reset deletes the Route 53 zone, so its 4 name servers change and the NS records at
+  Cloudflare (the apex lives there) go stale; until they are replaced the certificate cannot
+  issue and the ALB's HTTPS listener cannot be created. With `CLOUDFLARE_API_TOKEN` in
+  `infra/aws.env` (token: Edit zone DNS, restricted to the apex zone) the script replaces them
+  through the API. Without it, it prints the 4 names and, on a terminal, waits until you have
+  pasted them; otherwise it exits 3: set them, run `make deploy` again.
+- Terraform's state is not trusted for "is it up": the platform counts as live only when the
+  cluster exists in the account. After a reset the state may still list resources that are
+  gone; the uploads bucket (created by a `local-exec`) is recreated with `-replace` when the
+  state remembers it and the bucket is missing.
+- `make secrets` is not needed again: the Google/Gmail/Stripe tfvars are local, so the apply
+  recreates the Secrets Manager secrets. `scripts/sync-secrets.sh` runs only on a fresh clone
+  (it deletes the tfvars of any group `.env` leaves empty, and Terraform would then delete that
+  secret).
+- The database is new every session: register, then `make admin EMAIL=…`.
+- Not automated, by design: the credentials, and `make down` at the end.
+- `scripts/delegate-dns.test.sh` tests the delegation logic against a local mock (no token or
+  network). The from-zero path as a whole needs a real reset to be proven.
 
 ### Security
 
