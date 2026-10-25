@@ -22,8 +22,31 @@ files:
 defaults:
   replicas: 2
 
+# Redis is ElastiCache here (TLS + AUTH): REDIS_URL comes from the eventide-common Secret
+# (deploy.sh), so the static in-cluster URL and the redis pod are dropped.
+commonEnv:
+  REDIS_URL: null
+
+dbMigrate:
+  urlKey: DATABASE_MIGRATE_URL
+
+# Node tiers (infra/terraform/modules/platform/eks.tf): `edge` nodes have no route to the
+# internet, `egress` nodes go out through the NAT gateway. Only the services that call
+# Google, Stripe or Gmail need the second.
 services:
+  auth:
+    nodeSelector: { eventide/tier: egress }
+  payment:
+    nodeSelector: { eventide/tier: egress }
+  mail-worker:
+    nodeSelector: { eventide/tier: egress }
+  registration:
+    nodeSelector: { eventide/tier: edge }
+  web:
+    nodeSelector: { eventide/tier: edge }
+  redis: null
   event:
+    nodeSelector: { eventide/tier: edge }
     hpa:
       enabled: true
       minReplicas: 2

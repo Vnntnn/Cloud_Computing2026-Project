@@ -1,17 +1,17 @@
 # Eventide deployment and architecture diagrams
 
-These browser-ready diagrams are generated from the repository's current Makefile,
-Terraform, Helm, deployment scripts, and system-design documentation.
+- [`../architecture/aws/`](../architecture/aws/README.md) — the AWS infrastructure diagram, **as built** (PNG, SVG and the
+  editable draw.io source), next to the target architecture it was measured against. This is the one to use for where
+  everything runs: VPC tiers, NAT, endpoints, ALB + WAF, RDS Proxy, ElastiCache, alarms.
 
-- [`learner-lab-deployment-steps.html`](learner-lab-deployment-steps.html) — the safe
-  start-to-teardown AWS Academy session flow.
-- [`aws-infrastructure-deployment.html`](aws-infrastructure-deployment.html) — where the
-  platform and application artifacts run.
+These browser-ready diagrams are generated from the repository's Makefile, deployment scripts and
+system-design documentation.
+
+- [`learner-lab-deployment-steps.html`](learner-lab-deployment-steps.html) — the start-to-teardown AWS Academy
+  session flow. It predates the production layout: also run `make mirror` once per tag before `make up`, and the
+  teardown proof now lists NAT gateways, endpoints, ElastiCache, RDS proxies, WAF ACLs and alarms.
 - [`eventide-system-design.html`](eventide-system-design.html) — the logical service and
   data ownership boundaries.
-
-- [`../architecture/aws/`](../architecture/aws/README.md) — the AWS **as-built** diagram (PNG, SVG and the
-  editable draw.io source) next to the original target architecture.
 
 The operational source of truth remains the scripts and Make targets. In particular, always
 finish an AWS session with `make down` and confirm that the teardown verification lists are

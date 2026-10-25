@@ -28,9 +28,10 @@ resource "aws_eks_cluster" "this" {
   }
 
   vpc_config {
-    subnet_ids              = data.aws_subnets.abc.ids
-    endpoint_public_access  = true # no bastion / VPN / NAT
-    endpoint_private_access = true # node <-> API stays in-VPC
+    # two AZs are mandatory; only the first holds nodes
+    subnet_ids              = [var.edge_subnet_id, var.egress_subnet_id, var.cp_subnet_id]
+    endpoint_public_access  = true # kubectl/helm from the laptop (no bastion or VPN)
+    endpoint_private_access = true # node <-> API stays in-VPC: the edge tier has no other way
   }
 
   # Control-plane logging is a week-4 (Container Insights) concern and needs
@@ -67,20 +68,26 @@ resource "aws_eks_addon" "coredns" {
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
-  depends_on = [aws_eks_node_group.default]
+  depends_on = [aws_eks_node_group.edge]
 }
 
-# --- Managed node group -------------------------------------------------
-resource "aws_eks_node_group" "default" {
+# --- Managed node groups -------------------------------------------------
+# Two tiers, as in the architecture diagram. A pod lives in its node's subnet (vpc-cni),
+# so the tier is the node group and the chart pins services with `nodeSelector`:
+#   edge   no route to the internet: ingress-nginx, event, registration, web
+#   egress NAT route: the services that call out (Google OAuth, Stripe, Gmail SMTP)
+resource "aws_eks_node_group" "edge" {
   cluster_name    = aws_eks_cluster.this.name
-  node_group_name = "default"
+  node_group_name = "edge"
   node_role_arn   = local.eks_node_role_arn
-  subnet_ids      = data.aws_subnets.abc.ids
+  subnet_ids      = [var.edge_subnet_id]
 
   ami_type       = "AL2023_x86_64_STANDARD"
   capacity_type  = "ON_DEMAND"
   instance_types = [var.node_instance_type]
   disk_size      = 20
+
+  labels = { "eventide/tier" = "edge" }
 
   scaling_config {
     min_size     = var.node_min_size
@@ -92,32 +99,60 @@ resource "aws_eks_node_group" "default" {
     max_unavailable = 1
   }
 
-  # CNI + kube-proxy must exist first or nodes come up NotReady with no pod
-  # networking (bootstrap_self_managed_addons = false means nothing else installs
-  # them).
-  depends_on = [aws_eks_addon.vpc_cni, aws_eks_addon.kube_proxy]
+  # CNI + kube-proxy must exist first or nodes come up NotReady with no pod networking
+  # (bootstrap_self_managed_addons = false means nothing else installs them). The
+  # endpoints must exist too: with no NAT, a node can't register or pull without them.
+  depends_on = [aws_eks_addon.vpc_cni, aws_eks_addon.kube_proxy, aws_vpc_endpoint.interface]
 
   lifecycle {
-    # desired_size drifts when the (future) cluster-autoscaler / HPA-driven node
-    # scaling moves it; don't fight that on the next apply.
+    # desired_size drifts when the HPA-driven node scaling moves it; don't fight it
     ignore_changes = [scaling_config[0].desired_size]
   }
 }
 
-# --- NLB -> NodePort ---------------------------------------------------
-# Managed node groups attach the cluster primary security group to every node.
-# Open the ingress-nginx NodePort range on it so the Terraform NLB (and its
-# health checks) can reach the pods.
-resource "aws_vpc_security_group_ingress_rule" "nlb_nodeports" {
-  security_group_id = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
-  description       = "NLB to ingress-nginx NodePort range"
-  ip_protocol       = "tcp"
-  from_port         = var.ingress_http_nodeport
-  to_port           = var.ingress_https_nodeport
-  cidr_ipv4         = "0.0.0.0/0"
+resource "aws_eks_node_group" "egress" {
+  cluster_name    = aws_eks_cluster.this.name
+  node_group_name = "egress"
+  node_role_arn   = local.eks_node_role_arn
+  subnet_ids      = [var.egress_subnet_id]
+
+  ami_type       = "AL2023_x86_64_STANDARD"
+  capacity_type  = "ON_DEMAND"
+  instance_types = [var.node_instance_type]
+  disk_size      = 20
+
+  labels = { "eventide/tier" = "egress" }
+
+  scaling_config {
+    min_size     = var.egress_node_min_size
+    max_size     = var.egress_node_max_size
+    desired_size = var.egress_node_desired_size
+  }
+
+  update_config {
+    max_unavailable = 1
+  }
+
+  depends_on = [aws_eks_addon.vpc_cni, aws_eks_addon.kube_proxy, aws_route.egress_default]
+
+  lifecycle {
+    ignore_changes = [scaling_config[0].desired_size]
+  }
+}
+
+# --- ALB -> NodePort ---------------------------------------------------
+# Managed node groups attach the cluster primary security group to every node. Open the
+# ingress-nginx HTTP NodePort on it to the load balancer's security group, and to nothing else.
+resource "aws_vpc_security_group_ingress_rule" "alb_nodeport" {
+  security_group_id            = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
+  description                  = "ALB to ingress-nginx HTTP NodePort"
+  ip_protocol                  = "tcp"
+  from_port                    = var.ingress_http_nodeport
+  to_port                      = var.ingress_http_nodeport
+  referenced_security_group_id = aws_security_group.alb.id
 }
 
 locals {
   node_security_group_id = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
-  node_autoscaling_group = one(aws_eks_node_group.default.resources[0].autoscaling_groups[*].name)
+  edge_autoscaling_group = one(aws_eks_node_group.edge.resources[0].autoscaling_groups[*].name)
 }

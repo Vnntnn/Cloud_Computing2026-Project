@@ -108,3 +108,90 @@ variable "public_host" {
   type        = string
   default     = ""
 }
+
+# --- network (built at the root, network.tf) -------------------------------
+variable "vpc_id" {
+  type = string
+}
+
+variable "vpc_cidr" {
+  type = string
+}
+
+variable "public_subnet_ids" {
+  description = "[1a, 1b]: the NAT gateway goes in the first, the load balancer spans both."
+  type        = list(string)
+}
+
+variable "edge_subnet_id" {
+  description = "Private, no default route: ingress-nginx, event, registration, web."
+  type        = string
+}
+
+variable "egress_subnet_id" {
+  description = "Private, default route to the NAT gateway: auth, payment, mail-worker."
+  type        = string
+}
+
+variable "cp_subnet_id" {
+  description = "Private subnet in the second AZ; only the EKS control-plane ENIs use it."
+  type        = string
+}
+
+variable "data_subnet_ids" {
+  description = "[1a, 1b]: the DB subnet group needs two AZs, the instances sit in the first."
+  type        = list(string)
+}
+
+variable "egress_route_table_id" {
+  description = "Route table of the egress subnet; this module adds its route to the NAT gateway."
+  type        = string
+}
+
+variable "egress_node_min_size" {
+  type = number
+}
+
+variable "egress_node_max_size" {
+  type = number
+}
+
+variable "egress_node_desired_size" {
+  type = number
+}
+
+variable "redis_node_type" {
+  type    = string
+  default = "cache.t3.micro"
+}
+
+variable "waf_mode" {
+  description = "\"count\" records what the managed rules and the rate limit would block; \"block\" enforces them."
+  type        = string
+  default     = "count"
+
+  validation {
+    condition     = contains(["count", "block"], var.waf_mode)
+    error_message = "waf_mode must be \"count\" or \"block\"."
+  }
+}
+
+variable "waf_rate_limit" {
+  description = "Requests per 5 minutes from one IP before the rate rule acts. A single-source load test needs this raised."
+  type        = number
+  default     = 10000
+}
+
+variable "alert_email" {
+  description = "Email for the alerts SNS topic. Empty = no subscription (a subscription sends mail and must be confirmed from the inbox)."
+  type        = string
+  default     = ""
+}
+
+variable "mail_queue_name" {
+  type = string
+}
+
+variable "mail_dlq_name" {
+  type = string
+}
