@@ -185,18 +185,32 @@ docs/             เอกสารออกแบบ + รายงาน
 
 ระบบ deploy ขึ้น EKS บน AWS Academy Learner Lab ด้วย Terraform + Helm และรัน chart ชุดเดียวกันบน k3d ในเครื่องได้
 
+### สถาปัตยกรรมบน AWS
+
+![สถาปัตยกรรม AWS ของ Eventide](docs/architecture/aws/eventide-aws-as-built.png)
+
+(ไฟล์ [SVG](docs/architecture/aws/eventide-aws-as-built.svg) ซูมได้ชัดกว่า, [แหล่งที่มาแก้ไขได้ `.drawio`](docs/architecture/aws/eventide-aws-as-built.drawio), [คำอธิบายและวิธี generate ใหม่](docs/architecture/aws/README.md))
+
+- **ขอบ:** Route 53 → ALB (TLS ด้วย ACM) + **WAF** (โหมด block: Common, KnownBadInputs, IP reputation, rate limit) → ingress-nginx
+- **เครือข่าย:** VPC เฉพาะของระบบ `10.20.0.0/16` แบ่งเป็น public subnet (ALB, NAT gateway), private tier **edge** ที่ไม่มี route ออก internet (ingress-nginx, event, registration, web), private tier **egress** ที่ออกผ่าน NAT (auth, payment, mail-worker) และ data subnet
+- **ข้อมูล:** RDS PostgreSQL ผ่าน **RDS Proxy**, **ElastiCache Redis** (TLS + AUTH), S3, SQS + DLQ
+- **VPC endpoint:** S3 (gateway) และ ecr.api, ecr.dkr, sts, ec2, sqs, secretsmanager (interface) ให้ tier edge เรียก AWS ได้โดยไม่ต้องมี NAT
+- **สังเกตการณ์:** CloudWatch alarm 15 ตัว + dashboard `eventide` แจ้งเตือนผ่าน SNS
+- **ข้อจำกัดของ Learner Lab:** single-AZ, ไม่มี CloudFront (ใช้ ALB + WAF แทน), database ถูกสร้างใหม่ทุก session (`make up` / `make down`), pod ใช้ credential ของ session (ไม่มี IRSA)
+
 ```sh
 make k3d          # k3d + ingress-nginx + chart ทั้งระบบ (ใช้ Postgres/MinIO/ElasticMQ จาก docker compose) → http://localhost:8080
 make k3d-down
 
 cp infra/aws.env.example infra/aws.env   # ครั้งเดียว แล้ววาง credential จาก Learner Lab (AWS Details → AWS CLI) ทุก session
 bash scripts/check-lab.sh   # หลัง Start Lab ทุกครั้ง
-make up           # terraform apply ทั้งหมด (ECR/S3/SQS/DNS + EKS + RDS + NLB + ingress-nginx) — root เดียว state เดียว
+make mirror       # ครั้งเดียวต่อ tag: คัดลอก image ของ ingress-nginx / metrics-server เข้า ECR (tier edge ไม่มี internet ดึงจาก registry.k8s.io ไม่ได้)
+make up           # terraform apply ทั้งหมด (VPC/ECR/S3/SQS/DNS + NAT, endpoints, EKS 2 tier, RDS + Proxy, ElastiCache, ALB + WAF, alarms) — root เดียว state เดียว
 make deploy       # build 7 images → ECR, สร้าง k8s Secrets, helm upgrade (migrate ก่อน), roll out
 make admin EMAIL=you@example.com   # ตั้ง admin คนแรก หลังสมัครผ่านหน้าเว็บ
 make secrets      # คัดลอก Google/Gmail/Stripe จาก .env ไปเป็น Secrets Manager (รันซ้ำหลังเติม Stripe)
 make ci-creds DEPLOY=1   # เก็บ credential ของ session นี้เป็น GitHub secrets → push เข้า main แล้ว deploy ขึ้น AWS อัตโนมัติ
-make down         # terraform apply -var platform=false (ลบ EKS/RDS/NLB, เก็บ ECR/S3/SQS/DNS) — ทำทุกครั้งก่อนจบ session
+make down         # terraform apply -var platform=false (ลบ EKS, NAT, endpoints, RDS + Proxy, ElastiCache, ALB, WAF, alarms; เก็บ VPC, ECR/S3/SQS/DNS) — ทำทุกครั้งก่อนจบ session
 ```
 
 รายละเอียด: [docs/SYSTEM-DESIGN.md](docs/SYSTEM-DESIGN.md) (สถาปัตยกรรม, §1.1 สรุปสิ่งที่เปลี่ยนตอน merge v2),

@@ -256,10 +256,14 @@ plan `docs/superpowers/plans/2026-10-24-v2-infra-merge.md`.
 **State:** **one Terraform root, `infra/terraform/`, one state** (`README.md` there):
 permanent resources at the root (7 ECR repos, uploads S3 bucket + `public/*` read policy,
 SQS mail queue + DLQ, optional `eventide/{google-oauth,stripe,gmail}` secrets, optional
-Route 53 zone + ACM cert) and the nightly platform in `modules/platform` (raw
-`aws_eks_cluster` + node group, `db.t3.micro` RDS with ONE database `eventide`, Terraform
-NLB → ingress-nginx NodePort) plus the ingress-nginx / metrics-server Helm releases, all
-behind `var.platform` (`make up` = true, `make down` = false). **Credentials go in ONE
+Route 53 zone + ACM cert, and the free VPC network: `network.tf`) and the nightly platform in
+`modules/platform` (raw `aws_eks_cluster` + two node groups, NAT gateway + VPC endpoints,
+`db.t3.micro` RDS with ONE database `eventide` behind RDS Proxy, ElastiCache Redis, Terraform
+ALB + WAF → ingress-nginx NodePort, CloudWatch alarms + dashboard) plus the ingress-nginx /
+metrics-server Helm releases, all behind `var.platform` (`make up` = true, `make down` =
+false). **Production layout, built and GATE-passed 2026-10-26** (plan:
+`docs/superpowers/plans/2026-10-25-production-network.md`; diagram:
+`docs/architecture/aws/`). **Credentials go in ONE
 place: `infra/aws.env`** (copy of `infra/aws.env.example`; gitignored; sourced by every
 Make target and script). `infra/helm/eventide` (auth, event, registration, payment,
 mail-worker, redis, web, `/files` → S3, db-migrate hook) ·
@@ -295,18 +299,25 @@ Infrastructure does not compress under deadline pressure; features do.
 
 These are hard and load-bearing — most odd design choices trace back to one of them:
 
-- **$50 hard cap.** Exceeding it locks the account and deletes all work. `~$1.10` per 4-hour
-  session; leaving the platform layer up exhausts the budget in ~15 days.
+- **$50 hard cap.** Exceeding it locks the account and deletes all work. About `$2` per
+  4-hour session with the production layout (an estimate from list prices, ~`$0.5`/h while
+  up; it was ~`$1.10` before NAT, endpoints, RDS Proxy, ElastiCache, ALB and WAF); leaving
+  the platform layer up exhausts the budget in days.
 - **`make down` (`terraform apply -var platform=false`) at the end of every session.**
-  The lab auto-stops EC2 only; RDS, the EKS control plane and ELBs keep billing. Worker
-  nodes are in an ASG that relaunches lab-stopped instances.
+  The lab auto-stops EC2 only; RDS, the EKS control plane, NAT, interface endpoints,
+  RDS Proxy, ElastiCache, the ALB and the WAF keep billing. Worker nodes are in ASGs that
+  relaunch lab-stopped instances. The teardown proof lists all of these.
 - **No IRSA** (`iam:CreateOpenIDConnectProvider` denied) — also no GitHub Actions OIDC, so
   CI deploys with the session credentials stored as GitHub secrets (`make ci-creds`, see **CI/CD** below). Pods get the lab **session
   credentials** (S3 + SQS) through the `eventide-common` Secret; they expire with the
   session — `make deploy` every session.
 - **No `iam:CreateRole`** — Terraform reuses the lab's `LabEksClusterRole` / `LabEksNodeRole`
   via `data "aws_iam_roles"` + `name_regex`. Never hardcode the ARNs.
-- **Default VPC only, no NAT gateway.** Subnets pinned to **us-east-1a/b/c**.
+- **A dedicated VPC `10.20.0.0/16`** (`infra/terraform/network.tf`, free, permanent), **single-AZ
+  (us-east-1a)**: the 1b subnets exist only because the ALB, the EKS control plane and the
+  RDS subnet group each need two AZs. Probed 2026-10-25: new VPC, NAT/EIP, VPC endpoints,
+  ElastiCache, RDS Proxy (`LabRole` trusts `rds.amazonaws.com`) and WAFv2 are allowed;
+  **CloudFront and Shield are denied** (hence ALB + WAF; Shield Standard is automatic).
 - **An org SCP denies `s3:GetBucketObjectLockConfiguration`** — every bucket is CLI-created
   (`terraform_data` + `local-exec`) and consumed via `data "aws_s3_bucket"`; config goes in
   granular `aws_s3_bucket_*` resources. See `infra/terraform/s3.tf`.
@@ -319,13 +330,23 @@ These are hard and load-bearing — most odd design choices trace back to one of
 
 ### Infra architecture in brief
 
-- **One RDS `db.t3.micro`, one database `eventide`, one role.** The v2 schema is a single
-  Drizzle schema with cross-table FKs. Migrations = the chart's `db-migrate` pre-install/
-  pre-upgrade hook (`packages/db/Dockerfile`, `drizzle-kit migrate`) — every `make deploy`
-  migrates before pods roll. `DB_POOL_MAX=4` per pod (≈ 87 connections on `t3.micro`).
+- **One RDS `db.t3.micro`, one database `eventide`, one role, behind RDS Proxy.** The v2
+  schema is a single Drizzle schema with cross-table FKs. The services connect to the proxy
+  (`DATABASE_URL`); migrations = the chart's `db-migrate` pre-install/pre-upgrade hook
+  (`packages/db/Dockerfile`, `drizzle-kit migrate`) connect **direct** to RDS
+  (`DATABASE_MIGRATE_URL`, `dbMigrate.urlKey`) — every `make deploy` migrates before pods
+  roll. `DB_POOL_MAX=4` per pod; the proxy multiplexes them onto ≤ 87 connections.
+  RDS has no backups: the database is rebuilt every session.
+- **Network tiers** (`modules/platform/eks.tf`): the **edge** node group (private subnet, **no
+  route out**: ingress-nginx, event, registration, web) and the **egress** node group (route
+  to the NAT gateway: auth, payment, mail-worker; the only ones that call Google, Stripe or
+  Gmail). A pod lives in its node's subnet, so the chart pins them with `nodeSelector
+  eventide/tier` (`values.aws.yaml`). The edge tier reaches AWS through VPC endpoints
+  (S3 gateway; ecr.api, ecr.dkr, sts, ec2, sqs, secretsmanager).
 - **Auth across services** = Better Auth cookie session; `@app/auth-guard` introspects
-  `AUTH_SERVICE_URL` (in-cluster `auth` Service) and caches 60 s in the **`redis` pod** (no
-  persistence; losing it is one slow request, never a wrong one).
+  `AUTH_SERVICE_URL` (in-cluster `auth` Service) and caches 60 s in **ElastiCache Redis**
+  (1 node, TLS + AUTH token, `rediss://`; `REDIS_URL` comes from `eventide/endpoints` via
+  `deploy.sh`; there is no redis pod on AWS; losing it is one slow request, never a wrong one).
 - **Uploads** go through the owning service; the browser reads `/files/<key>`, which a
   second Ingress rewrites to the bucket on S3 (`values.aws.yaml`) or MinIO (`values.local.
   yaml`). Only `public/*` is readable — the bucket policy decides, not the ingress.
@@ -333,27 +354,38 @@ These are hard and load-bearing — most odd design choices trace back to one of
   SMTP. Without `eventide/gmail` it runs dry and logs. **Payment** = Stripe; without
   `eventide/stripe` checkout is off. Both are Terraform-managed from gitignored
   `*.auto.tfvars` in `infra/terraform`.
-- **ingress-nginx as a `NodePort` Service + an NLB created by Terraform** (never
-  `type=LoadBalancer` — that ELB would orphan outside Terraform state).
+- **ingress-nginx as a `NodePort` Service + an ALB created by Terraform** (never
+  `type=LoadBalancer` — that ELB would orphan outside Terraform state). The ALB (HTTPS with the
+  ACM cert, :80 → 301, idle timeout 3600 s, health check `/healthz`) has a **WAF** on it
+  (`waf.tf`: Common with a multipart scope-down, KnownBadInputs, IP reputation, a per-IP rate
+  limit, the Stripe webhook path allowed; `waf_mode` `block` by default, `count` to retune —
+  read the per-rule counts before flipping). ingress-nginx takes the client IP from
+  `X-Forwarded-For` (trusted from the VPC CIDR only).
+- **Monitoring** (`monitoring.tf`): 15 CloudWatch alarms (ALB, RDS, Proxy pinning, Redis, DLQ,
+  node CPU, WAF burst) → SNS topic `eventide-alerts` (email opt-in via `alert_email`) and the
+  dashboard `eventide`. Container Insights stays off (the node role can't take its policy).
 - **Secrets** — `scripts/deploy.sh` builds four k8s Secrets each session: `eventide-common`
-  (DATABASE_URL, S3_*, AWS_* session creds, MAIL_QUEUE_URL), `eventide-auth`
+  (DATABASE_URL via the proxy, DATABASE_MIGRATE_URL, REDIS_URL — from the `eventide/endpoints`
+  secret — plus S3_*, AWS_* session creds, MAIL_QUEUE_URL), `eventide-auth`
   (BETTER_AUTH_SECRET, GOOGLE_*), `eventide-payment` (STRIPE_*), `eventide-mail-worker`
   (GMAIL_*). Same chart on k3d with dev values. **ESO stays off** (SYSTEM-DESIGN §5.2.1).
 - **One Terraform root, split by `var.platform`:** permanent resources at the root,
-  the nightly EKS/RDS/NLB in `modules/platform` with `count = var.platform ? 1 : 0`.
+  the nightly EKS, NAT, endpoints, RDS + Proxy, ElastiCache, ALB + WAF and alarms in
+  `modules/platform` with `count = var.platform ? 1 : 0`.
   `make down` is `terraform apply -var platform=false` — a normal apply that destroys
   exactly the platform. The state bucket is created by `scripts/tf-init.sh`.
 - **DNS/TLS (opt-in, NOT deployed — no domain available):** `events.<domain>` delegated to Route 53, apex on Cloudflare; zone + wildcard
-  ACM cert are permanent (`infra/terraform/dns.tf`, opt-in via `dns.auto.tfvars`); the NLB
-  TLS listener + ALIAS record rebuild with the platform. Single host — SPA at `/`, APIs at `/api/*`,
+  ACM cert are permanent (`infra/terraform/dns.tf`, opt-in via `dns.auto.tfvars`); the ALB
+  HTTPS listener + ALIAS record rebuild with the platform. Single host — SPA at `/`, APIs at `/api/*`,
   files at `/files/*`, no CORS. Stripe's webhook and Google's redirect URI both need this
   HTTPS host. Never recreate the hosted zone.
 
 ### Infra commands
 
 `make dev` (compose + migrate + every app in watch mode) · `make db-reset` · `make k3d` /
-`make k3d-down` (local parity: same chart, host compose stack) · `make up` (`tf-init` +
-`terraform apply` + kubeconfig) · `make plan` · `make deploy` (`scripts/deploy.sh`: 7 images
+`make k3d-down` (local parity: same chart, host compose stack) · `make mirror` (copy the
+ingress-nginx and metrics-server images into ECR, once per tag: the edge tier can't pull from
+public registries) · `make up` (`tf-init` + `terraform apply` + kubeconfig) · `make plan` · `make deploy` (`scripts/deploy.sh`: 7 images
 → ECR, Secrets, helm upgrade with the migrate hook) · `make admin EMAIL=…` (first admin,
 after registering in the web) · `make load BASE_URL=…` (k6 vs `/api/events`) · `make down`
 (`teardown.sh`: `platform=false` + proof — every session end). Credentials: `infra/aws.env`.
@@ -396,7 +428,14 @@ as the `AWS_*` GitHub secrets.
 - RDS: `skip_final_snapshot = true`, `deletion_protection = false`, or the nightly destroy fails.
 - HPA max is **8 replicas** — a `t3.medium` allows only 17 pods; beyond the ceiling pods sit
   `Pending` with an error that looks like a bug. Run the load test with
-  `NODE_INSTANCE_TYPE=t3.medium make up`.
+  `NODE_INSTANCE_TYPE=t3.medium make up`. A single-source k6 run also trips the WAF's per-IP
+  rate rule: raise it for the run (`-var waf_rate_limit=…`).
+- **Nothing on the edge tier can pull from a public registry** (no route out; Docker Hub and
+  `registry.k8s.io` time out and the pod sits in `ImagePullBackOff`). Every image comes from our
+  ECR: the service images via `deploy.sh`, ingress-nginx and metrics-server via `make mirror`
+  (`k8s/*` repos). A new third-party image either goes on the egress tier or gets mirrored.
+- Changing the VPC or subnets replaces the EKS cluster, the DB subnet group and the load
+  balancer: `make down` first (from a checkout whose code matches what is live), then apply.
 - `auth`/`registration`/`payment` are `bun build --compile` binaries (Bun 1.4's floor is ~104 MB
   each). `event`, `mail-worker` and `web` are **bundled files on `oven/bun:1-slim`** instead,
   because they need files at runtime: event's OG renderer (`takumi-js`, a native addon + a
