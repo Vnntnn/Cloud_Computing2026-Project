@@ -306,7 +306,9 @@ These are hard and load-bearing — most odd design choices trace back to one of
 - **`make down` (`terraform apply -var platform=false`) at the end of every session.**
   The lab auto-stops EC2 only; RDS, the EKS control plane, NAT, interface endpoints,
   RDS Proxy, ElastiCache, the ALB and the WAF keep billing. Worker nodes are in ASGs that
-  relaunch lab-stopped instances. The teardown proof lists all of these.
+  relaunch lab-stopped instances. The teardown proof lists all of these and `make down`
+  exits non-zero unless every list is empty (it once reported success after the lab cut the
+  credentials half way through the destroy).
 - **No IRSA** (`iam:CreateOpenIDConnectProvider` denied) — also no GitHub Actions OIDC, so
   CI deploys with the session credentials stored as GitHub secrets (`make ci-creds`, see **CI/CD** below). Pods get the lab **session
   credentials** (S3 + SQS) through the `eventide-common` Secret; they expire with the
@@ -479,10 +481,24 @@ takes about 30-40 min. Things to know:
   recreates the Secrets Manager secrets. `scripts/sync-secrets.sh` runs only on a fresh clone
   (it deletes the tfvars of any group `.env` leaves empty, and Terraform would then delete that
   secret).
+- **An interrupted run repairs itself.** If the lab cuts the credentials mid-run (it did, halfway
+  through `make down`: `explicit deny … voc-cancel-cred`), Terraform leaves `errored.tfstate`
+  (the newest state, which it could not upload) and a stale `…/terraform.tfstate.tflock` in the
+  state bucket. `scripts/recover-state.sh` runs inside `tf-init` (so `make up`, `make deploy`)
+  and inside `make down`: it removes the lock only when no terraform process runs here and the
+  lock is older than 5 min, and pushes `errored.tfstate` when it is this account's and newer than
+  the remote state of the same lineage (otherwise archives it as `*.foreign-` / `*.stale-`, never
+  deleting; a lineage mismatch or a failed push stops with exit 1 for a human). Never run
+  `terraform apply` by hand before it has run: that forks the state.
+- **`make down` exits non-zero unless it is verifiably clean:** the apply succeeded and every
+  verification list is empty. A list it cannot read (credentials cut) is `UNVERIFIED`, never
+  "empty". After an interrupted `make down` the platform is still billing: Start Lab and run it
+  again.
 - The database is new every session: register, then `make admin EMAIL=…`.
 - Not automated, by design: the credentials, and `make down` at the end.
-- `scripts/delegate-dns.test.sh` tests the delegation logic against a local mock (no token or
-  network). The from-zero path as a whole needs a real reset to be proven.
+- `scripts/{delegate-dns,recover-state,teardown}.test.sh` test the DNS delegation, the state
+  recovery and `make down`'s exit codes against stand-ins for Cloudflare, `aws` and `terraform`
+  (no token, network or AWS; CI runs them). The from-zero path as a whole needs a real reset to be proven.
 
 ### Security
 

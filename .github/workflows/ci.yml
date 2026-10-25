@@ -43,6 +43,12 @@ jobs:
           docker compose wait minio-init || true
       - run: bun install --frozen-lockfile
       - run: bash scripts/lib.test.sh
+      # the session scripts, against stand-ins for aws / terraform / Cloudflare (no AWS, no network)
+      - name: test the session scripts (state recovery, teardown, DNS delegation)
+        run: |
+          bash scripts/recover-state.test.sh
+          bash scripts/teardown.test.sh
+          bash scripts/delegate-dns.test.sh
       - run: bun run db:migrate
       - name: test the packages and services that have a test script
         run: |
