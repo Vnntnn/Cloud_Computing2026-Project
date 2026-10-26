@@ -1,24 +1,7 @@
+import { hasRole, useSession } from "@/lib/session";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  BadgeCheck,
-  Ban,
-  CalendarDays,
-  Building2,
-  CircleAlert,
-  Clock,
-  FileText,
-  History,
-  Inbox,
-  MessageSquareText,
-  Phone,
-  RotateCcw,
-  Send,
-  Undo2,
-  XCircle,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowLeft, BadgeCheck, Ban, CalendarDays, CircleAlert, Clock, FileText, History, Inbox, RotateCcw, Send, Undo2, XCircle, type LucideIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
@@ -45,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { authClient } from "@/lib/api";
 import { problemMessage } from "@/lib/auth-errors";
+import { t as translate, useT } from "@/i18n";
 import { formatDateTime } from "@/lib/format";
 import {
   myApplicationHistoryQueryOptions,
@@ -56,16 +40,28 @@ import { cn } from "@/lib/utils";
 
 // mirrors the limits in apps/auth/src/routes/organizer-applications/model.ts
 const applicationSchema = z.object({
-  organizationName: z.string().trim().min(2, "กรุณากรอกชื่อองค์กรหรือชื่อผู้จัดงาน").max(120, "ยาวเกินไป"),
-  contact: z.string().trim().min(3, "กรุณากรอกช่องทางติดต่อ").max(200, "ยาวเกินไป"),
-  reason: z.string().trim().min(10, "กรุณาเล่าอย่างน้อย 10 ตัวอักษร").max(2000, "ยาวเกินไป"),
+  organizationName: z
+    .string()
+    .trim()
+    .min(2, { error: () => translate("shared.organizerApplication.form.nameRequired") })
+    .max(120, { error: () => translate("shared.organizerApplication.form.tooLong") }),
+  contact: z
+    .string()
+    .trim()
+    .min(3, { error: () => translate("shared.organizerApplication.form.contactRequired") })
+    .max(200, { error: () => translate("shared.organizerApplication.form.tooLong") }),
+  reason: z
+    .string()
+    .trim()
+    .min(10, { error: () => translate("shared.organizerApplication.form.reasonMin") })
+    .max(2000, { error: () => translate("shared.organizerApplication.form.tooLong") }),
 });
 
-const heroes: Record<ApplicationStatus, { icon: LucideIcon; title: string; tone: string }> = {
-  pending: { icon: Clock, title: "รอตรวจสอบ", tone: "bg-secondary text-secondary-foreground" },
-  approved: { icon: BadgeCheck, title: "อนุมัติแล้ว", tone: "bg-primary text-primary-foreground" },
-  rejected: { icon: XCircle, title: "ไม่อนุมัติ", tone: "bg-destructive/10 text-destructive" },
-  cancelled: { icon: Ban, title: "ยกเลิกแล้ว", tone: "bg-muted text-muted-foreground" },
+const heroes: Record<ApplicationStatus, { icon: LucideIcon; tone: string }> = {
+  pending: { icon: Clock, tone: "bg-secondary text-secondary-foreground" },
+  approved: { icon: BadgeCheck, tone: "bg-primary text-primary-foreground" },
+  rejected: { icon: XCircle, tone: "bg-destructive/10 text-destructive" },
+  cancelled: { icon: Ban, tone: "bg-muted text-muted-foreground" },
 };
 
 type ApplicationInput = z.input<typeof applicationSchema>;
@@ -80,13 +76,14 @@ function StatusHero({
   children: React.ReactNode;
   action?: React.ReactNode;
 }) {
-  const { icon: Icon, title, tone } = heroes[status];
+  const t = useT();
+  const { icon: Icon, tone } = heroes[status];
   return (
     <div data-slot="application-status" className="flex flex-col items-center gap-4 py-10 text-center">
       <div className={cn("flex size-24 items-center justify-center rounded-full", tone)}>
         <Icon className="size-12" />
       </div>
-      <h2 className="text-3xl font-bold">{title}</h2>
+      <h2 className="text-3xl font-bold">{t(`shared.applicationStatus.${status}`)}</h2>
       <p className="max-w-md text-muted-foreground">{children}</p>
       {action}
     </div>
@@ -95,8 +92,12 @@ function StatusHero({
 
 /** Lets a plain user apply to become an organizer and shows the latest decision. */
 export function OrganizerApplication() {
+  const t = useT();
   const { data: application, isPending } = useQuery(myApplicationQueryOptions);
   const [retrying, setRetrying] = useState(false);
+  const { data: session } = useSession();
+  // an organizer made without an application (promoted by an admin or a script) has nothing to apply for: the service refuses it
+  const alreadyOrganizer = hasRole(session?.user, ["organizer", "admin"]);
 
   if (isPending) return <Skeleton className="h-64" />;
 
@@ -111,24 +112,26 @@ export function OrganizerApplication() {
           </div>
         }
       >
-        คำขอในนาม <strong className="text-foreground">{application.organizationName}</strong> ส่งเมื่อ{" "}
-        {formatDateTime(application.createdAt)} เราจะแจ้งผลทางอีเมล
+        {t("shared.organizerApplication.pendingBefore")}{" "}
+        <strong className="text-foreground">{application.organizationName}</strong>{" "}
+        {t("shared.organizerApplication.pendingAfter", { date: formatDateTime(application.createdAt) })}
       </StatusHero>
     );
   }
 
-  if (application?.status === "approved") {
+  // (a pending application was answered above)
+  if (application?.status === "approved" || alreadyOrganizer) {
     return (
       <StatusHero
         status="approved"
         action={
           <Link to="/dashboard/events" className={buttonVariants({ size: "lg" })}>
             <CalendarDays data-icon="inline-start" />
-            จัดการอีเว็นต์ของฉัน
+            {t("shared.organizerApplication.manageEvents")}
           </Link>
         }
       >
-        คุณเป็นผู้จัดงานแล้ว เริ่มสร้างและจัดการอีเวนต์ได้เลย
+        {t("shared.organizerApplication.approvedBody")}
       </StatusHero>
     );
   }
@@ -151,13 +154,15 @@ export function OrganizerApplication() {
           <div className="flex flex-wrap justify-center gap-2">
             <Button size="lg" onClick={() => setRetrying(true)}>
               <RotateCcw data-icon="inline-start" />
-              ยื่นคำขอใหม่
+              {t("shared.organizerApplication.retry")}
             </Button>
             <ApplicationHistory />
           </div>
         }
       >
-        {application.reviewNote ? `หมายเหตุ: ${application.reviewNote}` : "คุณแก้ไขข้อมูลและยื่นคำขอใหม่ได้"}
+        {application.reviewNote
+          ? t("shared.organizerApplication.note", { note: application.reviewNote })
+          : t("shared.organizerApplication.retryHint")}
       </StatusHero>
     );
   }
@@ -167,7 +172,7 @@ export function OrganizerApplication() {
       {application?.status === "cancelled" && (
         <Alert>
           <Ban />
-          <AlertDescription>คุณยกเลิกคำขอล่าสุดแล้ว ยื่นคำขอใหม่ได้ด้านล่าง</AlertDescription>
+          <AlertDescription>{t("shared.organizerApplication.cancelledAlert")}</AlertDescription>
           <AlertAction>
             <ApplicationHistory size="sm" />
           </AlertAction>
@@ -180,19 +185,20 @@ export function OrganizerApplication() {
 
 /** Read-only copy of what the user submitted. */
 function ViewApplication({ application }: { application: MyApplication }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <Button variant="outline" size="lg" onClick={() => setOpen(true)}>
         <FileText data-icon="inline-start" />
-        ดูคำขอของฉัน
+        {t("shared.organizerApplication.view.button")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>คำขอเป็นผู้จัดงาน</DialogTitle>
-            <DialogDescription>ข้อมูลที่คุณส่งไว้ แก้ไขไม่ได้ระหว่างรอพิจารณา</DialogDescription>
+            <DialogTitle>{t("shared.organizerApplication.view.title")}</DialogTitle>
+            <DialogDescription>{t("shared.organizerApplication.view.description")}</DialogDescription>
           </DialogHeader>
           <ApplicationDetails application={application} className="max-h-[60vh] overflow-y-auto" />
         </DialogContent>
@@ -203,6 +209,7 @@ function ViewApplication({ application }: { application: MyApplication }) {
 
 /** Every application the user has sent, newest first, with each outcome. */
 function ApplicationHistory({ size = "lg" }: { size?: "sm" | "lg" }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const { data: history, isPending } = useQuery({ ...myApplicationHistoryQueryOptions, enabled: open });
 
@@ -210,13 +217,13 @@ function ApplicationHistory({ size = "lg" }: { size?: "sm" | "lg" }) {
     <>
       <Button variant="outline" size={size} onClick={() => setOpen(true)}>
         <History data-icon="inline-start" />
-        ประวัติคำขอ
+        {t("shared.organizerApplication.history.button")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>ประวัติคำขอเป็นผู้จัดงาน</DialogTitle>
-            <DialogDescription>คำขอทั้งหมดที่คุณเคยส่ง เรียงจากล่าสุด</DialogDescription>
+            <DialogTitle>{t("shared.organizerApplication.history.title")}</DialogTitle>
+            <DialogDescription>{t("shared.organizerApplication.history.description")}</DialogDescription>
           </DialogHeader>
           <div className="-mx-6 max-h-[60vh] overflow-y-auto px-6">
             {isPending ? (
@@ -230,18 +237,18 @@ function ApplicationHistory({ size = "lg" }: { size?: "sm" | "lg" }) {
                   <EmptyMedia variant="icon">
                     <Inbox />
                   </EmptyMedia>
-                  <EmptyTitle>ยังไม่มีประวัติคำขอ</EmptyTitle>
+                  <EmptyTitle>{t("shared.organizerApplication.history.empty")}</EmptyTitle>
                 </EmptyHeader>
               </Empty>
             ) : (
               <ol className="flex flex-col gap-3">
                 {history.map((item) => (
-                  <li key={item.id} className="flex flex-col gap-3 rounded-2xl border p-4">
+                  <li key={item.id} className="flex flex-col gap-3 rounded-md border p-4">
                     <div className="flex items-center justify-between gap-2">
                       <ApplicationStatusBadge status={item.status} />
                       {item.reviewedAt && (
                         <span className="text-xs text-muted-foreground">
-                          พิจารณาเมื่อ {formatDateTime(item.reviewedAt)}
+                          {t("shared.organizerApplication.history.reviewedAt", { date: formatDateTime(item.reviewedAt) })}
                         </span>
                       )}
                     </div>
@@ -258,6 +265,7 @@ function ApplicationHistory({ size = "lg" }: { size?: "sm" | "lg" }) {
 }
 
 function CancelApplication() {
+  const t = useT();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
 
@@ -268,7 +276,7 @@ function CancelApplication() {
     },
     onSuccess: async () => {
       setOpen(false);
-      toast.add({ type: "success", title: "ยกเลิกคำขอเรียบร้อย" });
+      toast.add({ type: "success", title: t("shared.organizerApplication.cancel.toast") });
       await queryClient.invalidateQueries({ queryKey: myApplicationQueryOptions.queryKey });
     },
     onError: (error) => toast.add({ type: "error", title: problemMessage(error) }),
@@ -278,7 +286,7 @@ function CancelApplication() {
     <>
       <Button variant="destructive" size="lg" onClick={() => setOpen(true)}>
         <Undo2 data-icon="inline-start" />
-        ยกเลิกคำขอ
+        {t("shared.organizerApplication.cancel.button")}
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent size="sm">
@@ -286,14 +294,14 @@ function CancelApplication() {
             <AlertDialogMedia className="bg-destructive/10 text-destructive">
               <Undo2 />
             </AlertDialogMedia>
-            <AlertDialogTitle>ยกเลิกคำขอเป็นผู้จัดงาน?</AlertDialogTitle>
-            <AlertDialogDescription>คำขอนี้จะถูกลบ คุณยื่นคำขอใหม่ได้ภายหลัง</AlertDialogDescription>
+            <AlertDialogTitle>{t("shared.organizerApplication.cancel.title")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("shared.organizerApplication.cancel.description")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>เก็บคำขอไว้</AlertDialogCancel>
+            <AlertDialogCancel>{t("shared.organizerApplication.cancel.keep")}</AlertDialogCancel>
             <Button variant="destructive" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
               {cancel.isPending ? <Spinner data-icon="inline-start" /> : <Undo2 data-icon="inline-start" />}
-              ยกเลิกคำขอ
+              {t("shared.organizerApplication.cancel.button")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -309,6 +317,7 @@ function ApplicationForm({
   defaultValues?: ApplicationInput;
   onBack?: () => void;
 }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -323,7 +332,11 @@ function ApplicationForm({
         reason: value.reason.trim(),
       });
       if (error) return setFormError(problemMessage(error));
-      toast.add({ type: "success", title: "ส่งคำขอเรียบร้อย", description: "เราจะแจ้งผลการพิจารณาทางอีเมล" });
+      toast.add({
+        type: "success",
+        title: t("shared.organizerApplication.form.sentTitle"),
+        description: t("shared.organizerApplication.form.sentDescription"),
+      });
       await queryClient.invalidateQueries({ queryKey: myApplicationQueryOptions.queryKey });
     },
   });
@@ -344,15 +357,14 @@ function ApplicationForm({
           </Alert>
         )}
         <form.Field name="organizationName">
-          {(field) => <TextField field={field} label="ชื่อองค์กรหรือชื่อผู้จัดงาน" icon={Building2} autoComplete="organization" />}
+          {(field) => <TextField field={field} label={t("shared.applicationDetails.organizationName")} autoComplete="organization" />}
         </form.Field>
         <form.Field name="contact">
           {(field) => (
             <TextField
               field={field}
-              label="ช่องทางติดต่อ"
-              icon={Phone}
-              placeholder="เบอร์โทร, LINE ID หรือเว็บไซต์"
+              label={t("shared.applicationDetails.contact")}
+              placeholder={t("shared.organizerApplication.form.contactPlaceholder")}
             />
           )}
         </form.Field>
@@ -360,10 +372,9 @@ function ApplicationForm({
           {(field) => (
             <TextField
               field={field}
-              label="อีเวนต์ที่คุณวางแผนจะจัด"
-              icon={MessageSquareText}
+              label={t("shared.organizerApplication.form.reasonLabel")}
               multiline
-              placeholder="เล่าประเภทอีเวนต์ ขนาดงาน และประสบการณ์ที่ผ่านมา"
+              placeholder={t("shared.organizerApplication.form.reasonPlaceholder")}
             />
           )}
         </form.Field>
@@ -371,13 +382,13 @@ function ApplicationForm({
           {onBack && (
             <Button type="button" variant="outline" onClick={onBack}>
               <ArrowLeft data-icon="inline-start" />
-              กลับ
+              {t("shared.organizerApplication.form.back")}
             </Button>
           )}
           <form.Subscribe selector={(state) => state.isSubmitting}>
             {(isSubmitting) => (
               <SubmitButton pending={isSubmitting} icon={Send}>
-                ส่งคำขอ
+                {t("shared.organizerApplication.form.submit")}
               </SubmitButton>
             )}
           </form.Subscribe>

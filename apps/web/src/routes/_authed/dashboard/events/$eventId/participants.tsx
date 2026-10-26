@@ -10,6 +10,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useT } from "@/i18n";
 import { enrollmentStatusInfo, eventEnrollmentsQueryOptions, type EnrollmentStatus } from "@/lib/enrollments";
 import { hasRole, useSession } from "@/lib/session";
 import { ticketTypesQueryOptions } from "@/lib/ticket-types";
@@ -33,6 +34,7 @@ export const Route = createFileRoute("/_authed/dashboard/events/$eventId/partici
 });
 
 function ParticipantsTab() {
+  const t = useT();
   const event = useEventDetail();
   const { data: session } = useSession();
   // a suspended event is frozen for its organizer until an admin lifts it
@@ -49,16 +51,16 @@ function ParticipantsTab() {
   }, [debouncedSearch, q, navigate]);
 
   const { data: types } = useQuery(ticketTypesQueryOptions(event.id));
-  const { data, isPending, isPlaceholderData } = useQuery({
+  const { data, isPending, isError, refetch, isPlaceholderData } = useQuery({
     ...eventEnrollmentsQueryOptions(event.id, { page, pageSize: PAGE_SIZE, q: q || undefined, status, ticketTypeId }),
     placeholderData: keepPreviousData,
   });
-  const columns = useMemo(() => enrollmentColumns(locked), [locked]);
+  const columns = useMemo(() => enrollmentColumns(t, locked), [t, locked]);
   const counts = data?.counts;
   const all = counts ? STATUSES.reduce((sum, key) => sum + counts[key], 0) : undefined;
   const filtered = !!status || !!q || !!ticketTypeId;
   const typeItems = [
-    { value: ALL_TYPES, label: "ทุกประเภทตั๋ว" },
+    { value: ALL_TYPES, label: t("eventAdmin.participants.allTypes") },
     ...(types ?? []).map((type) => ({ value: type.id, label: type.name })),
   ];
 
@@ -66,11 +68,11 @@ function ParticipantsTab() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
         <h2 className="flex items-center gap-2 text-xl font-bold">
-          <Users className="size-5 text-primary" />
-          ผู้ลงทะเบียน
+          <Users className="size-5 text-primary dark:text-chart-2" />
+          {t("eventAdmin.participants.title")}
         </h2>
         <p className="text-sm text-muted-foreground">
-          ดูผู้เข้าร่วมและคำตอบในแบบฟอร์มของแต่ละการลงทะเบียน และอนุมัติคำขอของตั๋วแบบต้องได้รับอนุมัติ
+          {t("eventAdmin.participants.description")}
         </p>
       </div>
 
@@ -81,11 +83,11 @@ function ParticipantsTab() {
             <EmptyMedia variant="icon">
               <Users />
             </EmptyMedia>
-            <EmptyTitle>ยังไม่มีผู้ลงทะเบียน</EmptyTitle>
+            <EmptyTitle>{t("eventAdmin.participants.empty.title")}</EmptyTitle>
             <EmptyDescription>
               {types?.length
-                ? "เมื่อมีคนลงทะเบียนรับตั๋ว รายชื่อและคำตอบในแบบฟอร์มจะแสดงที่นี่"
-                : "เพิ่มประเภทตั๋วก่อน เพื่อเปิดให้ลงทะเบียน"}
+                ? t("eventAdmin.participants.empty.withTypes")
+                : t("eventAdmin.participants.empty.noTypes")}
             </EmptyDescription>
           </EmptyHeader>
           {!types?.length && (
@@ -96,7 +98,7 @@ function ParticipantsTab() {
                 className={buttonVariants()}
               >
                 <TicketPlus data-icon="inline-start" />
-                เพิ่มประเภทตั๋ว
+                {t("eventAdmin.participants.empty.addType")}
               </Link>
             </EmptyContent>
           )}
@@ -106,7 +108,7 @@ function ParticipantsTab() {
           <ToggleGroup
             variant="outline"
             className="flex-wrap"
-            aria-label="กรองตามสถานะ"
+            aria-label={t("eventAdmin.participants.filters.status")}
             value={[status ?? "all"]}
             onValueChange={(value: string[]) => {
               if (!value[0]) return;
@@ -116,7 +118,7 @@ function ParticipantsTab() {
           >
             <ToggleGroupItem value="all">
               <ListFilter />
-              ทั้งหมด
+              {t("eventAdmin.participants.filters.all")}
               {all !== undefined && <span className="text-muted-foreground tabular-nums">{all}</span>}
             </ToggleGroupItem>
             {STATUSES.map((value) => {
@@ -140,7 +142,7 @@ function ParticipantsTab() {
                 })
               }
             >
-              <SelectTrigger className="w-full sm:w-56" aria-label="กรองตามประเภทตั๋ว">
+              <SelectTrigger className="w-full sm:w-56" aria-label={t("eventAdmin.participants.filters.type")}>
                 <Ticket className="text-muted-foreground" />
                 <SelectValue />
               </SelectTrigger>
@@ -160,14 +162,14 @@ function ParticipantsTab() {
               </InputGroupAddon>
               <InputGroupInput
                 enterKeyHint="search"
-                placeholder="ค้นหาชื่อหรืออีเมล"
-                aria-label="ค้นหาผู้ลงทะเบียนหรือผู้เข้าร่วม"
+                placeholder={t("eventAdmin.participants.search.placeholder")}
+                aria-label={t("eventAdmin.participants.search.label")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
               {search && (
                 <InputGroupAddon align="inline-end">
-                  <InputGroupButton size="icon-xs" aria-label="ล้างคำค้นหา" onClick={() => setSearch("")}>
+                  <InputGroupButton size="icon-xs" aria-label={t("eventAdmin.participants.search.clear")} onClick={() => setSearch("")}>
                     <X />
                   </InputGroupButton>
                 </InputGroupAddon>
@@ -178,11 +180,14 @@ function ParticipantsTab() {
             <DataTable
               columns={columns}
               data={data?.items ?? []}
+              mobileHide={["ticket", "total", "createdAt"]}
+              mobileFold={["status"]}
+              error={isError && !data ? { onRetry: () => void refetch() } : undefined}
               isLoading={isPending}
               empty={{
                 icon: SearchX,
-                title: "ไม่พบการลงทะเบียนที่ตรงกับตัวกรอง",
-                description: q ? `ไม่มีชื่อหรืออีเมลที่ตรงกับ “${q}”` : "ลองเลือกสถานะหรือประเภทตั๋วอื่น",
+                title: t("eventAdmin.participants.noMatch.title"),
+                description: q ? t("eventAdmin.participants.noMatch.query", { q }) : t("eventAdmin.participants.noMatch.tryOther"),
                 action: filtered && (
                   <Button
                     variant="outline"
@@ -192,7 +197,7 @@ function ParticipantsTab() {
                     }}
                   >
                     <X data-icon="inline-start" />
-                    ล้างตัวกรอง
+                    {t("eventAdmin.participants.noMatch.clear")}
                   </Button>
                 ),
               }}

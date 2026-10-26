@@ -33,10 +33,14 @@ ENV NODE_ENV=production
 # --minify-whitespace/--minify-syntax only (full --minify mangles names).
 RUN cd apps/payment && bun build --compile --minify-whitespace --minify-syntax --target bun \
       --outfile /app/server src/index.ts
+# Second entrypoint: the read-only release check (scripts/release.sh runs it as a one-off pod with this pod's env and Secrets).
+RUN cd apps/payment && bun build --compile --minify-whitespace --minify-syntax --target bun \
+      --outfile /app/preflight scripts/preflight.ts
 
 FROM gcr.io/distroless/base-debian12:nonroot
 WORKDIR /app
 COPY --from=build /app/server ./server
+COPY --from=build /app/preflight ./preflight
 ENV NODE_ENV=production
 USER nonroot
 EXPOSE 3000

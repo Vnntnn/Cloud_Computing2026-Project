@@ -50,6 +50,9 @@ deploy: ## ONE command: from an empty/reset lab (or a running platform) to the s
 redeploy: ## app only, on a running platform: build+push the 7 images, k8s Secrets, helm upgrade (migrates first), roll out (what CI runs)
 	$(AWSENV) bash scripts/deploy.sh
 
+rollback: ## gated Helm rollback (payment preflight first) — make rollback REV=<helm revision>
+	$(AWSENV) bash scripts/release.sh rollback $(REV)
+
 admin: ## promote a registered user to admin on the running cluster — make admin EMAIL=you@example.com
 	$(AWSENV) bash scripts/admin.sh $(EMAIL)
 

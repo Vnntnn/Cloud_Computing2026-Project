@@ -1,8 +1,8 @@
-import { alias, and, count, db, desc, enrollments, eq, events, payments, refunds, sql, ticketTypes, users } from "@app/db";
-import { announceSeats, EnrollmentNotFound, markCancelled, refundTerms } from "@app/tickets";
+import { alias, and, asc, count, db, desc, enrollments, eq, events, payments, refunds, sql, ticketTypes, users } from "@app/db";
+import { announceSeats, EnrollmentNotFound, refundTerms } from "@app/tickets";
 import { HTTPError } from "elysia";
-import { mailCancellation } from "../../libs/mail";
-import { issueRefund } from "../../libs/refund";
+import { RefundUnavailable } from "../../libs/errors";
+import { claimRefund, runRefund } from "../../libs/refund";
 import type * as RefundModel from "./model";
 
 export class AlreadyRefunded extends HTTPError.id("ALREADY_REFUNDED", 409) {
@@ -36,12 +36,14 @@ type Requester =
 
 /**
  * Cancels a confirmed, paid order and refunds it: its buyer gets the policy's percent until the
- * deadline, the organizer refunds 100% any time. The enrollment stays locked from the checks
- * through the Stripe call, so two requests can't both refund it; the cancellation frees its
- * seats and invitation.
+ * deadline, the organizer refunds 100% any time. The enrollment is locked while the checks run and
+ * the refund is claimed (libs/refund.ts), so two requests can't both refund it: the second finds the
+ * claim and is told it's already refunded. Stripe is asked after the lock is released; the refund,
+ * the payment and the cancellation (which frees its seats and invitation) are then recorded together.
+ * It's the order's accepted payment that is refunded, never a duplicate of it that is waiting for its own refund.
  */
 async function cancelAndRefund(enrollmentId: string, requester: Requester) {
-  const result = await db.transaction(async (tx) => {
+  const claimed = await db.transaction(async (tx) => {
     const [row] = await tx
       .select({ enrollment: enrollments, event: { startsAt: events.startsAt } })
       .from(enrollments)
@@ -65,26 +67,37 @@ async function cancelAndRefund(enrollmentId: string, requester: Requester) {
     const [payment] = await tx
       .select()
       .from(payments)
-      .where(and(eq(payments.enrollmentId, enrollmentId), eq(payments.status, "paid")))
+      .where(
+        and(
+          eq(payments.enrollmentId, enrollmentId),
+          eq(payments.status, "paid"),
+          // an order confirmed before the accepted payment was recorded: the one paid first
+          enrollment.acceptedPaymentId ? eq(payments.id, enrollment.acceptedPaymentId) : undefined,
+        ),
+      )
+      .orderBy(asc(payments.paidAt), asc(payments.id))
+      .limit(1)
       .for("update");
     // a free order: nothing to give back
     if (!payment) return new NotRefundable();
 
-    const refund = await issueRefund(tx, payment, {
+    const claim = await claimRefund(tx, payment, {
       percent,
       initiatedBy: requester.initiatedBy,
       requestedBy: requester.userId,
       note: requester.initiatedBy === "organizer" ? requester.note?.trim() || undefined : undefined,
     });
-    if (refund instanceof Error) return refund;
-    await markCancelled(tx, enrollment);
-    return { refund, eventId: enrollment.eventId };
+    return { claim, payment, eventId: enrollment.eventId };
   });
-  if (result instanceof Error) return result;
-  announceSeats(result.eventId);
-  // awaited (one mail per attendee, at most 10); it never throws
-  await mailCancellation(result.refund);
-  return toRefund(result.refund);
+  if (claimed instanceof Error) return claimed;
+
+  const outcome = await runRefund(claimed.claim, claimed.payment);
+  // its owner is still on it, or it is waiting for its next attempt
+  if ("inFlight" in outcome) return outcome.waiting ? new RefundUnavailable() : new AlreadyRefunded();
+  if (outcome instanceof Error) return outcome;
+  // the cancellation mails were recorded with the refund and sent by the step that recorded it
+  if (outcome.performed) announceSeats(claimed.eventId);
+  return toRefund(outcome.refund);
 }
 
 export const refundAsBuyer = (buyerId: string, enrollmentId: string) =>

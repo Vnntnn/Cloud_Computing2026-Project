@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
-import { CalendarDays, CalendarX, ChevronLeft, ChevronRight, History, Search, SearchX, Sparkles, Tag, X } from "lucide-react";
+import { CalendarDays, CalendarX, ChevronLeft, ChevronRight, History, RotateCw, Search, SearchX, Tag, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -10,9 +10,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { useT } from "@/i18n";
 import { EventCard } from "@/components/event-card";
+import { Billboard } from "@/components/home-events";
+import { CategoryChip } from "@/components/event-poster";
+import { PageHeader } from "@/components/page-header";
 import { UserAvatar } from "@/components/user-avatar";
-import { categoriesQueryOptions, publicEventsQueryOptions } from "@/lib/events";
+import { categoriesQueryOptions, publicEventsQueryOptions, type EventSummary } from "@/lib/events";
+import { formatMonthYear } from "@/lib/format";
 import { organizerQueryOptions } from "@/lib/organizers";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +36,7 @@ export const Route = createFileRoute("/events/_browse")({
 });
 
 function EventsListPage() {
+  const t = useT();
   // `to: "."` keeps the current path; navigating from this layout would resolve "." to /events and drop the category
   const navigate = useNavigate();
   const { category: slug } = useParams({ strict: false });
@@ -52,8 +58,8 @@ function EventsListPage() {
   const category = slug ? categories?.find((c) => c.slug === slug) : undefined;
   const categoryMissing = !!slug && !!categories && !category;
   // a category path keeps its title until the categories load
-  usePageTitle(slug ? category?.name : "สำรวจอีเวนต์");
-  const { data, isError, isPlaceholderData } = useQuery({
+  usePageTitle(slug ? category?.name : t("pub.browse.title"));
+  const { data, isError, isPlaceholderData, refetch, isRefetching } = useQuery({
     ...publicEventsQueryOptions({
       page,
       pageSize: PAGE_SIZE,
@@ -86,31 +92,26 @@ function EventsListPage() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 py-4">
-      <div className="flex flex-col gap-1">
-        <h1 className="flex items-center gap-2 text-3xl font-bold">
-          <Sparkles className="size-7 text-primary" />
-          สำรวจอีเวนต์
-        </h1>
-        <p className="text-muted-foreground">ค้นหาอีเวนต์ที่น่าสนใจ แล้วไปร่วมสนุกกัน</p>
-      </div>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 py-6">
+      <PageHeader size="lg" title={category?.name ?? t("pub.browse.title")} description={t("pub.browse.subtitle")} />
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-3">
-          <InputGroup className="max-w-md flex-1">
+          {/* a phone gives the search its own row: next to the Upcoming/Past toggle it was squeezed to a few pixels */}
+          <InputGroup className="w-full sm:max-w-md sm:flex-1 sm:basis-0">
             <InputGroupAddon>
               <Search />
             </InputGroupAddon>
             <InputGroupInput
               enterKeyHint="search"
-              placeholder="ค้นหาชื่ออีเวนต์หรือสถานที่"
-              aria-label="ค้นหาอีเวนต์"
+              placeholder={t("pub.browse.searchPlaceholder")}
+              aria-label={t("pub.browse.searchLabel")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
             {search && (
               <InputGroupAddon align="inline-end">
-                <InputGroupButton size="icon-xs" aria-label="ล้างคำค้นหา" onClick={() => setSearch("")}>
+                <InputGroupButton size="icon-xs" aria-label={t("pub.browse.clearSearch")} onClick={() => setSearch("")}>
                   <X />
                 </InputGroupButton>
               </InputGroupAddon>
@@ -118,7 +119,7 @@ function EventsListPage() {
           </InputGroup>
           <ToggleGroup
             variant="outline"
-            aria-label="ช่วงเวลา"
+            aria-label={t("pub.browse.whenLabel")}
             value={[when]}
             onValueChange={(value: string[]) =>
               value[0] &&
@@ -130,11 +131,11 @@ function EventsListPage() {
           >
             <ToggleGroupItem value="upcoming">
               <CalendarDays />
-              กำลังจะมาถึง
+              {t("pub.browse.upcoming")}
             </ToggleGroupItem>
             <ToggleGroupItem value="past">
               <History />
-              ผ่านไปแล้ว
+              {t("pub.browse.past")}
             </ToggleGroupItem>
           </ToggleGroup>
         </div>
@@ -151,16 +152,17 @@ function EventsListPage() {
             variant="outline"
             size="sm"
             className="flex-wrap"
-            aria-label="หมวดหมู่"
+            aria-label={t("pub.browse.categoryLabel")}
             value={category ? [category.id] : slug ? [] : ["all"]}
             onValueChange={(value: string[]) => value[0] && selectCategory(value[0])}
           >
             <ToggleGroupItem value="all">
               <Tag />
-              ทุกหมวดหมู่
+              {t("pub.browse.allCategories")}
             </ToggleGroupItem>
             {categories.map((c) => (
               <ToggleGroupItem key={c.id} value={c.id}>
+                <CategoryChip slug={c.slug} className="size-3.5" />
                 {c.name}
               </ToggleGroupItem>
             ))}
@@ -168,15 +170,42 @@ function EventsListPage() {
         )}
       </div>
 
+      {data && !isError && (
+        <div className="-mt-2 flex flex-wrap items-center justify-between gap-3">
+          <p aria-live="polite" className="text-sm font-medium text-muted-foreground">
+            {t("pub.browse.results", { n: data.total })}
+          </p>
+          {filtered && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                void navigate({ to: "/events", search: (prev) => ({ when: prev.when }) });
+              }}
+            >
+              <X data-icon="inline-start" />
+              {t("pub.browse.empty.clearFilters")}
+            </Button>
+          )}
+        </div>
+      )}
+
       {isError || (slug && categoriesError) ? (
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <CalendarX />
             </EmptyMedia>
-            <EmptyTitle>โหลดอีเวนต์ไม่สำเร็จ</EmptyTitle>
-            <EmptyDescription>กรุณาลองใหม่อีกครั้ง</EmptyDescription>
+            <EmptyTitle>{t("pub.browse.error.title")}</EmptyTitle>
+            <EmptyDescription>{t("pub.browse.error.description")}</EmptyDescription>
           </EmptyHeader>
+          <EmptyContent>
+            <Button variant="outline" disabled={isRefetching} onClick={() => void refetch()}>
+              <RotateCw data-icon="inline-start" />
+              {t("shared.dataTable.retry")}
+            </Button>
+          </EmptyContent>
         </Empty>
       ) : categoryMissing ? (
         <Empty>
@@ -184,8 +213,8 @@ function EventsListPage() {
             <EmptyMedia variant="icon">
               <SearchX />
             </EmptyMedia>
-            <EmptyTitle>ไม่พบหมวดหมู่นี้</EmptyTitle>
-            <EmptyDescription>หมวดหมู่อาจถูกลบหรือเปลี่ยนชื่อแล้ว</EmptyDescription>
+            <EmptyTitle>{t("pub.browse.categoryMissing.title")}</EmptyTitle>
+            <EmptyDescription>{t("pub.browse.categoryMissing.description")}</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Link
@@ -194,14 +223,19 @@ function EventsListPage() {
               className={buttonVariants({ variant: "outline" })}
             >
               <Tag data-icon="inline-start" />
-              ดูทุกหมวดหมู่
+              {t("pub.browse.categoryMissing.viewAll")}
             </Link>
           </EmptyContent>
         </Empty>
       ) : !data ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => (
-            <Skeleton key={i} className="h-80" />
+            <div key={i} className="flex flex-col gap-4">
+              <Skeleton className="aspect-[16/10] rounded-sm" />
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-6 w-4/5" />
+              <Skeleton className="h-4 w-3/5" />
+            </div>
           ))}
         </div>
       ) : data.items.length === 0 ? (
@@ -210,8 +244,8 @@ function EventsListPage() {
             <EmptyMedia variant="icon">
               <CalendarX />
             </EmptyMedia>
-            <EmptyTitle>{when === "past" ? "ยังไม่มีอีเวนต์ที่ผ่านไปแล้ว" : "ยังไม่มีอีเวนต์ที่กำลังจะมาถึง"}</EmptyTitle>
-            <EmptyDescription>{filtered ? "ลองเปลี่ยนคำค้นหาหรือหมวดหมู่" : "กลับมาดูใหม่เร็วๆ นี้"}</EmptyDescription>
+            <EmptyTitle>{when === "past" ? t("pub.browse.empty.titlePast") : t("pub.browse.empty.titleUpcoming")}</EmptyTitle>
+            <EmptyDescription>{filtered ? t("pub.browse.empty.descriptionFiltered") : t("pub.browse.empty.description")}</EmptyDescription>
           </EmptyHeader>
           {filtered && (
             <EmptyContent>
@@ -223,32 +257,26 @@ function EventsListPage() {
                 }}
               >
                 <X data-icon="inline-start" />
-                ล้างตัวกรอง
+                {t("pub.browse.empty.clearFilters")}
               </Button>
             </EmptyContent>
           )}
         </Empty>
       ) : (
-        <div
-          className={cn("grid gap-4 transition-opacity sm:grid-cols-2 lg:grid-cols-3", isPlaceholderData && "opacity-60")}
-        >
-          {data.items.map((event) => (
-            <EventCard key={event.id} event={event} />
-          ))}
-        </div>
+        <Programme events={data.items} fading={isPlaceholderData} />
       )}
 
       {pageCount > 1 && (
-        <nav className="flex items-center justify-center gap-3" aria-label="หน้า">
+        <nav className="flex items-center justify-center gap-3" aria-label={t("pub.browse.pagination.label")}>
           <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => goToPage(page - 1)}>
             <ChevronLeft data-icon="inline-start" />
-            ก่อนหน้า
+            {t("pub.browse.pagination.previous")}
           </Button>
           <span className="text-sm text-muted-foreground tabular-nums">
-            หน้า {page} จาก {pageCount}
+            {t("pub.browse.pagination.page", { page, pageCount })}
           </span>
           <Button variant="outline" size="sm" disabled={page >= pageCount} onClick={() => goToPage(page + 1)}>
-            ถัดไป
+            {t("pub.browse.pagination.next")}
             <ChevronRight data-icon="inline-end" />
           </Button>
         </nav>
@@ -257,16 +285,55 @@ function EventsListPage() {
   );
 }
 
+/**
+ * The events as a programme: the first one set big (the way the home page sets its next event) when there are enough to
+ * make a list, then the rest under the month they fall in, each month a heading in type with a card grid beneath it.
+ * The server's order is kept; a month heading appears whenever the month changes.
+ */
+function Programme({ events, fading }: { events: EventSummary[]; fading: boolean }) {
+  const lead = events.length >= 4 ? events[0] : undefined;
+  const months: { key: string; at: string; items: EventSummary[] }[] = [];
+  for (const event of lead ? events.slice(1) : events) {
+    const d = new Date(event.startsAt);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const last = months.at(-1);
+    if (last?.key === key) last.items.push(event);
+    else months.push({ key, at: event.startsAt, items: [event] });
+  }
+  return (
+    <div className={cn("flex flex-col gap-14 transition-opacity", fading && "opacity-60")}>
+      {lead && <Billboard event={lead} level={2} />}
+      {months.map((month) => (
+        <section key={month.key} aria-labelledby={`month-${month.key}`} className="flex flex-col gap-8">
+          <h2 id={`month-${month.key}`} className="rise-in border-t border-foreground/80 pt-4 text-3xl leading-[1.25] font-bold tracking-tight sm:text-4xl sm:leading-[1.25]">
+            {formatMonthYear(month.at)}
+          </h2>
+          <div className="grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {month.items.map((event) => (
+              <EventCard key={event.id} event={event} />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 /** "Events by …" chip shown while the list is narrowed to one organizer (from an event page's organizer section). */
 function OrganizerFilter({ organizerId, onClear }: { organizerId: string; onClear: () => void }) {
+  const t = useT();
   const { data: organizer } = useQuery(organizerQueryOptions(organizerId));
+  // the name goes in bold wherever the language puts it
+  const [before, after] = t("pub.browse.organizerFilter.prefix", { name: "\u0001" }).split("\u0001");
   return (
     <div className="flex items-center gap-2 self-start rounded-full border py-1 pr-1 pl-1.5 text-sm">
       {organizer ? <UserAvatar user={organizer} size="sm" /> : <Skeleton className="size-6 rounded-full" />}
       <span>
-        อีเวนต์จาก <span className="font-medium">{organizer?.name ?? "ผู้จัดงาน"}</span>
+        {before}
+        <span className="font-medium">{organizer?.name ?? t("pub.browse.organizerFilter.fallbackName")}</span>
+        {after}
       </span>
-      <Button variant="ghost" size="icon-xs" aria-label="แสดงอีเวนต์จากทุกผู้จัดงาน" onClick={onClear}>
+      <Button variant="ghost" size="icon-xs" aria-label={t("pub.browse.organizerFilter.clear")} onClick={onClear}>
         <X />
       </Button>
     </div>

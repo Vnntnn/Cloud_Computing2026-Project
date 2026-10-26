@@ -96,3 +96,13 @@ describe("account links", () => {
     expect(mail.text).toContain("สมัครสมาชิกและดูตั๋ว");
   });
 });
+
+test("a cancelled refund says the money was not returned, and never that it is refunded or on its way", async () => {
+  const mail = await renderWith("refund-canceled", { amount: 450 });
+  expect(mail.subject).toContain("การคืนเงินถูกยกเลิก");
+  expect(mail.text).toContain("ยังไม่ได้คืน");
+  expect(mail.text).toContain("ติดต่อผู้จัดงาน");
+  expect(mail.text).not.toContain("คืนเงินแล้ว");
+  expect(mail.text).not.toContain("กำลังดำเนินการ");
+  expect(mail.html).toContain("450");
+});

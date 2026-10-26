@@ -1,9 +1,7 @@
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  ArrowLeft, CalendarClock, ChevronRight, CircleCheckBig, CircleX, Clock, CreditCard, Hourglass, Mail, MapPin, QrCode,
-  ReceiptText, RefreshCw, TicketX, Undo2, UserRound,
-} from "lucide-react";
+import { ArrowLeft, CalendarClock, ChevronRight, CircleCheckBig, CircleX, Clock, CreditCard, Hourglass, Mail, MapPin, QrCode, RefreshCw, TicketX, Undo2, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { EnrollmentStatusBadge } from "@/components/enrollment-status-badge";
@@ -29,6 +27,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { paymentClient } from "@/lib/api";
+import { cn } from "cn";
+import { useT, type Translate } from "@/i18n";
 import { problemMessage } from "@/lib/auth-errors";
 import { enrollmentQueryOptions, enrollmentsKey, type Enrollment } from "@/lib/enrollments";
 import { formatBaht, formatDateRange, formatDateTime, formatPrice } from "@/lib/format";
@@ -44,6 +44,7 @@ const POLL_MS = 2_000;
 const POLL_FOR_MS = 30_000;
 
 function OrderPage() {
+  const t = useT();
   const { enrollmentId } = Route.useParams();
   const { paid } = Route.useSearch();
   // back from Stripe: check again until the webhook confirms it, for a while
@@ -57,10 +58,11 @@ function OrderPage() {
     ...enrollmentQueryOptions(enrollmentId),
     refetchInterval: (query) => (polling && query.state.data?.status === "awaiting_payment" ? POLL_MS : false),
   });
+  usePageTitle(order ? t("common.pageTitle.order", { event: order.event.title }) : undefined);
 
   if (isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 py-4" aria-busy="true" aria-label="กำลังโหลดรายการ">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 py-4" aria-busy="true" aria-label={t("account.tickets.order.loading")}>
         <Skeleton className="h-56" />
         <Skeleton className="h-40" />
       </div>
@@ -73,13 +75,13 @@ function OrderPage() {
           <EmptyMedia variant="icon">
             <TicketX />
           </EmptyMedia>
-          <EmptyTitle>ไม่พบรายการนี้</EmptyTitle>
-          <EmptyDescription>รายการลงทะเบียนจะแสดงกับบัญชีที่ลงทะเบียนเท่านั้น</EmptyDescription>
+          <EmptyTitle>{t("account.tickets.order.notFound.title")}</EmptyTitle>
+          <EmptyDescription>{t("account.tickets.order.notFound.description")}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Link to="/tickets" className={buttonVariants({ variant: "outline" })}>
             <ArrowLeft data-icon="inline-start" />
-            ตั๋วของฉัน
+            {t("account.tickets.back")}
           </Link>
         </EmptyContent>
       </Empty>
@@ -92,7 +94,7 @@ function OrderPage() {
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 py-4">
       <Link to="/tickets" className={buttonVariants({ variant: "ghost", size: "sm", className: "self-start" })}>
         <ArrowLeft data-icon="inline-start" />
-        ตั๋วของฉัน
+        {t("account.tickets.back")}
       </Link>
       <OrderStatus order={order} confirming={confirming} afterPayment={!!paid} />
       <OrderSummary order={order} />
@@ -102,10 +104,11 @@ function OrderPage() {
 }
 
 function OrderStatus({ order, confirming, afterPayment }: { order: Enrollment; confirming: boolean; afterPayment: boolean }) {
+  const t = useT();
   const toEvent = (
     <Link to="/events/$slug" params={{ slug: order.event.slug }} className={buttonVariants({ variant: "outline" })}>
       <ArrowLeft data-icon="inline-start" />
-      กลับไปหน้าอีเวนต์
+      {t("account.tickets.order.status.backToEvent")}
     </Link>
   );
   const status: { icon: typeof Clock; title: string; description: string; actions?: React.ReactNode } = (() => {
@@ -113,31 +116,38 @@ function OrderStatus({ order, confirming, afterPayment }: { order: Enrollment; c
       case "confirmed":
         return {
           icon: CircleCheckBig,
-          title: order.ticketType.kind === "approval" ? "ได้รับการอนุมัติแล้ว" : "ลงทะเบียนสำเร็จ",
-          description: "ส่งตั๋วไปที่อีเมลของผู้เข้าร่วมแล้ว ผู้เข้าร่วมที่มีบัญชีด้วยอีเมลนั้นจะเห็นตั๋วในหน้าตั๋วของฉันด้วย",
+          title: order.ticketType.kind === "approval" ? t("account.tickets.order.status.approved") : t("account.tickets.order.status.registered"),
+          description: t("account.tickets.order.status.confirmedDescription"),
           actions: (
-            <Link to="/tickets" className={buttonVariants()}>
+            <Link to="/tickets" className={buttonVariants({ variant: "sun", size: "lg" })}>
               <QrCode data-icon="inline-start" />
-              ดูตั๋วของฉัน
+              {t("account.tickets.order.status.viewTickets")}
             </Link>
           ),
         };
       case "pending":
-        return { icon: Hourglass, title: "ส่งคำขอแล้ว", description: "รอผู้จัดงานพิจารณา เราจะแจ้งผลทางอีเมล", actions: toEvent };
+        return {
+          icon: Hourglass,
+          title: t("account.tickets.order.status.requestSent"),
+          description: t("account.tickets.order.status.requestSentDescription"),
+          actions: toEvent,
+        };
       case "awaiting_payment":
         if (confirming) {
           return {
             icon: CreditCard,
-            title: "กำลังยืนยันการชำระเงิน",
-            description: "รอสักครู่ หน้านี้จะอัปเดตเองเมื่อได้รับการยืนยันจาก Stripe",
+            title: t("account.tickets.order.status.confirmingPayment"),
+            description: t("account.tickets.order.status.confirmingPaymentDescription"),
           };
         }
         return {
           icon: CreditCard,
-          title: afterPayment ? "ยังไม่ได้รับการยืนยันการชำระเงิน" : "รอชำระเงิน",
+          title: afterPayment ? t("account.tickets.order.status.paymentNotConfirmed") : t("account.tickets.order.status.awaitingPayment"),
           description: afterPayment
-            ? "หากชำระแล้ว ระบบจะส่งตั๋วทางอีเมลเมื่อยืนยันเสร็จ ไม่ต้องชำระซ้ำ"
-            : `ชำระภายใน ${order.expiresAt ? formatDateTime(order.expiresAt) : "เวลาที่กำหนด"} เพื่อรับตั๋ว`,
+            ? t("account.tickets.order.status.paymentNotConfirmedDescription")
+            : t("account.tickets.order.status.payBy", {
+                when: order.expiresAt ? formatDateTime(order.expiresAt) : t("account.tickets.order.status.payByFallback"),
+              }),
           // back from Stripe, checking comes first: paying again isn't what they need
           actions: (
             <div className="flex flex-wrap justify-center gap-2">
@@ -149,36 +159,47 @@ function OrderStatus({ order, confirming, afterPayment }: { order: Enrollment; c
       case "rejected":
         return {
           icon: CircleX,
-          title: "ไม่ได้รับการอนุมัติ",
-          description: "ผู้จัดงานไม่ได้อนุมัติคำขอนี้ ดูเหตุผลได้ในอีเมลแจ้งผล",
+          title: t("account.tickets.order.status.rejected"),
+          description: t("account.tickets.order.status.rejectedDescription"),
           actions: toEvent,
         };
       case "expired":
         return {
           icon: Clock,
-          title: "หมดเวลาชำระเงิน",
-          description: "ที่นั่งที่จองไว้ถูกปล่อยแล้ว ลงทะเบียนใหม่ได้จากหน้าอีเวนต์หากตั๋วยังเหลือ",
+          title: t("account.tickets.order.status.expired"),
+          description: t("account.tickets.order.status.expiredDescription"),
           actions: toEvent,
         };
       case "cancelled":
-        return { icon: Undo2, ...cancelledStatus(order), actions: toEvent };
+        return { icon: Undo2, ...cancelledStatus(t, order), actions: toEvent };
     }
   })();
 
+  // what the order came to, said by the panel's colour first: ink for tickets in hand, red for a loss, grey while it waits
+  const good = order.status === "confirmed";
+  const bad = order.status === "rejected" || order.status === "cancelled" || order.status === "expired";
   return (
-    <Empty className="border">
-      <EmptyHeader>
-        <EmptyMedia variant="icon">{confirming ? <Spinner /> : <status.icon />}</EmptyMedia>
-        <EmptyTitle>{status.title}</EmptyTitle>
-        <EmptyDescription>{status.description}</EmptyDescription>
-      </EmptyHeader>
-      {status.actions && <EmptyContent>{status.actions}</EmptyContent>}
-    </Empty>
+    <section className={cn("flex flex-col items-center gap-6 rounded-md px-6 py-12 text-center sm:py-14", good ? "bg-dusk text-dusk-foreground dark:ring-1 dark:ring-dusk-foreground/15" : bad ? "bg-destructive/10" : "bg-muted")}>
+      <span
+        className={cn(
+          "flex size-16 items-center justify-center rounded-full",
+          good ? "bg-sun text-sun-foreground" : bad ? "bg-destructive/15 text-destructive" : "bg-background text-primary dark:text-chart-2",
+        )}
+      >
+        {confirming ? <Spinner className="size-7" /> : <status.icon className="size-8" />}
+      </span>
+      <div className="flex max-w-lg flex-col gap-2">
+        <h1 className="text-3xl leading-[1.25] font-bold tracking-tight text-balance sm:text-4xl sm:leading-[1.25]">{status.title}</h1>
+        <p className={cn("text-base", good ? "text-dusk-foreground/85" : "text-muted-foreground")}>{status.description}</p>
+      </div>
+      {status.actions}
+    </section>
   );
 }
 
 /** Has the payment service ask Stripe, for a payment the webhook hasn't confirmed (e.g. it never arrived). */
 function VerifyPaymentButton({ enrollmentId, ...props }: { enrollmentId: string } & React.ComponentProps<typeof Button>) {
+  const t = useT();
   const queryClient = useQueryClient();
   const verify = useMutation({
     mutationFn: async () => {
@@ -188,9 +209,17 @@ function VerifyPaymentButton({ enrollmentId, ...props }: { enrollmentId: string 
     },
     onSuccess: ({ status }) => {
       if (status === "confirmed") {
-        toast.add({ type: "success", title: "ยืนยันการชำระเงินแล้ว", description: "ส่งตั๋วไปที่อีเมลของผู้เข้าร่วมแล้ว" });
+        toast.add({
+          type: "success",
+          title: t("account.tickets.order.verify.confirmed"),
+          description: t("account.tickets.order.verify.confirmedHint"),
+        });
       } else if (status === "awaiting_payment") {
-        toast.add({ type: "info", title: "ยังไม่พบการชำระเงิน", description: "หากเพิ่งชำระ รอสักครู่แล้วตรวจสอบอีกครั้ง" });
+        toast.add({
+          type: "info",
+          title: t("account.tickets.order.verify.notFound"),
+          description: t("account.tickets.order.verify.notFoundHint"),
+        });
       }
       // anything else (e.g. the hold ran out) shows on the page itself
     },
@@ -200,43 +229,41 @@ function VerifyPaymentButton({ enrollmentId, ...props }: { enrollmentId: string 
   return (
     <Button {...props} disabled={verify.isPending || props.disabled} onClick={() => verify.mutate()}>
       {verify.isPending ? <Spinner data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}
-      ตรวจสอบการชำระเงิน
+      {t("account.tickets.order.verify.button")}
     </Button>
   );
 }
 
 /** What happened to a cancelled order's money, by the state of the refund that cancelled it. */
-function cancelledStatus(order: Enrollment) {
+function cancelledStatus(t: Translate, order: Enrollment) {
   const refund = order.refunds.at(-1);
-  const title = refund?.initiatedBy === "organizer" ? "ผู้จัดงานยกเลิกรายการนี้" : "ยกเลิกรายการแล้ว";
-  if (!refund) return { title, description: "ตั๋วในรายการนี้ใช้เช็กอินไม่ได้แล้ว" };
+  const title = refund?.initiatedBy === "organizer" ? t("account.tickets.order.cancelled.byOrganizer") : t("account.tickets.order.cancelled.byYou");
+  if (!refund) return { title, description: t("account.tickets.order.cancelled.noRefund") };
   const amount = formatBaht(refund.amount);
   switch (refund.status) {
     case "succeeded":
     case "pending":
       return {
         title,
-        description: `${refund.status === "succeeded" ? "คืนเงิน" : "กำลังคืนเงิน"} ${amount} เงินจะกลับเข้าช่องทางที่คุณชำระภายใน 5–10 วันทำการ`,
+        description: t(refund.status === "succeeded" ? "account.tickets.order.cancelled.refunded" : "account.tickets.order.cancelled.refunding", { amount }),
       };
     case "requires_action":
       return {
         title,
-        description: `ช่องทางที่คุณชำระคืนเงินอัตโนมัติไม่ได้ เราส่งอีเมลวิธีรับเงินคืน ${amount} ไปแล้ว กรุณาติดต่อเราพร้อมเลขคำสั่งซื้อ ${order.id}`,
+        description: t("account.tickets.order.cancelled.requiresAction", { amount, orderId: order.id }),
       };
     case "failed":
     case "canceled":
-      return { title, description: `คืนเงิน ${amount} ไม่สำเร็จ กรุณาติดต่อผู้จัดงานเพื่อรับเงินคืนทางช่องทางอื่น` };
+      return { title, description: t("account.tickets.order.cancelled.failed", { amount }) };
   }
 }
 
 function OrderSummary({ order }: { order: Enrollment }) {
+  const t = useT();
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ReceiptText className="size-5" />
-          {order.event.title}
-        </CardTitle>
+        <CardTitle>{order.event.title}</CardTitle>
         <CardDescription className="flex flex-col gap-1">
           <span className="flex items-center gap-1.5">
             <CalendarClock className="size-4 shrink-0" />
@@ -262,7 +289,7 @@ function OrderSummary({ order }: { order: Enrollment }) {
           <div key={refund.id} className="flex flex-wrap items-center justify-between gap-2">
             <span className="flex flex-wrap items-center gap-2">
               <Undo2 className="size-4 text-muted-foreground" />
-              คืนเงิน {refund.percent}%
+              {t("account.tickets.order.summary.refundPercent", { percent: refund.percent })}
               <RefundStatusBadge status={refund.status} />
               <span className="text-xs text-muted-foreground">{formatDateTime(refund.createdAt)}</span>
             </span>
@@ -270,7 +297,7 @@ function OrderSummary({ order }: { order: Enrollment }) {
           </div>
         ))}
         <Separator />
-        <ol className="flex flex-col gap-2" aria-label="ผู้เข้าร่วม">
+        <ol className="flex flex-col gap-2" aria-label={t("account.tickets.order.summary.attendees")}>
           {order.tickets.map((ticket) => {
             const row = (
               <>
@@ -304,7 +331,9 @@ function OrderSummary({ order }: { order: Enrollment }) {
             );
           })}
         </ol>
-        <span className="text-xs text-muted-foreground">ลงทะเบียนเมื่อ {formatDateTime(order.createdAt)}</span>
+        <span className="text-xs text-muted-foreground">
+          {t("account.tickets.order.summary.registeredAt", { date: formatDateTime(order.createdAt) })}
+        </span>
       </CardContent>
     </Card>
   );
@@ -312,6 +341,7 @@ function OrderSummary({ order }: { order: Enrollment }) {
 
 /** A confirmed paid order: what its refund policy gives back, and the button that cancels it for that. */
 function RefundCard({ order }: { order: Enrollment }) {
+  const t = useT();
   const terms = order.refundTerms;
   const open = terms !== null && isRefundOpen(terms);
   return (
@@ -319,14 +349,19 @@ function RefundCard({ order }: { order: Enrollment }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Undo2 className="size-5" />
-          การคืนเงิน
+          {t("account.tickets.order.refund.title")}
         </CardTitle>
         <CardDescription>
           {!terms
-            ? "รายการนี้ไม่รับคืนเงิน"
+            ? t("account.tickets.order.refund.none")
             : open
-              ? `ยกเลิกได้ถึง ${formatDateTime(terms.deadline)} และรับเงินคืน ${formatBaht(terms.amount)} (${terms.percent}% ของ ${formatPrice(order.total)})`
-              : `เลยกำหนดขอคืนเงินแล้ว (ขอคืนได้ถึง ${formatDateTime(terms.deadline)})`}
+              ? t("account.tickets.order.refund.open", {
+                  deadline: formatDateTime(terms.deadline),
+                  amount: formatBaht(terms.amount),
+                  percent: terms.percent,
+                  total: formatPrice(order.total),
+                })
+              : t("account.tickets.order.refund.closed", { deadline: formatDateTime(terms.deadline) })}
         </CardDescription>
         {open && (
           <CardAction>
@@ -339,6 +374,7 @@ function RefundCard({ order }: { order: Enrollment }) {
 }
 
 function RefundButton({ order, terms }: { order: Enrollment; terms: NonNullable<Enrollment["refundTerms"]> }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const refund = useMutation({
@@ -350,8 +386,8 @@ function RefundButton({ order, terms }: { order: Enrollment; terms: NonNullable<
     onSuccess: (data) => {
       toast.add({
         type: "success",
-        title: "ยกเลิกรายการแล้ว",
-        description: `ระบบกำลังคืนเงิน ${formatBaht(data.amount)} และส่งอีเมลแจ้งผู้เข้าร่วมแล้ว`,
+        title: t("account.tickets.order.refund.done"),
+        description: t("account.tickets.order.refund.doneHint", { amount: formatBaht(data.amount) }),
       });
       setOpen(false);
     },
@@ -364,27 +400,31 @@ function RefundButton({ order, terms }: { order: Enrollment; terms: NonNullable<
     <AlertDialog open={open} onOpenChange={(next) => !refund.isPending && setOpen(next)}>
       <AlertDialogTrigger render={<Button variant="outline" />}>
         <Undo2 data-icon="inline-start" />
-        ขอคืนเงิน
+        {t("account.tickets.order.refund.button")}
       </AlertDialogTrigger>
       <AlertDialogContent size="sm">
         <AlertDialogHeader>
           <AlertDialogMedia className="bg-destructive/10 text-destructive">
             <Undo2 />
           </AlertDialogMedia>
-          <AlertDialogTitle>ยกเลิกและขอคืนเงิน?</AlertDialogTitle>
+          <AlertDialogTitle>{t("account.tickets.order.refund.dialogTitle")}</AlertDialogTitle>
           <AlertDialogDescription>
-            คุณจะได้รับเงินคืน {formatBaht(terms.amount)} ({terms.percent}% ของ {formatPrice(order.total)}) ตั๋วทั้ง{" "}
-            {order.quantity} ใบจะถูกยกเลิกและใช้เช็กอินไม่ได้ ย้อนกลับไม่ได้
+            {t("account.tickets.order.refund.dialogDescription", {
+              amount: formatBaht(terms.amount),
+              percent: terms.percent,
+              total: formatPrice(order.total),
+              quantity: order.quantity,
+            })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={refund.isPending}>
             <ArrowLeft data-icon="inline-start" />
-            กลับ
+            {t("account.tickets.order.refund.back")}
           </AlertDialogCancel>
           <AlertDialogAction variant="destructive" disabled={refund.isPending} onClick={() => refund.mutate()}>
             {refund.isPending ? <Spinner data-icon="inline-start" /> : <Undo2 data-icon="inline-start" />}
-            ยกเลิกและคืนเงิน
+            {t("account.tickets.order.refund.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

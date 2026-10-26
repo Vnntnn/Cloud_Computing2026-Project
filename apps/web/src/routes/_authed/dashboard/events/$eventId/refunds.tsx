@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CircleX, Hourglass, ListFilter, Receipt, ReceiptText, SearchX, Users, Wallet, X, type LucideIcon } from "lucide-react";
+import { useMemo } from "react";
 import { z } from "zod";
 import { DataTable } from "@/components/data-table/data-table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -9,7 +10,8 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { formatBaht, formatDuration } from "@/lib/format";
+import { useT } from "@/i18n";
+import { formatBaht, formatDuration, formatNumber } from "@/lib/format";
 import { eventRefundsQueryOptions, refundStatusInfo, type RefundStatus } from "@/lib/refunds";
 import { cn } from "@/lib/utils";
 import { refundColumns } from "./-components/refunds-columns";
@@ -28,10 +30,12 @@ export const Route = createFileRoute("/_authed/dashboard/events/$eventId/refunds
 });
 
 function RefundsTab() {
+  const t = useT();
+  const columns = useMemo(() => refundColumns(t), [t]);
   const event = useEventDetail();
   const navigate = Route.useNavigate();
   const { status, page = 1 } = Route.useSearch();
-  const { data, isPending, isPlaceholderData } = useQuery({
+  const { data, isPending, isError, refetch, isPlaceholderData } = useQuery({
     ...eventRefundsQueryOptions(event.id, { page, pageSize: PAGE_SIZE, status }),
     placeholderData: keepPreviousData,
   });
@@ -42,11 +46,11 @@ function RefundsTab() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
         <h2 className="flex items-center gap-2 text-xl font-bold">
-          <ReceiptText className="size-5 text-primary" />
-          คืนเงิน
+          <ReceiptText className="size-5 text-primary dark:text-chart-2" />
+          {t("eventAdmin.refunds.title")}
         </h2>
         <p className="text-sm text-muted-foreground">
-          ประวัติการคืนเงินของอีเวนต์นี้ ผู้ซื้อยกเลิกและรับเงินคืนเองได้ตามนโยบาย ส่วนการคืนเงินเต็มจำนวนทำได้จากแท็บผู้เข้าร่วม
+          {t("eventAdmin.refunds.description")}
         </p>
       </div>
 
@@ -54,19 +58,25 @@ function RefundsTab() {
         <Receipt />
         <AlertTitle>
           {event.isRefundAvailable && event.refundCutoffHours !== null && event.refundPercent !== null
-            ? `คืนเงิน ${event.refundPercent}% เมื่อขอคืนก่อนงานเริ่มอย่างน้อย ${formatDuration(event.refundCutoffHours * 3_600_000)}`
-            : "อีเวนต์นี้ไม่รับคืนเงิน"}
+            ? t("eventAdmin.refunds.policy", {
+                percent: event.refundPercent,
+                duration: formatDuration(event.refundCutoffHours * 3_600_000),
+              })
+            : t("eventAdmin.refunds.noRefunds")}
         </AlertTitle>
         <AlertDescription>
-          การลงทะเบียนแต่ละรายการใช้นโยบาย ณ ตอนที่ลงทะเบียน การแก้นโยบายมีผลกับการลงทะเบียนใหม่เท่านั้น
+          {t("eventAdmin.refunds.policyNote")}
         </AlertDescription>
       </Alert>
 
+      {/* totals only mean something once there is a refund; at zero the empty state below says it */}
+      {(isPending || all !== 0) && (
       <div className="grid gap-4 md:grid-cols-3">
-        <StatCard icon={Wallet} label="ยอดคืนเงินรวม" value={data && formatBaht(data.refundedTotal)} />
-        <StatCard icon={Hourglass} label="กำลังดำเนินการ" value={counts && (counts.pending + counts.requires_action).toLocaleString("th-TH")} />
-        <StatCard icon={CircleX} label="คืนเงินไม่สำเร็จ" value={counts?.failed.toLocaleString("th-TH")} />
+        <StatCard icon={Wallet} label={t("eventAdmin.refunds.stats.total")} value={data && formatBaht(data.refundedTotal)} />
+        <StatCard icon={Hourglass} label={t("eventAdmin.refunds.stats.inProgress")} value={counts && formatNumber(counts.pending + counts.requires_action)} />
+        <StatCard icon={CircleX} label={t("eventAdmin.refunds.stats.failed")} value={counts && formatNumber(counts.failed)} />
       </div>
+      )}
 
       {!isPending && all === 0 ? (
         <Empty className="border">
@@ -74,8 +84,8 @@ function RefundsTab() {
             <EmptyMedia variant="icon">
               <ReceiptText />
             </EmptyMedia>
-            <EmptyTitle>ยังไม่มีการคืนเงิน</EmptyTitle>
-            <EmptyDescription>เมื่อผู้ซื้อขอคืนเงิน หรือคุณคืนเงินให้ผู้ลงทะเบียน รายการจะแสดงที่นี่</EmptyDescription>
+            <EmptyTitle>{t("eventAdmin.refunds.empty.title")}</EmptyTitle>
+            <EmptyDescription>{t("eventAdmin.refunds.empty.description")}</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Link
@@ -84,7 +94,7 @@ function RefundsTab() {
               className={buttonVariants({ variant: "outline" })}
             >
               <Users data-icon="inline-start" />
-              ดูผู้เข้าร่วม
+              {t("eventAdmin.refunds.empty.viewParticipants")}
             </Link>
           </EmptyContent>
         </Empty>
@@ -93,7 +103,7 @@ function RefundsTab() {
           <ToggleGroup
             variant="outline"
             className="flex-wrap"
-            aria-label="กรองตามสถานะ"
+            aria-label={t("eventAdmin.refunds.filters.status")}
             value={[status ?? "all"]}
             onValueChange={(value: string[]) => {
               if (!value[0]) return;
@@ -103,7 +113,7 @@ function RefundsTab() {
           >
             <ToggleGroupItem value="all">
               <ListFilter />
-              ทั้งหมด
+              {t("eventAdmin.refunds.filters.all")}
               {all !== undefined && <span className="text-muted-foreground tabular-nums">{all}</span>}
             </ToggleGroupItem>
             {STATUSES.map((value) => {
@@ -119,17 +129,18 @@ function RefundsTab() {
           </ToggleGroup>
           <div className={cn("transition-opacity", isPlaceholderData && "opacity-60")}>
             <DataTable
-              columns={refundColumns}
+              columns={columns}
               data={data?.items ?? []}
               isLoading={isPending}
+              error={isError && !data ? { onRetry: () => void refetch() } : undefined}
               empty={{
                 icon: SearchX,
-                title: "ไม่พบการคืนเงินในสถานะนี้",
-                description: "ลองเลือกสถานะอื่น",
+                title: t("eventAdmin.refunds.noMatch.title"),
+                description: t("eventAdmin.refunds.noMatch.description"),
                 action: status && (
                   <Button variant="outline" onClick={() => void navigate({ search: {} })}>
                     <X data-icon="inline-start" />
-                    ล้างตัวกรอง
+                    {t("eventAdmin.refunds.noMatch.clear")}
                   </Button>
                 ),
               }}

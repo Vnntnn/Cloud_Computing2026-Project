@@ -1,3 +1,5 @@
+import { usePageTitle } from "@/hooks/use-page-title";
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, Outlet, useMatchRoute } from "@tanstack/react-router";
 import {
@@ -23,12 +25,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { eventQueryOptions, eventUrl, type EventDetail } from "@/lib/events";
 import { formatDateTime } from "@/lib/format";
+import { useT, type MessageKey } from "@/i18n";
 import { hasRole, useSession } from "@/lib/session";
 
 export const Route = createFileRoute("/_authed/dashboard/events/$eventId")({ component: EventLayout });
 
 type Tab = {
-  title: string;
+  title: MessageKey;
   icon: LucideIcon;
   to:
     | "/dashboard/events/$eventId"
@@ -39,14 +42,15 @@ type Tab = {
 };
 
 const tabs: Tab[] = [
-  { title: "รายละเอียด", to: "/dashboard/events/$eventId", icon: PencilLine },
-  { title: "ตั๋ว", to: "/dashboard/events/$eventId/tickets", icon: Ticket },
-  { title: "ผู้ได้รับเชิญ", to: "/dashboard/events/$eventId/invitations", icon: MailCheck },
-  { title: "ผู้เข้าร่วม", to: "/dashboard/events/$eventId/participants", icon: Users },
-  { title: "คืนเงิน", to: "/dashboard/events/$eventId/refunds", icon: ReceiptText },
+  { title: "eventAdmin.layout.tabs.details", to: "/dashboard/events/$eventId", icon: PencilLine },
+  { title: "eventAdmin.layout.tabs.tickets", to: "/dashboard/events/$eventId/tickets", icon: Ticket },
+  { title: "eventAdmin.layout.tabs.invitations", to: "/dashboard/events/$eventId/invitations", icon: MailCheck },
+  { title: "eventAdmin.layout.tabs.participants", to: "/dashboard/events/$eventId/participants", icon: Users },
+  { title: "eventAdmin.layout.tabs.refunds", to: "/dashboard/events/$eventId/refunds", icon: ReceiptText },
 ];
 
 function EventLayout() {
+  const t = useT();
   const { eventId } = Route.useParams();
   const { data: event, isPending, isError } = useQuery(eventQueryOptions(eventId));
 
@@ -58,13 +62,13 @@ function EventLayout() {
           <EmptyMedia variant="icon">
             <CalendarX />
           </EmptyMedia>
-          <EmptyTitle>ไม่พบอีเวนต์นี้</EmptyTitle>
-          <EmptyDescription>อีเวนต์อาจถูกลบไปแล้ว หรือคุณไม่มีสิทธิ์แก้ไข</EmptyDescription>
+          <EmptyTitle>{t("eventAdmin.layout.notFound.title")}</EmptyTitle>
+          <EmptyDescription>{t("eventAdmin.layout.notFound.description")}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Link to="/dashboard/events" className={buttonVariants({ variant: "outline" })}>
             <ArrowLeft data-icon="inline-start" />
-            กลับไปรายการอีเวนต์
+            {t("eventAdmin.layout.notFound.back")}
           </Link>
         </EmptyContent>
       </Empty>
@@ -74,7 +78,7 @@ function EventLayout() {
   return (
     <div className="flex flex-col gap-6">
       <EventHeader event={event} />
-      <EventTabs eventId={event.id} />
+      <EventTabs eventId={event.id} eventTitle={event.title} />
       <SuspendedAlert event={event} />
       <Outlet />
     </div>
@@ -82,12 +86,13 @@ function EventLayout() {
 }
 
 function EventHeader({ event }: { event: EventDetail }) {
+  const t = useT();
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(eventUrl(event.slug));
-      toast.add({ type: "success", title: "คัดลอกลิงก์แล้ว", description: eventUrl(event.slug) });
+      toast.add({ type: "success", title: t("eventAdmin.layout.header.linkCopied"), description: eventUrl(event.slug) });
     } catch {
-      toast.add({ type: "error", title: "คัดลอกไม่สำเร็จ" });
+      toast.add({ type: "error", title: t("eventAdmin.layout.header.copyFailed") });
     }
   }
 
@@ -95,23 +100,23 @@ function EventHeader({ event }: { event: EventDetail }) {
     <header className="flex flex-col gap-3">
       <Link to="/dashboard/events" className={buttonVariants({ variant: "ghost", size: "sm", className: "self-start" })}>
         <ArrowLeft data-icon="inline-start" />
-        อีเวนต์ทั้งหมด
+        {t("eventAdmin.layout.header.allEvents")}
       </Link>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-2">
           <h1 className="flex min-w-0 items-center gap-2 text-2xl font-bold">
-            <CalendarCog className="size-6 shrink-0 text-primary" />
-            <span className="truncate">{event.title}</span>
+            <CalendarCog className="size-6 shrink-0 text-primary dark:text-chart-2" />
+            <span className="max-sm:line-clamp-2 sm:truncate">{event.title}</span>
           </h1>
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <EventStatusBadge status={event.status} publishAt={event.publishAt} />
-            <span>แก้ไขล่าสุด {formatDateTime(event.updatedAt)}</span>
+            <span>{t("eventAdmin.layout.header.lastEdited", { date: formatDateTime(event.updatedAt) })}</span>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={copyLink}>
             <Copy data-icon="inline-start" />
-            คัดลอกลิงก์
+            {t("eventAdmin.layout.header.copyLink")}
           </Button>
           <Link
             to="/events/$slug"
@@ -120,7 +125,7 @@ function EventHeader({ event }: { event: EventDetail }) {
             className={buttonVariants({ variant: "outline" })}
           >
             <ExternalLink data-icon="inline-start" />
-            ดูหน้าอีเวนต์
+            {t("eventAdmin.layout.header.viewPage")}
           </Link>
         </div>
       </div>
@@ -132,15 +137,24 @@ function EventHeader({ event }: { event: EventDetail }) {
  * One tab per route under the event; the URL picks the active one, so leaving unsaved edits still asks first.
  * Tabs with pages under them (e.g. tickets/new) stay active there; the details tab is the index, so only exactly.
  */
-function EventTabs({ eventId }: { eventId: string }) {
+function EventTabs({ eventId, eventTitle }: { eventId: string; eventTitle: string }) {
+  const t = useT();
   const matchRoute = useMatchRoute();
+  // the tab title carries the event's name ("Attendees · Night Market"); the pages under a tab (a ticket type's editor) set their own
+  const exact = tabs.find((tab) => matchRoute({ to: tab.to }));
+  usePageTitle(exact ? (exact.to === "/dashboard/events/$eventId" ? eventTitle : `${t(exact.title)} · ${eventTitle}`) : undefined);
   const current = tabs.find((tab) => matchRoute({ to: tab.to, fuzzy: tab.to !== "/dashboard/events/$eventId" }))?.to;
+  // on a phone the strip scrolls: bring the active tab into view instead of leaving it half hidden
+  const strip = useRef<HTMLElement>(null);
+  useEffect(() => {
+    strip.current?.querySelector("[data-active]")?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [current]);
 
   return (
     // scrolls sideways on narrow screens; the bottom padding keeps the active underline inside the scroll box
-    <nav aria-label="เมนูอีเวนต์" className="-mt-2 overflow-x-auto pb-1">
+    <nav ref={strip} aria-label={t("eventAdmin.layout.tabsLabel")} className="scroll-hint -mt-2 overflow-x-auto pb-1">
       <Tabs value={current}>
-        <TabsList variant="line">
+        <TabsList variant="line" className="max-sm:h-11">
           {tabs.map((tab) => (
             <TabsTrigger
               key={tab.to}
@@ -149,7 +163,7 @@ function EventTabs({ eventId }: { eventId: string }) {
               render={<Link to={tab.to} params={{ eventId }} />}
             >
               <tab.icon data-icon="inline-start" />
-              {tab.title}
+              {t(tab.title)}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -159,24 +173,26 @@ function EventTabs({ eventId }: { eventId: string }) {
 }
 
 function SuspendedAlert({ event }: { event: EventDetail }) {
+  const t = useT();
   const { data: session } = useSession();
   if (event.status !== "suspended") return null;
   return (
     <Alert variant="destructive">
       <Ban />
-      <AlertTitle>อีเวนต์นี้ถูกระงับ</AlertTitle>
+      <AlertTitle>{t("eventAdmin.layout.suspended.title")}</AlertTitle>
       <AlertDescription>
         {hasRole(session?.user, ["admin"])
-          ? "อีเวนต์ถูกซ่อนจากทุกคน ยกเลิกการระงับได้ที่การ์ด “การกำกับดูแล” ในแท็บรายละเอียด หรือเลือกสถานะใหม่แล้วบันทึก"
-          : "ผู้ดูแลระบบระงับอีเวนต์นี้ อีเวนต์ถูกซ่อนจากทุกคน และคุณแก้ไขไม่ได้จนกว่าจะยกเลิกการระงับ"}
+          ? t("eventAdmin.layout.suspended.admin")
+          : t("eventAdmin.layout.suspended.organizer")}
       </AlertDescription>
     </Alert>
   );
 }
 
 function LayoutSkeleton() {
+  const t = useT();
   return (
-    <div className="flex flex-col gap-6" aria-busy="true" aria-label="กำลังโหลดอีเวนต์">
+    <div className="flex flex-col gap-6" aria-busy="true" aria-label={t("eventAdmin.layout.loading")}>
       <Skeleton className="h-8 w-32" />
       <Skeleton className="h-10 w-2/3 max-w-md" />
       <Skeleton className="h-9 w-full max-w-sm" />

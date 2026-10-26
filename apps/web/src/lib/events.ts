@@ -1,6 +1,8 @@
 import { queryOptions } from "@tanstack/react-query";
 import { Ban, CalendarClock, FileText, Globe, MailCheck, type LucideIcon } from "lucide-react";
+import { t } from "@/i18n";
 import { eventClient } from "./api";
+import { isValidDate } from "./format";
 
 export type EventStatus = "draft" | "public" | "invite" | "suspended";
 
@@ -8,40 +10,64 @@ type BadgeVariant = "secondary" | "default" | "outline" | "destructive";
 
 export const statusInfo: Record<EventStatus, { label: string; description: string; icon: LucideIcon; variant: BadgeVariant }> = {
   draft: {
-    label: "ฉบับร่าง",
-    description: "เห็นเฉพาะคุณและผู้ดูแลระบบ",
+    get label() {
+      return t("shared.eventStatus.draft.label");
+    },
+    get description() {
+      return t("shared.eventStatus.draft.description");
+    },
     icon: FileText,
     variant: "secondary",
   },
   public: {
-    label: "สาธารณะ",
-    description: "แสดงในหน้าสำรวจ ทุกคนค้นหาและเปิดดูได้",
+    get label() {
+      return t("shared.eventStatus.public.label");
+    },
+    get description() {
+      return t("shared.eventStatus.public.description");
+    },
     icon: Globe,
     variant: "default",
   },
   invite: {
-    label: "เฉพาะผู้ได้รับเชิญ",
-    description: "ไม่แสดงในหน้าสำรวจ เปิดดูได้เฉพาะอีเมลที่คุณเชิญ",
+    get label() {
+      return t("shared.eventStatus.invite.label");
+    },
+    get description() {
+      return t("shared.eventStatus.invite.description");
+    },
     icon: MailCheck,
     variant: "outline",
   },
   suspended: {
-    label: "ถูกระงับ",
-    description: "ผู้ดูแลระบบระงับไว้ ซ่อนจากทุกคนและผู้จัดงานแก้ไขไม่ได้",
+    get label() {
+      return t("shared.eventStatus.suspended.label");
+    },
+    get description() {
+      return t("shared.eventStatus.suspended.description");
+    },
     icon: Ban,
     variant: "destructive",
   },
 };
 
 /** A public event whose publish time is still ahead: it shows as scheduled rather than public. */
-export const scheduledInfo = { label: "ตั้งเวลาเผยแพร่", icon: CalendarClock, variant: "outline" as BadgeVariant };
+export const scheduledInfo = {
+  get label() {
+    return t("shared.eventStatus.scheduled");
+  },
+  icon: CalendarClock,
+  variant: "outline" as BadgeVariant,
+};
 
 export const isScheduled = (event: { status: EventStatus; publishAt: string | null }) =>
   event.status === "public" && !!event.publishAt && new Date(event.publishAt) > new Date();
 
 export const hasEnded = (event: { endsAt: string }) => new Date(event.endsAt) < new Date();
 
+// a missing start would read as the epoch ("already started"), so unreadable dates are never live
 export const isLive = (event: { startsAt: string; endsAt: string }) => {
+  if (!isValidDate(event.startsAt) || !isValidDate(event.endsAt)) return false;
   const now = new Date();
   return new Date(event.startsAt) <= now && now <= new Date(event.endsAt);
 };

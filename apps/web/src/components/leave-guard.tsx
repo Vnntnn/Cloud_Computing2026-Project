@@ -12,6 +12,7 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useT } from "@/i18n";
 
 type LeaveGuardProps = {
   /** block leaving while true (unsaved input) */
@@ -26,9 +27,10 @@ type LeaveGuardProps = {
 export function LeaveGuard({
   when,
   allowLeaveRef,
-  title = "ออกจากหน้านี้โดยไม่บันทึก?",
-  description = "ข้อมูลที่ยังไม่บันทึกจะหายไป",
+  title,
+  description,
 }: LeaveGuardProps) {
+  const t = useT();
   const whenRef = useRef(when);
   useEffect(() => {
     whenRef.current = when;
@@ -40,20 +42,20 @@ export function LeaveGuard({
     <AlertDialog open={blocker.status === "blocked"} onOpenChange={(open) => !open && blocker.reset?.()}>
       <AlertDialogContent size="sm">
         <AlertDialogHeader>
-          <AlertDialogMedia className="bg-primary/10 text-primary">
+          <AlertDialogMedia className="bg-primary/10 text-primary dark:text-chart-2">
             <CircleAlert />
           </AlertDialogMedia>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+          <AlertDialogTitle>{title ?? t("shared.leaveGuard.title")}</AlertDialogTitle>
+          <AlertDialogDescription>{description ?? t("shared.leaveGuard.description")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={() => blocker.reset?.()}>
             <ArrowLeft data-icon="inline-start" />
-            อยู่ต่อ
+            {t("shared.leaveGuard.stay")}
           </AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={() => blocker.proceed?.()}>
             <LogOut data-icon="inline-start" />
-            ออกโดยไม่บันทึก
+            {t("shared.leaveGuard.leave")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

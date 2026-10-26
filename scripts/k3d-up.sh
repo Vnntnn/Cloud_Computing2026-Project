@@ -103,6 +103,13 @@ mksecret eventide-common \
   --from-literal=AWS_SECRET_ACCESS_KEY="local" \
   --from-literal=SQS_ENDPOINT="http://${H}:9324" \
   --from-literal=MAIL_QUEUE_URL="http://${H}:9324/000000000000/mail-queue"
+# The payment release gate runs here, before the other Secrets are touched (the preflight pod needs only the common one).
+case " $IMAGES " in
+  *" payment "*) PAYMENT_IMAGE="${REG_INCLUSTER}/eventide/payment:$TAG" ;;
+  *) PAYMENT_IMAGE="$(payment_running_image 2>/dev/null || true)" ;;
+esac
+echo "== payment preflight =="
+payment_gate upgrade "$PAYMENT_IMAGE" || { echo "nothing was deployed"; exit 1; }
 mksecret eventide-auth \
   --from-literal=BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET}"
 mksecret eventide-payment \
@@ -113,14 +120,12 @@ mksecret eventide-mail-worker \
   --from-literal=GMAIL_APP_PASSWORD="" \
   --from-literal=MAIL_FROM=""
 
-# --- deploy the chart (same chart as EKS, values-local overlay) -------
-echo "== helm upgrade --install eventide (db-migrate hook runs first) =="
-helm upgrade --install eventide infra/helm/eventide --namespace eventide \
-  -f infra/helm/eventide/values.yaml \
-  -f infra/helm/eventide/values.local.yaml \
+# --- deploy the chart (same chart as EKS, values-local overlay), through the payment release gate (scripts/lib.sh) -------
+echo "== release (payment preflight, then helm upgrade --install eventide; db-migrate hook runs first) =="
+release_upgrade values.local.yaml "$PAYMENT_IMAGE" 300s \
   --set imageRegistry="${REG_INCLUSTER}" \
   $(helm_tag_sets "$TAG" $IMAGES) $(keep_sets $IMAGES) \
-  --wait --timeout 300s
+  || exit 1
 
 echo
 echo "deployed to k3d. smoke test (same paths as the NLB GATE on EKS):"

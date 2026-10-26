@@ -56,6 +56,8 @@ export type MailTemplates = {
   "ticket-cancelled": { name: string; buyerName: string | null; order: MailOrder };
   /** Stripe couldn't return the money. */
   "refund-failed": { name: string | null; order: MailOrder; amount: number; url: string };
+  /** Stripe cancelled the refund, so the money was not returned. */
+  "refund-canceled": { name: string | null; order: MailOrder; amount: number; url: string };
 };
 
 export type MailTemplate = keyof MailTemplates;

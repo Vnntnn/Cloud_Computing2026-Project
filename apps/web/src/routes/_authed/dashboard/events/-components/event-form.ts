@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { t } from "@/i18n";
 import { SLUG_REGEX, toLocalInput, type EventDetail, type EventStatus } from "@/lib/events";
 
 /** The editor's form state; dates are "YYYY-MM-DDTHH:mm" in local time, numbers are input strings. */
@@ -84,20 +85,26 @@ const hoursPattern = /^\d+$/;
 
 export const eventFormSchema = z
   .object({
-    title: z.string().trim().min(1, "กรุณากรอกชื่ออีเวนต์").max(150, "ชื่อยาวได้ไม่เกิน 150 ตัวอักษร"),
+    title: z.string().trim().min(1, { error: () => t("dashboard.eventForm.titleRequired") }).max(150, { error: () => t("dashboard.eventForm.titleMax") }),
     slug: z
       .string()
-      .refine((v) => v.length >= 3 && v.length <= 80 && SLUG_REGEX.test(v), "ลิงก์ต้องยาว 3–80 ตัวอักษร ใช้ a-z, 0-9 และ -"),
-    categoryId: z.string().min(1, "กรุณาเลือกหมวดหมู่"),
-    startsAt: z.string().min(1, "กรุณาเลือกวันเวลาเริ่ม"),
-    endsAt: z.string().min(1, "กรุณาเลือกวันเวลาสิ้นสุด"),
-    venue: z.string().trim().min(1, "กรุณากรอกสถานที่").max(200, "ยาวได้ไม่เกิน 200 ตัวอักษร"),
-    venueDescription: z.string().trim().max(1000, "ยาวได้ไม่เกิน 1,000 ตัวอักษร"),
+      .refine((v) => v.length >= 3 && v.length <= 80 && SLUG_REGEX.test(v), {
+        error: () => t("dashboard.eventForm.slugInvalid"),
+      }),
+    categoryId: z.string().min(1, { error: () => t("dashboard.eventForm.categoryRequired") }),
+    startsAt: z.string().min(1, { error: () => t("dashboard.eventForm.startRequired") }),
+    endsAt: z.string().min(1, { error: () => t("dashboard.eventForm.endRequired") }),
+    venue: z
+      .string()
+      .trim()
+      .min(1, { error: () => t("dashboard.eventForm.venueRequired") })
+      .max(200, { error: () => t("dashboard.eventForm.venueMax") }),
+    venueDescription: z.string().trim().max(1000, { error: () => t("dashboard.eventForm.venueDescriptionMax") }),
     venueUrl: z
       .string()
       .trim()
-      .refine((v) => v === "" || /^https?:\/\/\S+$/.test(v), "ลิงก์ต้องขึ้นต้นด้วย http:// หรือ https://"),
-    description: z.string().max(100_000, "รายละเอียดยาวเกินไป"),
+      .refine((v) => v === "" || /^https?:\/\/\S+$/.test(v), { error: () => t("dashboard.eventForm.venueUrlInvalid") }),
+    description: z.string().max(100_000, { error: () => t("dashboard.eventForm.descriptionTooLong") }),
     status: z.enum(["draft", "public", "invite", "suspended"]),
     schedulePublish: z.boolean(),
     publishAt: z.string(),
@@ -107,17 +114,17 @@ export const eventFormSchema = z
   })
   .superRefine((v, ctx) => {
     if (v.startsAt && v.endsAt && new Date(v.endsAt) <= new Date(v.startsAt)) {
-      ctx.addIssue({ code: "custom", path: ["endsAt"], message: "เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่มต้น" });
+      ctx.addIssue({ code: "custom", path: ["endsAt"], message: t("dashboard.eventForm.endAfterStart") });
     }
     if (v.status === "public" && v.schedulePublish && !v.publishAt) {
-      ctx.addIssue({ code: "custom", path: ["publishAt"], message: "กรุณาเลือกเวลาเผยแพร่" });
+      ctx.addIssue({ code: "custom", path: ["publishAt"], message: t("dashboard.eventForm.publishAtRequired") });
     }
     if (!v.isRefundAvailable) return;
     if (!hoursPattern.test(v.refundCutoffHours) || Number(v.refundCutoffHours) > 8760) {
-      ctx.addIssue({ code: "custom", path: ["refundCutoffHours"], message: "ระบุจำนวนชั่วโมง 0–8,760" });
+      ctx.addIssue({ code: "custom", path: ["refundCutoffHours"], message: t("dashboard.eventForm.cutoffHours") });
     }
     if (!hoursPattern.test(v.refundPercent) || Number(v.refundPercent) > 100) {
-      ctx.addIssue({ code: "custom", path: ["refundPercent"], message: "ระบุเปอร์เซ็นต์ 0–100" });
+      ctx.addIssue({ code: "custom", path: ["refundPercent"], message: t("dashboard.eventForm.percent") });
     }
   });
 

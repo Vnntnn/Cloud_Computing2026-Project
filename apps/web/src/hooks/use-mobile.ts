@@ -1,19 +1,18 @@
 import * as React from "react"
 
-const MOBILE_BREAKPOINT = 768
+// the dashboard sidebar becomes a drawer below this width (lg): at 820px an open sidebar left tables about 520px, hiding their dates, statuses and row actions
+const MOBILE_BREAKPOINT = 1024
+const QUERY = `(max-width: ${MOBILE_BREAKPOINT - 1}px)`
 
+// read from the media query on the first render (this is a SPA), so a tablet never paints the desktop sidebar and then swaps it for a drawer
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
-
-  React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
-    mql.addEventListener("change", onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    return () => mql.removeEventListener("change", onChange)
-  }, [])
-
-  return !!isMobile
+  return React.useSyncExternalStore(
+    (notify) => {
+      const mql = window.matchMedia(QUERY)
+      mql.addEventListener("change", notify)
+      return () => mql.removeEventListener("change", notify)
+    },
+    () => window.matchMedia(QUERY).matches,
+    () => false,
+  )
 }

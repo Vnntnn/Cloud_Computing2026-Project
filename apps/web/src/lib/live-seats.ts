@@ -71,7 +71,9 @@ export function useLiveSeats(eventId: string | undefined) {
       socket = live;
     };
 
-    connect();
+    // one tick later, so the throwaway first mount of React's StrictMode (development) is cleaned up before it ever opens a socket;
+    // closing a socket that is still connecting is reported as an error by Firefox
+    retry = setTimeout(connect, 0);
     return () => {
       stopped = true;
       clearTimeout(retry);

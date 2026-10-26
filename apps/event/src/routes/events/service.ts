@@ -11,7 +11,7 @@ import {
 } from "../../libs/errors";
 import { sanitizeDescription } from "../../libs/sanitize";
 import { isUsableSlug, slugFromTitle } from "../../libs/slug";
-import { isInvited, sendPendingInvitations } from "../invitations/service";
+import { dispatchRecordedInvitations, isInvited, recordPendingInvitations } from "../invitations/service";
 import type * as EventModel from "./model";
 
 export type Viewer = { id: string; role: Role };
@@ -216,6 +216,7 @@ export async function updateEvent(eventId: string, actor: Viewer, input: EventMo
       : sanitizeDescription(input.description, eventId) || null;
 
   let previousSlug: string;
+  let invitationsOwed: string[] = [];
   try {
     const result = await db.transaction(async (tx) => {
       const [current] = await tx.select().from(events).where(eq(events.id, eventId)).for("update");
@@ -252,18 +253,21 @@ export async function updateEvent(eventId: string, actor: Viewer, input: EventMo
           refundPercent: isRefundAvailable ? refundPercent : null,
         })
         .where(eq(events.id, eventId));
-      return { previousSlug: current.slug };
+      // invitations added before the switch are claimed and their mail recorded with it
+      const owed = input.status === "invite" ? await recordPendingInvitations(tx, eventId) : [];
+      return { previousSlug: current.slug, owed };
     });
     if (result instanceof Error) return result;
     previousSlug = result.previousSlug;
+    invitationsOwed = result.owed;
   } catch (error) {
     if (isUniqueViolation(error)) return new SlugTaken();
     if (isForeignKeyViolation(error)) return new CategoryNotFound();
     throw error;
   }
-  // invitations added before the switch are emailed now; not awaited, since there may be up to a
-  // thousand and the save is already done (it never throws, and claims each row so none goes twice)
-  if (input.status === "invite") void sendPendingInvitations(eventId);
+  // sent now; not awaited, since there may be up to a thousand and the save is already done (it never throws; what isn't sent
+  // is retried by the outbox)
+  void dispatchRecordedInvitations(invitationsOwed);
   return refreshEvent(eventId, previousSlug);
 }
 

@@ -86,6 +86,15 @@ mksecret eventide-common \
   --from-literal=AWS_SESSION_TOKEN="$(jkey "$CREDS" SessionToken)" \
   --from-literal=MAIL_QUEUE_URL="$MAIL_QUEUE_URL"
 
+# The payment release gate runs here: before the auth, payment and mail Secrets are touched (the preflight pod needs only the common
+# Secret above), so a blocked release leaves what the running pods read on their next restart as it was.
+case " $IMAGES " in
+  *" payment "*) PAYMENT_IMAGE="$REG/eventide/payment:$TAG" ;;
+  *) PAYMENT_IMAGE="$(payment_running_image 2>/dev/null || true)" ;;
+esac
+echo "== payment preflight =="
+payment_gate upgrade "$PAYMENT_IMAGE" || { echo "nothing was deployed"; exit 1; }
+
 AUTH_ARGS=(--from-literal=BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-$(jkey "$RDS_JSON" BETTER_AUTH_SECRET)}")
 # Google rejects redirect URIs that are not HTTPS (localhost aside), so the button
 # would only ever fail on the bare http://<alb> origin: enable it once the custom
@@ -113,16 +122,15 @@ mksecret eventide-mail-worker \
 echo "mail: $([ -n "$GMAIL_SECRET" ] && echo gmail || echo 'dry-run (no eventide/gmail secret)')"
 
 # --- deploy the chart (the db-migrate hook runs before the pods roll) --------
-echo "== helm upgrade --install eventide =="
-helm upgrade --install eventide infra/helm/eventide --namespace eventide \
-  -f infra/helm/eventide/values.yaml \
-  -f infra/helm/eventide/values.aws.yaml \
+# Through the release gate (scripts/lib.sh): the payment preflight runs first and a blocking or unreadable result stops the release
+# before Helm is called; afterwards the rollout, the payment settings and its scheduler are verified, not assumed from helm's exit code.
+echo "== release (payment preflight, then helm upgrade --install eventide) =="
+release_upgrade values.aws.yaml "$PAYMENT_IMAGE" 420s \
   --set imageRegistry="$REG" \
   --set publicUrl="$PUBLIC_URL" \
   --set files.bucket="$UPLOADS_BUCKET" \
   $(helm_tag_sets "$TAG" $IMAGES) $(keep_sets $IMAGES) \
-  --wait --timeout 420s \
-  || { echo "helm failed — look at: helm -n eventide status eventide; kubectl -n eventide get pods; kubectl -n eventide logs job/db-migrate"; exit 1; }
+  || exit 1
 
 for d in $APP_SERVICES; do
   kubectl -n eventide rollout status "deployment/$d" --timeout=180s

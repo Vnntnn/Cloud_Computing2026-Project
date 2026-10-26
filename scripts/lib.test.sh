@@ -21,3 +21,51 @@ want="--set services.auth.image.tag=oldtag --set services.registration.image.tag
 got="$(keep_sets auth event registration payment mail-worker web db-bootstrap)"
 [ -z "$got" ] || { echo "FAIL (keep_sets full set must be empty): got '$got'"; exit 1; }
 echo "lib.test.sh: 4 pass"
+
+# The payment chart must never roll two versions side by side (refunds and settlement follow rules a release can change): one
+# Deployment, Recreate (no rollingUpdate block, so no maxSurge), a grace period long enough for the longest chain of Stripe calls one record can make (210 s),
+# one pod, no autoscaler, and no other workload running the payment image. The check is a function so it can be shown to fail.
+# Rendering is not the cluster's behaviour; it only keeps the chart from losing the setting.
+payment_chart_problems() { # reads `helm template` output on stdin, prints one line per problem
+  python3 -c '
+import re, sys
+docs = sys.stdin.read().split("\n---\n")
+problems = []
+pay = [d for d in docs if "\nkind: Deployment\n" in "\n" + d + "\n" and re.search(r"^  name: payment$", d, re.M)]
+if len(pay) != 1:
+    problems.append(f"expected one payment Deployment, found {len(pay)}")
+else:
+    d = pay[0]
+    if not re.search(r"^  strategy:\n    type: Recreate$", d, re.M): problems.append("payment must roll with strategy Recreate")
+    if "rollingUpdate" in d or "maxSurge" in d: problems.append("payment must not set rollingUpdate/maxSurge")
+    if not re.search(r"^      terminationGracePeriodSeconds: 210$", d, re.M): problems.append("payment needs terminationGracePeriodSeconds: 210")
+    if not re.search(r"^  replicas: 1$", d, re.M): problems.append("payment runs one pod")
+for d in docs:
+    if "kind: HorizontalPodAutoscaler" in d and re.search(r"^  name: payment$", d, re.M): problems.append("payment must not have an autoscaler")
+    if re.search(r"^kind: (Deployment|StatefulSet|DaemonSet|Job|CronJob)$", d, re.M) and not re.search(r"^  name: payment$", d, re.M) and re.search(r"image: \S*eventide/payment:", d):
+        problems.append("only the payment Deployment may run the payment image")
+print("\n".join(problems))
+'
+}
+if command -v helm >/dev/null; then
+  chart="$(dirname "$0")/../infra/helm/eventide"
+  render() { helm template t "$chart" -f "$chart/$1" --set files.bucket=b "${@:2}"; }
+  for values in values.local.yaml values.aws.yaml; do
+    problems="$(render "$values" | payment_chart_problems)"
+    [ -z "$problems" ] || { echo "FAIL ($values): $problems"; exit 1; }
+  done
+  echo "lib.test.sh: 5 pass (payment chart)"
+  # and the check must notice each way of getting it wrong
+  must_fail() { # name, then the --set arguments that break the chart
+    local name="$1"; shift
+    [ -n "$(render values.local.yaml "$@" | payment_chart_problems)" ] || { echo "FAIL: the chart check missed: $name"; exit 1; }
+  }
+  must_fail "a rolling update" --set services.payment.strategy.type=RollingUpdate
+  must_fail "no strategy at all" --set services.payment.strategy=null
+  must_fail "a short grace period" --set services.payment.terminationGracePeriodSeconds=30
+  must_fail "two pods" --set services.payment.replicas=2
+  must_fail "an autoscaler" --set services.payment.hpa.enabled=true --set services.payment.hpa.minReplicas=1 --set services.payment.hpa.maxReplicas=2 --set services.payment.hpa.targetCPUUtilizationPercentage=60
+  echo "lib.test.sh: 10 pass (payment chart check fails when it should)"
+else
+  echo "lib.test.sh: payment chart check skipped (no helm)"
+fi

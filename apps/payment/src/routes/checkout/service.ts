@@ -1,7 +1,7 @@
 import { and, db, desc, enrollments, eq, events, gt, payments, ticketTypes } from "@app/db";
 import { appUrl, effectiveStatus, EnrollmentClosed, EnrollmentNotFound } from "@app/tickets";
 import { HTTPError } from "elysia";
-import { settlePaid, settleUnpaid } from "../../libs/settle";
+import { recoverPaid, settleSession } from "../../libs/settle";
 import { stripe } from "../../libs/stripe";
 
 export class AlreadyPaid extends HTTPError.id("ALREADY_PAID", 409) {
@@ -142,9 +142,10 @@ async function syncPayments(buyerId: string, enrollmentId: string) {
   try {
     for (const { sessionId } of pending) {
       const session = await stripe.checkout.sessions.retrieve(sessionId);
-      if (session.status === "complete" && session.payment_status === "paid") await settlePaid(session);
-      else if (session.status === "expired") await settleUnpaid(session);
+      await settleSession(session);
     }
+    // a payment claimed as paid by a process that died before confirming the order
+    await recoverPaid(buyerId, enrollmentId);
   } catch (error) {
     console.error("Failed to sync a Stripe Checkout session", error);
     return new PaymentUnavailable();

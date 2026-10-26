@@ -131,6 +131,14 @@ services:
   payment:
     port: 3000
     replicas: 1
+    # Never two versions at once. The payment service refunds and settles money under rules a release can change (refund
+    # intents, leases, idempotency keys: docs/tickets.md §6-7), and a rolling update would run the old and the new pod side by
+    # side (maxSurge rounds 25 % of 1 pod up to 1). Recreate stops the old pod (the grace period lets its in-flight Stripe
+    # calls finish: the longest chain one record makes is a session lookup plus the three calls of a refund, each 20 s with one retry, about 165 s, and a mail chunk of 10 s; what it can't finish is picked up by the new one) before the new one starts. The cost: payment is down for
+    # a few seconds per release, and Stripe re-sends the webhooks it couldn't deliver. Keep `replicas` at one version's worth
+    # of pods, never raise `maxSurge` here. Rollout steps: docs/tickets.md §10.
+    strategy: { type: Recreate }
+    terminationGracePeriodSeconds: 210
     ingressPaths: [/api/payment]
     livePath: /api/payment/health
     readyPath: /api/payment/health

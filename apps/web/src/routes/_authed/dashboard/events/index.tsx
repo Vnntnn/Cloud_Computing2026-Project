@@ -1,7 +1,8 @@
+import { usePageTitle } from "@/hooks/use-page-title";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CalendarDays, CalendarPlus, ListFilter, Search, SearchX, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { DataTable } from "@/components/data-table/data-table";
 import { PageHeader } from "@/components/page-header";
@@ -10,11 +11,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useT } from "@/i18n";
 import { myEventsQueryOptions, statusInfo, type EventStatus } from "@/lib/events";
 import { hasRole, useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { NoEventsYet } from "../-components/no-events-yet";
-import { eventColumns } from "./-components/events-columns";
+import { useEventColumns } from "./-components/events-columns";
 
 const statuses = ["draft", "public", "invite", "suspended"] as const;
 const PAGE_SIZE = 10;
@@ -30,8 +32,10 @@ export const Route = createFileRoute("/_authed/dashboard/events/")({
 });
 
 function EventsPage() {
+  const t = useT();
   const { data: session } = useSession();
   const isAdmin = hasRole(session?.user, ["admin"]);
+  usePageTitle(isAdmin ? t("dashboard.events.allTitle") : t("dashboard.events.ownTitle"));
   const navigate = Route.useNavigate();
   const { status, q = "", page = 1 } = Route.useSearch();
   const [search, setSearch] = useState(q);
@@ -43,11 +47,11 @@ function EventsPage() {
     }
   }, [debouncedSearch, q, navigate]);
 
-  const { data, isPending, isPlaceholderData } = useQuery({
+  const { data, isPending, isError, refetch, isPlaceholderData } = useQuery({
     ...myEventsQueryOptions({ page, pageSize: PAGE_SIZE, q: q || undefined, status }),
     placeholderData: keepPreviousData,
   });
-  const columns = useMemo(() => eventColumns(isAdmin), [isAdmin]);
+  const columns = useEventColumns(isAdmin);
   const counts = data?.counts;
   const all = counts ? statuses.reduce((sum, s) => sum + counts[s], 0) : undefined;
   const filtered = !!status || !!q;
@@ -55,12 +59,12 @@ function EventsPage() {
   const header = (
     <PageHeader
       icon={CalendarDays}
-      title={isAdmin ? "อีเวนต์ทั้งหมด" : "อีเวนต์ของฉัน"}
-      description="สร้าง แก้ไข และเผยแพร่อีเวนต์"
+      title={isAdmin ? t("dashboard.events.allTitle") : t("dashboard.events.ownTitle")}
+      description={t("dashboard.events.description")}
       actions={
         <Link to="/dashboard/events/new" className={buttonVariants()}>
           <CalendarPlus data-icon="inline-start" />
-          สร้างอีเวนต์
+          {t("dashboard.events.create")}
         </Link>
       }
     />
@@ -87,7 +91,7 @@ function EventsPage() {
         <ToggleGroup
           variant="outline"
           className="flex-wrap"
-          aria-label="กรองตามสถานะ"
+          aria-label={t("dashboard.events.filterLabel")}
           value={[status ?? "all"]}
           onValueChange={(value: string[]) => {
             if (!value[0]) return;
@@ -97,7 +101,7 @@ function EventsPage() {
         >
           <ToggleGroupItem value="all">
             <ListFilter />
-            ทั้งหมด
+            {t("dashboard.events.filterAll")}
             {all !== undefined && <span className="text-muted-foreground tabular-nums">{all}</span>}
           </ToggleGroupItem>
           {statuses
@@ -120,14 +124,14 @@ function EventsPage() {
           </InputGroupAddon>
           <InputGroupInput
             enterKeyHint="search"
-            placeholder="ค้นหาชื่ออีเวนต์หรือสถานที่"
-            aria-label="ค้นหาอีเวนต์"
+            placeholder={t("dashboard.events.searchPlaceholder")}
+            aria-label={t("dashboard.events.searchLabel")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           {search && (
             <InputGroupAddon align="inline-end">
-              <InputGroupButton size="icon-xs" aria-label="ล้างคำค้นหา" onClick={() => setSearch("")}>
+              <InputGroupButton size="icon-xs" aria-label={t("dashboard.events.clearSearch")} onClick={() => setSearch("")}>
                 <X />
               </InputGroupButton>
             </InputGroupAddon>
@@ -138,11 +142,14 @@ function EventsPage() {
         <DataTable
           columns={columns}
           data={data?.items ?? []}
+          mobileHide={["schedule"]}
+          mobileFold={["status"]}
+          error={isError && !data ? { onRetry: () => void refetch() } : undefined}
           isLoading={isPending}
           empty={{
             icon: SearchX,
-            title: "ไม่พบอีเวนต์ที่ตรงกับตัวกรอง",
-            description: q ? `ไม่มีอีเวนต์ที่ชื่อหรือสถานที่ตรงกับ “${q}”` : "ลองเลือกสถานะอื่น",
+            title: t("dashboard.events.emptyTitle"),
+            description: q ? t("dashboard.events.emptySearch", { q }) : t("dashboard.events.emptyFilter"),
             action: filtered && (
               <Button
                 variant="outline"
@@ -152,7 +159,7 @@ function EventsPage() {
                 }}
               >
                 <X data-icon="inline-start" />
-                ล้างตัวกรอง
+                {t("dashboard.events.clearFilters")}
               </Button>
             ),
           }}

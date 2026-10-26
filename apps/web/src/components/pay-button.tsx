@@ -3,6 +3,7 @@ import { CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { useT } from "@/i18n";
 import { paymentClient } from "@/lib/api";
 import { problemMessage } from "@/lib/auth-errors";
 import { enrollmentsKey } from "@/lib/enrollments";
@@ -26,13 +27,14 @@ export function useCheckout() {
 }
 
 export function PayButton({ enrollmentId, ...props }: { enrollmentId: string } & React.ComponentProps<typeof Button>) {
+  const t = useT();
   const checkout = useCheckout();
   // stays pending while the browser leaves for Stripe
   const pending = checkout.isPending || checkout.isSuccess;
   return (
     <Button {...props} disabled={pending || props.disabled} onClick={() => checkout.mutate(enrollmentId)}>
       {pending ? <Spinner data-icon="inline-start" /> : <CreditCard data-icon="inline-start" />}
-      ชำระเงิน
+      {t("shared.pay.button")}
     </Button>
   );
 }

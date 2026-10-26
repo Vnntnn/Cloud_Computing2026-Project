@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { useT } from "@/i18n";
 import { eventClient } from "@/lib/api";
 import { problemMessage } from "@/lib/auth-errors";
 import { eventsKey } from "@/lib/events";
@@ -26,6 +27,7 @@ type DeleteEventDialogProps = {
 };
 
 export function DeleteEventDialog({ event, open, onOpenChange, onDeleted }: DeleteEventDialogProps) {
+  const t = useT();
   const queryClient = useQueryClient();
   const remove = useMutation({
     mutationFn: async () => {
@@ -33,7 +35,7 @@ export function DeleteEventDialog({ event, open, onOpenChange, onDeleted }: Dele
       if (error) throw error;
     },
     onSuccess: async () => {
-      toast.add({ type: "success", title: `ลบ “${event.title}” แล้ว` });
+      toast.add({ type: "success", title: t("dashboard.events.deleteDialog.toast", { title: event.title }) });
       onOpenChange(false);
       await onDeleted?.();
       await queryClient.invalidateQueries({ queryKey: eventsKey });
@@ -48,19 +50,19 @@ export function DeleteEventDialog({ event, open, onOpenChange, onDeleted }: Dele
           <AlertDialogMedia className="bg-destructive/10 text-destructive">
             <Trash2 />
           </AlertDialogMedia>
-          <AlertDialogTitle>ลบ “{event.title}”?</AlertDialogTitle>
+          <AlertDialogTitle>{t("dashboard.events.deleteDialog.title", { title: event.title })}</AlertDialogTitle>
           <AlertDialogDescription>
-            รายละเอียด ภาพปก และรูปภาพทั้งหมดของอีเวนต์จะถูกลบถาวร และลิงก์ของอีเวนต์จะใช้ไม่ได้อีก
+            {t("dashboard.events.deleteDialog.description")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={remove.isPending}>
             <ArrowLeft data-icon="inline-start" />
-            กลับ
+            {t("dashboard.events.deleteDialog.back")}
           </AlertDialogCancel>
           <AlertDialogAction variant="destructive" disabled={remove.isPending} onClick={() => remove.mutate()}>
             {remove.isPending ? <Spinner data-icon="inline-start" /> : <Trash2 data-icon="inline-start" />}
-            ลบอีเวนต์
+            {t("dashboard.events.deleteDialog.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
