@@ -32,12 +32,12 @@ export function Billboard({ event, level = 3 }: { event: EventSummary; level?: 2
     </Heading>
   );
   return (
-    <Link to="/events/$slug" params={{ slug: event.slug }} className={cn("group grid gap-6 rounded-sm lg:grid-cols-[7fr_5fr] lg:gap-12", focus)}>
-      <div data-cursor={t("common.cursor.view")} className="relative aspect-[5/4] overflow-hidden rounded-sm bg-muted sm:aspect-[4/3] lg:aspect-[16/9]">
+    <Link to="/events/$slug" params={{ slug: event.slug }} className={cn("card-lift group grid gap-6 rounded-sm lg:grid-cols-[7fr_5fr] lg:gap-12", focus)}>
+      <div data-cursor={t("common.cursor.view")} className="card-lift-cover relative aspect-[5/4] overflow-hidden rounded-sm bg-muted sm:aspect-[4/3] lg:aspect-[16/9]">
         {event.thumbnailUrl ? (
           <img src={event.thumbnailUrl} alt="" loading="lazy" className="size-full object-cover transition-transform duration-700 ease-out-expo group-hover:scale-[1.03]" />
         ) : (
-          <EventPoster event={event} layout={1} bare className="size-full">
+          <EventPoster event={event} layout={1} bare ticket className="size-full">
             <div className="absolute inset-x-0 bottom-0 z-10 p-5 pr-[34%] sm:p-7 sm:pr-[34%]">{title}</div>
           </EventPoster>
         )}

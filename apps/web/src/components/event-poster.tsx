@@ -1,5 +1,5 @@
+import { DateTicket } from "@/components/date-ticket";
 import { useLocale } from "@/i18n";
-
 import { categoryName } from "@/lib/category-name";
 import { formatDay, formatMonth } from "@/lib/format";
 import { colourwayOf, layoutOf } from "@/lib/poster";
@@ -23,14 +23,27 @@ export function Tide({ color, className }: { color: string; className?: string }
  * the layout is the event's, so a list of them reads as one family. The words are drawn for looks only; the date
  * and category are always written out beside it, which is why it is hidden from assistive technology.
  * `layout` fixes the arrangement (the billboard needs the numeral at the top right); `bare` leaves out the category and
- * month so the caller can set its own words on the poster.
+ * month so the caller can set its own words on the poster. `ticket` sets the date on a ticket (DateTicket) in place of the big numeral;
+ * the ticket tears when the card around the poster is hovered.
  */
-export function EventPoster({ event, className, layout: fixed, bare, children }: { event: PosterEvent; className?: string; layout?: 0 | 1 | 2; bare?: boolean; children?: React.ReactNode }) {
+export function EventPoster({ event, className, layout: fixed, bare, ticket, children }: { event: PosterEvent; className?: string; layout?: 0 | 1 | 2; bare?: boolean; ticket?: boolean; children?: React.ReactNode }) {
   const locale = useLocale();
   const colourway = colourwayOf(event.category.slug);
   const layout = fixed ?? layoutOf(event.id);
   const text = colourway.tone === "dark" ? "text-dusk-foreground" : "text-sun-foreground";
-  const day = (
+  const day = ticket ? (
+    <DateTicket
+      value={event.startsAt}
+      slug={event.category.slug}
+      size="poster"
+      className={cn(
+        "absolute z-10",
+        layout === 0 && "bottom-[8cqmin] left-[8cqmin]",
+        layout === 1 && "top-[8cqmin] right-[8cqmin]",
+        layout === 2 && "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",
+      )}
+    />
+  ) : (
     <span
       aria-hidden
       className={cn(
