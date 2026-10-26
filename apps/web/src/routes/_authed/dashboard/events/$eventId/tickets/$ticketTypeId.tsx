@@ -6,15 +6,18 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Skeleton } from "@/components/ui/skeleton";
 import { availabilityQueryOptions } from "@/lib/enrollments";
 import { useLiveSeats } from "@/lib/live-seats";
+import { useT } from "@/i18n";
 import { ticketTypesQueryOptions } from "@/lib/ticket-types";
 import { useEventDetail } from "../-components/use-event-detail";
 import { TicketTypeEditor } from "./-components/ticket-type-editor";
 
 export const Route = createFileRoute("/_authed/dashboard/events/$eventId/tickets/$ticketTypeId")({
+  staticData: { title: "common.pageTitle.editTicketType" },
   component: EditTicketTypePage,
 });
 
 function EditTicketTypePage() {
+  const t = useT();
   const event = useEventDetail();
   const { ticketTypeId } = Route.useParams();
   const { data: types, isPending } = useQuery(ticketTypesQueryOptions(event.id));
@@ -24,7 +27,7 @@ function EditTicketTypePage() {
   // waits for the seats too: they decide whether the kind is locked
   if (isPending || availabilityPending) {
     return (
-      <div className="flex flex-col gap-6" aria-busy="true" aria-label="กำลังโหลดประเภทตั๋ว">
+      <div className="flex flex-col gap-6" aria-busy="true" aria-label={t("eventAdmin.ticketType.loading")}>
         <Skeleton className="h-8 w-40" />
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_24rem]">
           <div className="flex flex-col gap-6">
@@ -44,8 +47,8 @@ function EditTicketTypePage() {
           <EmptyMedia variant="icon">
             <TicketX />
           </EmptyMedia>
-          <EmptyTitle>ไม่พบประเภทตั๋วนี้</EmptyTitle>
-          <EmptyDescription>อาจถูกลบไปแล้ว</EmptyDescription>
+          <EmptyTitle>{t("eventAdmin.ticketType.notFound.title")}</EmptyTitle>
+          <EmptyDescription>{t("eventAdmin.ticketType.notFound.description")}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Link
@@ -54,7 +57,7 @@ function EditTicketTypePage() {
             className={buttonVariants({ variant: "outline" })}
           >
             <ArrowLeft data-icon="inline-start" />
-            ประเภทตั๋วทั้งหมด
+            {t("eventAdmin.ticketType.notFound.back")}
           </Link>
         </EmptyContent>
       </Empty>

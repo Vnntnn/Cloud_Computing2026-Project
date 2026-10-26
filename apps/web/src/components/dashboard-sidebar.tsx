@@ -14,36 +14,37 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useT, type MessageKey } from "@/i18n";
 import { pendingApplicationsQueryOptions } from "@/lib/organizer-applications";
 import { hasRole, useSession } from "@/lib/session";
 
 type NavItem = {
-  title: string;
+  title: MessageKey;
   to: "/dashboard" | "/dashboard/events" | "/dashboard/categories" | "/dashboard/users" | "/dashboard/applications" | "/profile";
   icon: LucideIcon;
 };
 
-const sections: { label: string; roles: Role[]; items: NavItem[] }[] = [
+const sections: { label: MessageKey; roles: Role[]; items: NavItem[] }[] = [
   {
-    label: "จัดการอีเวนต์",
+    label: "shared.sidebar.manageEvents",
     roles: ["organizer", "admin"],
     items: [
-      { title: "ภาพรวม", to: "/dashboard", icon: LayoutDashboard },
-      { title: "อีเวนต์ของฉัน", to: "/dashboard/events", icon: CalendarDays },
+      { title: "shared.sidebar.overview", to: "/dashboard", icon: LayoutDashboard },
+      { title: "shared.sidebar.myEvents", to: "/dashboard/events", icon: CalendarDays },
     ],
   },
   {
-    label: "บัญชี",
+    label: "shared.sidebar.account",
     roles: ["organizer", "admin"],
-    items: [{ title: "จัดการโปรไฟล์", to: "/profile", icon: UserRound }],
+    items: [{ title: "shared.sidebar.manageProfile", to: "/profile", icon: UserRound }],
   },
   {
-    label: "ผู้ดูแลระบบ",
+    label: "shared.sidebar.admin",
     roles: ["admin"],
     items: [
-      { title: "หมวดหมู่อีเวนต์", to: "/dashboard/categories", icon: Tags },
-      { title: "ผู้ใช้", to: "/dashboard/users", icon: Users },
-      { title: "คำขอเป็นผู้จัดงาน", to: "/dashboard/applications", icon: ClipboardCheck },
+      { title: "shared.sidebar.categories", to: "/dashboard/categories", icon: Tags },
+      { title: "shared.sidebar.users", to: "/dashboard/users", icon: Users },
+      { title: "shared.sidebar.applications", to: "/dashboard/applications", icon: ClipboardCheck },
     ],
   },
 ];
@@ -55,6 +56,7 @@ const isActive = (pathname: string, to: string) => {
 };
 
 export function DashboardSidebar() {
+  const t = useT();
   const { data: session } = useSession();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { setOpenMobile } = useSidebar();
@@ -69,7 +71,7 @@ export function DashboardSidebar() {
           .filter((section) => hasRole(session?.user, section.roles))
           .map((section) => (
             <SidebarGroup key={section.label}>
-              <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
+              <SidebarGroupLabel>{t(section.label)}</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {section.items.map((item) => (
@@ -79,7 +81,7 @@ export function DashboardSidebar() {
                         render={<Link to={item.to} onClick={() => setOpenMobile(false)} />}
                       >
                         <item.icon />
-                        <span>{item.title}</span>
+                        <span>{t(item.title)}</span>
                       </SidebarMenuButton>
                       {item.to === "/dashboard/applications" && !!pending?.length && (
                         <SidebarMenuBadge>{pending.length}</SidebarMenuBadge>

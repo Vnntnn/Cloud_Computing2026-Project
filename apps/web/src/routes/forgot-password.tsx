@@ -1,24 +1,27 @@
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, CircleAlert, KeyRound, Mail, MailCheck, Send } from "lucide-react";
+import { ArrowLeft, CircleAlert, MailCheck, Send } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import { AuthLayout } from "@/components/auth-layout";
 import { SubmitButton, TextField } from "@/components/form-field";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { FieldGroup } from "@/components/ui/field";
+import { t, useT } from "@/i18n";
 import { auth } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { redirectIfSignedIn } from "@/lib/session";
 
 export const Route = createFileRoute("/forgot-password")({
+  staticData: { title: "pub.auth.forgot.title" },
   beforeLoad: ({ context }) => redirectIfSignedIn(context.queryClient),
   component: ForgotPasswordPage,
 });
 
-const forgotSchema = z.object({ email: z.email("กรุณากรอกอีเมลให้ถูกต้อง") });
+const forgotSchema = z.object({ email: z.email({ error: () => t("pub.auth.errors.email") }) });
 
 function ForgotPasswordPage() {
+  const t = useT();
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -39,23 +42,20 @@ function ForgotPasswordPage() {
 
   return (
     <AuthLayout
-      icon={KeyRound}
-      title="ลืมรหัสผ่าน"
-      description="กรอกอีเมลที่ใช้สมัคร แล้วเราจะส่งลิงก์สำหรับตั้งรหัสผ่านใหม่ให้"
+      title={t("pub.auth.forgot.title")}
+      description={t("pub.auth.forgot.description")}
       footer={
-        <Link to="/login" className="flex items-center gap-1 font-medium text-primary hover:underline">
+        <Link to="/login" className="flex items-center gap-1 font-medium text-primary dark:text-chart-2 hover:underline">
           <ArrowLeft className="size-4" />
-          กลับไปหน้าเข้าสู่ระบบ
+          {t("pub.auth.forgot.back")}
         </Link>
       }
     >
       {sentTo ? (
         <Alert>
           <MailCheck />
-          <AlertTitle>ตรวจสอบอีเมลของคุณ</AlertTitle>
-          <AlertDescription>
-            หาก {sentTo} มีบัญชีอยู่ในระบบ คุณจะได้รับลิงก์สำหรับตั้งรหัสผ่านใหม่ภายในไม่กี่นาที
-          </AlertDescription>
+          <AlertTitle>{t("pub.auth.forgot.sentTitle")}</AlertTitle>
+          <AlertDescription>{t("pub.auth.forgot.sentDescription", { email: sentTo })}</AlertDescription>
         </Alert>
       ) : (
         <>
@@ -75,13 +75,13 @@ function ForgotPasswordPage() {
             <FieldGroup>
               <form.Field name="email">
                 {(field) => (
-                  <TextField field={field} label="อีเมล" icon={Mail} type="email" autoComplete="email" placeholder="you@example.com" />
+                  <TextField field={field} label={t("pub.auth.email")} type="email" autoComplete="email" placeholder="you@example.com" />
                 )}
               </form.Field>
               <form.Subscribe selector={(state) => state.isSubmitting}>
                 {(isSubmitting) => (
                   <SubmitButton pending={isSubmitting} icon={Send} size="lg">
-                    ส่งลิงก์ตั้งรหัสผ่านใหม่
+                    {t("pub.auth.forgot.submit")}
                   </SubmitButton>
                 )}
               </form.Subscribe>

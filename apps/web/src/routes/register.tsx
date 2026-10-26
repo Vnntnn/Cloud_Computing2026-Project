@@ -1,7 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { CircleAlert, KeyRound, Mail, ShieldCheck, UserPlus, UserRound } from "lucide-react";
+import { CircleAlert, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import { AuthLayout } from "@/components/auth-layout";
@@ -9,11 +9,13 @@ import { SubmitButton, TextField } from "@/components/form-field";
 import { GoogleSignIn } from "@/components/google-sign-in";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FieldGroup } from "@/components/ui/field";
+import { t, useT } from "@/i18n";
 import { auth } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { redirectIfSignedIn, refreshSession, safeRedirect } from "@/lib/session";
 
 export const Route = createFileRoute("/register")({
+  staticData: { title: "pub.auth.register.title" },
   validateSearch: z.object({ redirect: z.string().optional() }),
   beforeLoad: ({ context, search }) => redirectIfSignedIn(context.queryClient, search.redirect),
   component: RegisterPage,
@@ -22,17 +24,18 @@ export const Route = createFileRoute("/register")({
 // Better Auth's default password policy is 8 to 128 characters
 const registerSchema = z
   .object({
-    name: z.string().trim().min(2, "กรุณากรอกชื่ออย่างน้อย 2 ตัวอักษร").max(100, "ชื่อยาวเกินไป"),
-    email: z.email("กรุณากรอกอีเมลให้ถูกต้อง"),
-    password: z.string().min(8, "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร").max(128, "รหัสผ่านยาวเกินไป"),
+    name: z.string().trim().min(2, { error: () => t("pub.auth.errors.nameMin") }).max(100, { error: () => t("pub.auth.errors.nameMax") }),
+    email: z.email({ error: () => t("pub.auth.errors.email") }),
+    password: z.string().min(8, { error: () => t("pub.auth.errors.passwordMin") }).max(128, { error: () => t("pub.auth.errors.passwordMax") }),
     confirmPassword: z.string(),
   })
   .refine((value) => value.password === value.confirmPassword, {
-    message: "รหัสผ่านไม่ตรงกัน",
+    error: () => t("pub.auth.errors.passwordMismatch"),
     path: ["confirmPassword"],
   });
 
 function RegisterPage() {
+  const t = useT();
   const search = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -57,14 +60,13 @@ function RegisterPage() {
 
   return (
     <AuthLayout
-      icon={UserPlus}
-      title="สมัครสมาชิก"
-      description="สร้างบัญชี Eventide เพื่อจองตั๋วอีเวนต์ที่คุณสนใจ"
+      title={t("pub.auth.register.title")}
+      description={t("pub.auth.register.description")}
       footer={
         <>
-          มีบัญชีอยู่แล้ว?
-          <Link to="/login" search={{ redirect: search.redirect }} className="font-medium text-primary hover:underline">
-            เข้าสู่ระบบ
+          {t("pub.auth.register.haveAccount")}
+          <Link to="/login" search={{ redirect: search.redirect }} className="font-medium text-primary dark:text-chart-2 hover:underline">
+            {t("pub.auth.register.login")}
           </Link>
         </>
       }
@@ -85,34 +87,33 @@ function RegisterPage() {
       >
         <FieldGroup>
           <form.Field name="name">
-            {(field) => <TextField field={field} label="ชื่อที่แสดง" icon={UserRound} autoComplete="name" />}
+            {(field) => <TextField field={field} label={t("pub.auth.register.name")} autoComplete="name" />}
           </form.Field>
           <form.Field name="email">
             {(field) => (
-              <TextField field={field} label="อีเมล" icon={Mail} type="email" autoComplete="email" placeholder="you@example.com" />
+              <TextField field={field} label={t("pub.auth.email")} type="email" autoComplete="email" placeholder="you@example.com" />
             )}
           </form.Field>
           <form.Field name="password">
             {(field) => (
               <TextField
                 field={field}
-                label="รหัสผ่าน"
-                icon={KeyRound}
+                label={t("pub.auth.password")}
                 type="password"
                 autoComplete="new-password"
-                description="อย่างน้อย 8 ตัวอักษร"
+                description={t("pub.auth.passwordHint")}
               />
             )}
           </form.Field>
           <form.Field name="confirmPassword">
             {(field) => (
-              <TextField field={field} label="ยืนยันรหัสผ่าน" icon={ShieldCheck} type="password" autoComplete="new-password" />
+              <TextField field={field} label={t("pub.auth.register.confirmPassword")} type="password" autoComplete="new-password" />
             )}
           </form.Field>
           <form.Subscribe selector={(state) => state.isSubmitting}>
             {(isSubmitting) => (
               <SubmitButton pending={isSubmitting} icon={UserPlus} size="lg">
-                สมัครสมาชิก
+                {t("pub.auth.register.submit")}
               </SubmitButton>
             )}
           </form.Subscribe>

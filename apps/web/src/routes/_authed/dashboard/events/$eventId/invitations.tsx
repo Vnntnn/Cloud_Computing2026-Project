@@ -12,6 +12,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useT, type MessageKey } from "@/i18n";
 import { statusInfo } from "@/lib/events";
 import { invitationsQueryOptions, type InvitationStatus } from "@/lib/invitations";
 import { hasRole, useSession } from "@/lib/session";
@@ -23,9 +24,9 @@ import { useEventDetail } from "./-components/use-event-detail";
 const PAGE_SIZE = 10;
 
 const statusFilters = [
-  { value: "unused", label: "ยังไม่ใช้", icon: CircleDashed },
-  { value: "used", label: "ใช้แล้ว", icon: CircleCheckBig },
-] as const;
+  { value: "unused", label: "eventAdmin.invitations.filters.unused", icon: CircleDashed },
+  { value: "used", label: "eventAdmin.invitations.filters.used", icon: CircleCheckBig },
+] as const satisfies readonly { value: InvitationStatus; label: MessageKey; icon: unknown }[];
 
 // filters live in the URL, like the events list
 export const Route = createFileRoute("/_authed/dashboard/events/$eventId/invitations")({
@@ -38,6 +39,7 @@ export const Route = createFileRoute("/_authed/dashboard/events/$eventId/invitat
 });
 
 function InvitationsTab() {
+  const t = useT();
   const event = useEventDetail();
   const { data: session } = useSession();
   // a suspended event is frozen for its organizer until an admin lifts it
@@ -54,11 +56,11 @@ function InvitationsTab() {
     }
   }, [debouncedSearch, q, navigate]);
 
-  const { data, isPending, isPlaceholderData } = useQuery({
+  const { data, isPending, isError, refetch, isPlaceholderData } = useQuery({
     ...invitationsQueryOptions(event.id, { page, pageSize: PAGE_SIZE, q: q || undefined, status }),
     placeholderData: keepPreviousData,
   });
-  const columns = useMemo(() => invitationColumns(event.id, locked), [event.id, locked]);
+  const columns = useMemo(() => invitationColumns(t, event.id, locked), [t, event.id, locked]);
   const counts = data?.counts;
   const all = counts ? counts.used + counts.unused : undefined;
   const filtered = !!status || !!q;
@@ -66,18 +68,18 @@ function InvitationsTab() {
   const inviteButton = (
     <Button onClick={() => setInviteOpen(true)} disabled={locked}>
       <MailPlus data-icon="inline-start" />
-      เชิญผู้เข้าร่วม
+      {t("eventAdmin.invitations.invite")}
     </Button>
   );
 
   return (
     <div className="flex flex-col gap-6">
       {event.status !== "invite" && event.status !== "suspended" && (
-        <Alert variant="destructive">
+        <Alert>
           <TriangleAlert />
-          <AlertTitle>อีเวนต์นี้ยังไม่ได้เผยแพร่แบบ “{statusInfo.invite.label}”</AlertTitle>
+          <AlertTitle>{t("eventAdmin.invitations.notInviteOnly.title", { status: statusInfo.invite.label })}</AlertTitle>
           <AlertDescription>
-            เพิ่มรายชื่อไว้ก่อนได้ ระบบจะส่งอีเมลเชิญ และผู้ได้รับเชิญจะเปิดอีเวนต์ได้ เมื่อเปลี่ยนการเผยแพร่เป็น “{statusInfo.invite.label}” ในแท็บรายละเอียด
+            {t("eventAdmin.invitations.notInviteOnly.description", { status: statusInfo.invite.label })}
           </AlertDescription>
           <AlertAction>
             <Link
@@ -86,7 +88,7 @@ function InvitationsTab() {
               className={buttonVariants({ variant: "outline", size: "sm" })}
             >
               <PencilLine data-icon="inline-start" />
-              ไปที่รายละเอียด
+              {t("eventAdmin.invitations.notInviteOnly.goToDetails")}
             </Link>
           </AlertAction>
         </Alert>
@@ -95,11 +97,11 @@ function InvitationsTab() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h2 className="flex items-center gap-2 text-xl font-bold">
-            <MailCheck className="size-5 text-primary" />
-            ผู้ได้รับเชิญ
+            <MailCheck className="size-5 text-primary dark:text-chart-2" />
+            {t("eventAdmin.invitations.title")}
           </h2>
-          <p className="text-sm text-muted-foreground">
-            ผู้ได้รับเชิญจะได้รับอีเมลพร้อมลิงก์อีเวนต์ และเปิดอีเวนต์ได้เมื่อเข้าสู่ระบบหรือสมัครด้วยอีเมลนั้น คำเชิญจะเป็น “ใช้แล้ว” เมื่อลงทะเบียนรับตั๋ว
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            {t("eventAdmin.invitations.description")}
           </p>
         </div>
         {inviteButton}
@@ -112,8 +114,8 @@ function InvitationsTab() {
             <EmptyMedia variant="icon">
               <MailPlus />
             </EmptyMedia>
-            <EmptyTitle>ยังไม่มีผู้ได้รับเชิญ</EmptyTitle>
-            <EmptyDescription>เชิญด้วยอีเมล ทั้งคนที่มีบัญชีแล้วและยังไม่ได้สมัคร วางหลายอีเมลพร้อมกันได้</EmptyDescription>
+            <EmptyTitle>{t("eventAdmin.invitations.empty.title")}</EmptyTitle>
+            <EmptyDescription>{t("eventAdmin.invitations.empty.description")}</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>{inviteButton}</EmptyContent>
         </Empty>
@@ -123,7 +125,7 @@ function InvitationsTab() {
             <ToggleGroup
               variant="outline"
               className="flex-wrap"
-              aria-label="กรองตามสถานะคำเชิญ"
+              aria-label={t("eventAdmin.invitations.filters.label")}
               value={[status ?? "all"]}
               onValueChange={(value: string[]) => {
                 if (!value[0]) return;
@@ -133,13 +135,13 @@ function InvitationsTab() {
             >
               <ToggleGroupItem value="all">
                 <ListFilter />
-                ทั้งหมด
+                {t("eventAdmin.invitations.filters.all")}
                 {all !== undefined && <span className="text-muted-foreground tabular-nums">{all}</span>}
               </ToggleGroupItem>
               {statusFilters.map(({ value, label, icon: Icon }) => (
                 <ToggleGroupItem key={value} value={value}>
                   <Icon />
-                  {label}
+                  {t(label)}
                   {counts && <span className="text-muted-foreground tabular-nums">{counts[value]}</span>}
                 </ToggleGroupItem>
               ))}
@@ -150,14 +152,14 @@ function InvitationsTab() {
               </InputGroupAddon>
               <InputGroupInput
                 enterKeyHint="search"
-                placeholder="ค้นหาอีเมลหรือชื่อ"
-                aria-label="ค้นหาผู้ได้รับเชิญ"
+                placeholder={t("eventAdmin.invitations.search.placeholder")}
+                aria-label={t("eventAdmin.invitations.search.label")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
               {search && (
                 <InputGroupAddon align="inline-end">
-                  <InputGroupButton size="icon-xs" aria-label="ล้างคำค้นหา" onClick={() => setSearch("")}>
+                  <InputGroupButton size="icon-xs" aria-label={t("eventAdmin.invitations.search.clear")} onClick={() => setSearch("")}>
                     <X />
                   </InputGroupButton>
                 </InputGroupAddon>
@@ -168,11 +170,14 @@ function InvitationsTab() {
             <DataTable
               columns={columns}
               data={data?.items ?? []}
+              mobileHide={["createdAt"]}
+              mobileFold={["status"]}
+              error={isError && !data ? { onRetry: () => void refetch() } : undefined}
               isLoading={isPending}
               empty={{
                 icon: SearchX,
-                title: "ไม่พบผู้ได้รับเชิญที่ตรงกับตัวกรอง",
-                description: q ? `ไม่มีอีเมลหรือชื่อที่ตรงกับ “${q}”` : "ลองเลือกสถานะอื่น",
+                title: t("eventAdmin.invitations.noMatch.title"),
+                description: q ? t("eventAdmin.invitations.noMatch.query", { q }) : t("eventAdmin.invitations.noMatch.tryStatus"),
                 action: filtered && (
                   <Button
                     variant="outline"
@@ -182,7 +187,7 @@ function InvitationsTab() {
                     }}
                   >
                     <X data-icon="inline-start" />
-                    ล้างตัวกรอง
+                    {t("eventAdmin.invitations.noMatch.clear")}
                   </Button>
                 ),
               }}

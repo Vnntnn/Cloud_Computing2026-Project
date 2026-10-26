@@ -19,7 +19,8 @@ import {
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { availabilityQueryOptions, type Availability } from "@/lib/enrollments";
-import { formatPrice } from "@/lib/format";
+import { useT } from "@/i18n";
+import { formatNumber, formatPrice } from "@/lib/format";
 import { useLiveSeats } from "@/lib/live-seats";
 import { hasRole, useSession } from "@/lib/session";
 import { kindInfo, ticketTypesQueryOptions, type TicketType } from "@/lib/ticket-types";
@@ -29,6 +30,7 @@ import { DeleteTicketTypeDialog } from "./-components/delete-ticket-type-dialog"
 export const Route = createFileRoute("/_authed/dashboard/events/$eventId/tickets/")({ component: TicketsTab });
 
 function TicketsTab() {
+  const t = useT();
   const event = useEventDetail();
   const { data: session } = useSession();
   // a suspended event is frozen for its organizer until an admin lifts it
@@ -41,12 +43,12 @@ function TicketsTab() {
   const addButton = locked ? (
     <Button disabled>
       <TicketPlus data-icon="inline-start" />
-      เพิ่มประเภทตั๋ว
+      {t("eventAdmin.tickets.add")}
     </Button>
   ) : (
     <Link to="/dashboard/events/$eventId/tickets/new" params={params} className={buttonVariants()}>
       <TicketPlus data-icon="inline-start" />
-      เพิ่มประเภทตั๋ว
+      {t("eventAdmin.tickets.add")}
     </Link>
   );
 
@@ -55,12 +57,12 @@ function TicketsTab() {
       {event.status === "draft" && !!types?.length && (
         <Alert>
           <Info />
-          <AlertTitle>ยังไม่เปิดลงทะเบียน</AlertTitle>
-          <AlertDescription>ผู้สนใจจะลงทะเบียนรับตั๋วได้เมื่อคุณเผยแพร่อีเวนต์ในแท็บรายละเอียด</AlertDescription>
+          <AlertTitle>{t("eventAdmin.tickets.draft.title")}</AlertTitle>
+          <AlertDescription>{t("eventAdmin.tickets.draft.description")}</AlertDescription>
           <AlertAction>
             <Link to="/dashboard/events/$eventId" params={params} className={buttonVariants({ variant: "outline", size: "sm" })}>
               <PencilLine data-icon="inline-start" />
-              ไปที่รายละเอียด
+              {t("eventAdmin.tickets.draft.goToDetails")}
             </Link>
           </AlertAction>
         </Alert>
@@ -69,18 +71,18 @@ function TicketsTab() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h2 className="flex items-center gap-2 text-xl font-bold">
-            <Ticket className="size-5 text-primary" />
-            ประเภทตั๋ว
+            <Ticket className="size-5 text-primary dark:text-chart-2" />
+            {t("eventAdmin.tickets.title")}
           </h2>
           <p className="text-sm text-muted-foreground">
-            กำหนดราคา จำนวน วิธีรับตั๋ว และคำถามในแบบฟอร์มลงทะเบียนของแต่ละประเภท
+            {t("eventAdmin.tickets.description")}
           </p>
         </div>
         {addButton}
       </div>
 
       {isPending ? (
-        <div className="grid gap-4 md:grid-cols-2" aria-busy="true" aria-label="กำลังโหลดประเภทตั๋ว">
+        <div className="grid gap-4 md:grid-cols-2" aria-busy="true" aria-label={t("eventAdmin.ticketType.loading")}>
           <Skeleton className="h-56" />
           <Skeleton className="h-56" />
         </div>
@@ -90,9 +92,9 @@ function TicketsTab() {
             <EmptyMedia variant="icon">
               <TicketPlus />
             </EmptyMedia>
-            <EmptyTitle>ยังไม่มีประเภทตั๋ว</EmptyTitle>
+            <EmptyTitle>{t("eventAdmin.tickets.empty.title")}</EmptyTitle>
             <EmptyDescription>
-              เพิ่มอย่างน้อย 1 ประเภทเพื่อเปิดให้ลงทะเบียน เช่น บัตรทั่วไปแบบมาก่อนได้ก่อน หรือบัตร VIP ที่ต้องได้รับอนุมัติ
+              {t("eventAdmin.tickets.empty.description")}
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>{addButton}</EmptyContent>
@@ -125,6 +127,7 @@ function TicketTypeCard({
   availability: Availability | undefined;
   locked: boolean;
 }) {
+  const t = useT();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const { icon: KindIcon, label } = kindInfo[ticketType.kind];
   const held = availability ? availability.confirmed + availability.reserved + availability.pending : 0;
@@ -143,21 +146,21 @@ function TicketTypeCard({
         </CardDescription>
         <CardAction>
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />} aria-label={`จัดการ ${ticketType.name}`}>
+            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />} aria-label={t("eventAdmin.tickets.card.manage", { name: ticketType.name })}>
               <MoreHorizontal />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
               <DropdownMenuGroup>
                 <DropdownMenuItem render={<Link to="/dashboard/events/$eventId/tickets/$ticketTypeId" params={params} />}>
                   <Pencil />
-                  แก้ไข
+                  {t("eventAdmin.tickets.card.edit")}
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem variant="destructive" disabled={locked || held > 0} onClick={() => setDeleteOpen(true)}>
                   <Trash2 />
-                  ลบ
+                  {t("eventAdmin.tickets.card.delete")}
                 </DropdownMenuItem>
               </DropdownMenuGroup>
             </DropdownMenuContent>
@@ -170,40 +173,40 @@ function TicketTypeCard({
         )}
         <dl className="grid grid-cols-3 gap-2 text-sm">
           <div className="flex flex-col gap-0.5">
-            <dt className="text-xs text-muted-foreground">ยืนยันแล้ว</dt>
+            <dt className="text-xs text-muted-foreground">{t("eventAdmin.tickets.card.confirmed")}</dt>
             <dd className="font-semibold tabular-nums">
-              {(availability?.confirmed ?? 0).toLocaleString()}
+              {formatNumber(availability?.confirmed ?? 0)}
               {ticketType.quota !== null && (
-                <span className="font-normal text-muted-foreground"> / {ticketType.quota.toLocaleString()}</span>
+                <span className="font-normal text-muted-foreground"> / {formatNumber(ticketType.quota)}</span>
               )}
             </dd>
           </div>
           {ticketType.kind === "approval" ? (
             <div className="flex flex-col gap-0.5">
-              <dt className="text-xs text-muted-foreground">รออนุมัติ</dt>
-              <dd className="font-semibold tabular-nums">{(availability?.pending ?? 0).toLocaleString()}</dd>
+              <dt className="text-xs text-muted-foreground">{t("eventAdmin.tickets.card.pending")}</dt>
+              <dd className="font-semibold tabular-nums">{formatNumber(availability?.pending ?? 0)}</dd>
             </div>
           ) : (
             <div className="flex flex-col gap-0.5">
-              <dt className="text-xs text-muted-foreground">รอชำระเงิน</dt>
-              <dd className="font-semibold tabular-nums">{(availability?.reserved ?? 0).toLocaleString()}</dd>
+              <dt className="text-xs text-muted-foreground">{t("eventAdmin.tickets.card.awaitingPayment")}</dt>
+              <dd className="font-semibold tabular-nums">{formatNumber(availability?.reserved ?? 0)}</dd>
             </div>
           )}
           <div className="flex flex-col gap-0.5">
-            <dt className="text-xs text-muted-foreground">เหลือ</dt>
+            <dt className="text-xs text-muted-foreground">{t("eventAdmin.tickets.card.remaining")}</dt>
             <dd className="font-semibold tabular-nums">
-              {availability?.remaining == null ? "ไม่จำกัด" : availability.remaining.toLocaleString()}
+              {availability?.remaining == null ? t("eventAdmin.tickets.card.unlimited") : formatNumber(availability.remaining)}
             </dd>
           </div>
         </dl>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <span className="flex items-center gap-1">
             <ShoppingCart className="size-4" />
-            สูงสุด {ticketType.maxPerUser} ใบต่อบัญชี
+            {t("eventAdmin.tickets.card.maxPerUser", { n: ticketType.maxPerUser })}
           </span>
           <span className="flex items-center gap-1">
             <ClipboardList className="size-4" />
-            {ticketType.questions.length ? `คำถามเพิ่มเติม ${ticketType.questions.length} ข้อ` : "ไม่มีคำถามเพิ่มเติม"}
+            {ticketType.questions.length ? t("eventAdmin.tickets.card.questions", { n: ticketType.questions.length }) : t("eventAdmin.tickets.card.noQuestions")}
           </span>
         </div>
       </CardContent>
@@ -214,7 +217,7 @@ function TicketTypeCard({
           className={buttonVariants({ variant: "outline", className: "w-full" })}
         >
           <Pencil data-icon="inline-start" />
-          แก้ไขตั๋วและแบบฟอร์ม
+          {t("eventAdmin.tickets.card.editForm")}
         </Link>
       </CardFooter>
       <DeleteTicketTypeDialog eventId={eventId} ticketType={ticketType} open={deleteOpen} onOpenChange={setDeleteOpen} />

@@ -1,6 +1,7 @@
 import { CalendarCog, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
 import type { Role } from "@app/auth-guard/permissions";
 import { Badge } from "@/components/ui/badge";
+import { useT } from "@/i18n";
 import { roleLabels } from "@/lib/roles";
 
 const roleStyles: Record<Role, { icon: LucideIcon; variant: "secondary" | "outline" | "default" }> = {
@@ -14,6 +15,7 @@ export function RoleBadge({
   role,
   ...props
 }: Omit<React.ComponentProps<typeof Badge>, "role"> & { role?: string | null }) {
+  useT(); // re-render on a language switch: the labels read the current language
   const key: Role = role === "organizer" || role === "admin" ? role : "user";
   const { icon: Icon, variant } = roleStyles[key];
   return (

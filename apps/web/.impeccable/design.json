@@ -1,0 +1,689 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-25T21:46:29Z",
+  "title": "Design System: Eventide",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Eventide Teal",
+        "canonical": "oklch(0.511 0.096 186.391)",
+        "tonalRamp": [
+          "oklch(0.15 0.05 186)",
+          "oklch(0.25 0.07 186)",
+          "oklch(0.35 0.085 186)",
+          "oklch(0.511 0.096 186)",
+          "oklch(0.6 0.118 185)",
+          "oklch(0.7 0.14 183)",
+          "oklch(0.855 0.138 181)",
+          "oklch(0.95 0.05 181)"
+        ]
+      },
+      "dusk": {
+        "role": "neutral",
+        "displayName": "Night Ink",
+        "canonical": "oklch(0.2 0.045 205)",
+        "tonalRamp": [
+          "oklch(0.15 0.04 205)",
+          "oklch(0.2 0.045 205)",
+          "oklch(0.3 0.07 196)",
+          "oklch(0.45 0.095 188)",
+          "oklch(0.6 0.08 190)",
+          "oklch(0.75 0.05 190)",
+          "oklch(0.9 0.03 185)",
+          "oklch(0.985 0.012 185)"
+        ]
+      },
+      "sun": {
+        "role": "secondary",
+        "displayName": "Marigold",
+        "canonical": "oklch(0.83 0.15 78)",
+        "tonalRamp": [
+          "oklch(0.24 0.05 200)",
+          "oklch(0.4 0.1 60)",
+          "oklch(0.55 0.15 50)",
+          "oklch(0.7 0.18 45)",
+          "oklch(0.83 0.15 78)",
+          "oklch(0.88 0.12 80)",
+          "oklch(0.94 0.035 85)",
+          "oklch(0.97 0.02 85)"
+        ]
+      },
+      "sand": {
+        "role": "neutral",
+        "displayName": "Sand",
+        "canonical": "oklch(0.94 0.035 85)",
+        "tonalRamp": [
+          "oklch(0.3 0.03 85)",
+          "oklch(0.45 0.04 85)",
+          "oklch(0.6 0.05 85)",
+          "oklch(0.75 0.05 85)",
+          "oklch(0.85 0.045 85)",
+          "oklch(0.94 0.035 85)",
+          "oklch(0.96 0.025 85)",
+          "oklch(0.98 0.012 85)"
+        ]
+      },
+      "poster-2": {
+        "role": "tertiary",
+        "displayName": "Tent Vermilion",
+        "canonical": "oklch(0.52 0.19 38)",
+        "tonalRamp": [
+          "oklch(0.2 0.08 38)",
+          "oklch(0.3 0.12 38)",
+          "oklch(0.4 0.16 38)",
+          "oklch(0.52 0.19 38)",
+          "oklch(0.6 0.19 38)",
+          "oklch(0.72 0.14 38)",
+          "oklch(0.85 0.07 38)",
+          "oklch(0.95 0.025 38)"
+        ]
+      },
+      "poster-3": {
+        "role": "tertiary",
+        "displayName": "Tent Orchid",
+        "canonical": "oklch(0.45 0.2 328)",
+        "tonalRamp": [
+          "oklch(0.2 0.08 328)",
+          "oklch(0.3 0.12 328)",
+          "oklch(0.38 0.16 328)",
+          "oklch(0.45 0.2 328)",
+          "oklch(0.55 0.18 328)",
+          "oklch(0.7 0.13 328)",
+          "oklch(0.85 0.07 328)",
+          "oklch(0.95 0.025 328)"
+        ]
+      },
+      "poster-4": {
+        "role": "tertiary",
+        "displayName": "Tent Indigo",
+        "canonical": "oklch(0.36 0.14 275)",
+        "tonalRamp": [
+          "oklch(0.15 0.07 275)",
+          "oklch(0.25 0.1 275)",
+          "oklch(0.3 0.12 275)",
+          "oklch(0.36 0.14 275)",
+          "oklch(0.5 0.14 275)",
+          "oklch(0.65 0.1 275)",
+          "oklch(0.82 0.05 275)",
+          "oklch(0.95 0.02 275)"
+        ]
+      },
+      "poster-6": {
+        "role": "tertiary",
+        "displayName": "Tent Green",
+        "canonical": "oklch(0.42 0.1 160)",
+        "tonalRamp": [
+          "oklch(0.17 0.05 160)",
+          "oklch(0.26 0.07 160)",
+          "oklch(0.34 0.09 160)",
+          "oklch(0.42 0.1 160)",
+          "oklch(0.55 0.1 160)",
+          "oklch(0.7 0.08 160)",
+          "oklch(0.85 0.045 160)",
+          "oklch(0.95 0.02 160)"
+        ]
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "Ink Text",
+        "canonical": "oklch(0.2 0.03 205)",
+        "tonalRamp": [
+          "oklch(0.15 0.025 205)",
+          "oklch(0.2 0.03 205)",
+          "oklch(0.35 0.035 205)",
+          "oklch(0.49 0.03 205)",
+          "oklch(0.64 0.02 205)",
+          "oklch(0.8 0.012 205)",
+          "oklch(0.915 0.01 205)",
+          "oklch(0.965 0.008 205)"
+        ]
+      },
+      "input": {
+        "role": "neutral",
+        "displayName": "Control Border",
+        "canonical": "oklch(0.64 0.02 205)",
+        "tonalRamp": [
+          "oklch(0.3 0.03 205)",
+          "oklch(0.4 0.03 205)",
+          "oklch(0.5 0.025 205)",
+          "oklch(0.64 0.02 205)",
+          "oklch(0.75 0.015 205)",
+          "oklch(0.85 0.012 205)",
+          "oklch(0.915 0.01 205)",
+          "oklch(0.965 0.008 205)"
+        ]
+      },
+      "poster-1": {
+        "role": "tertiary",
+        "displayName": "Tent Night Ink",
+        "canonical": "oklch(0.2 0.045 205)",
+        "tonalRamp": [
+          "oklch(0.15 0.04 205)",
+          "oklch(0.2 0.045 205)",
+          "oklch(0.3 0.07 196)",
+          "oklch(0.45 0.095 188)",
+          "oklch(0.6 0.08 190)",
+          "oklch(0.75 0.05 190)",
+          "oklch(0.9 0.03 185)",
+          "oklch(0.985 0.012 185)"
+        ]
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "Page White",
+        "canonical": "oklch(1 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.35 0 0)",
+          "oklch(0.5 0 0)",
+          "oklch(0.62 0 0)",
+          "oklch(0.75 0 0)",
+          "oklch(0.88 0 0)",
+          "oklch(1 0 0)"
+        ]
+      },
+      "muted-foreground": {
+        "role": "neutral",
+        "displayName": "Quiet Ink Text",
+        "canonical": "oklch(0.49 0.03 205)",
+        "tonalRamp": [
+          "oklch(0.15 0.019 205)",
+          "oklch(0.25 0.022 205)",
+          "oklch(0.35 0.025 205)",
+          "oklch(0.5 0.029 205)",
+          "oklch(0.62 0.028 205)",
+          "oklch(0.75 0.025 205)",
+          "oklch(0.88 0.021 205)",
+          "oklch(0.96 0.019 205)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "oklch(0.915 0.01 205)",
+        "tonalRamp": [
+          "oklch(0.15 0.006 205)",
+          "oklch(0.25 0.007 205)",
+          "oklch(0.35 0.008 205)",
+          "oklch(0.5 0.01 205)",
+          "oklch(0.62 0.009 205)",
+          "oklch(0.75 0.008 205)",
+          "oklch(0.88 0.007 205)",
+          "oklch(0.96 0.006 205)"
+        ]
+      },
+      "ring": {
+        "role": "neutral",
+        "displayName": "Focus Teal",
+        "canonical": "oklch(0.62 0.07 190)",
+        "tonalRamp": [
+          "oklch(0.15 0.045 190)",
+          "oklch(0.25 0.051 190)",
+          "oklch(0.35 0.057 190)",
+          "oklch(0.5 0.067 190)",
+          "oklch(0.62 0.066 190)",
+          "oklch(0.75 0.057 190)",
+          "oklch(0.88 0.049 190)",
+          "oklch(0.96 0.044 190)"
+        ]
+      },
+      "dusk-foreground": {
+        "role": "neutral",
+        "displayName": "Lantern White",
+        "canonical": "oklch(0.985 0.012 185)",
+        "tonalRamp": [
+          "oklch(0.15 0.008 185)",
+          "oklch(0.25 0.009 185)",
+          "oklch(0.35 0.01 185)",
+          "oklch(0.5 0.011 185)",
+          "oklch(0.62 0.011 185)",
+          "oklch(0.75 0.01 185)",
+          "oklch(0.88 0.008 185)",
+          "oklch(0.96 0.008 185)"
+        ]
+      },
+      "sun-foreground": {
+        "role": "neutral",
+        "displayName": "Dark Teal Type",
+        "canonical": "oklch(0.24 0.05 200)",
+        "tonalRamp": [
+          "oklch(0.15 0.032 200)",
+          "oklch(0.25 0.036 200)",
+          "oklch(0.35 0.041 200)",
+          "oklch(0.5 0.048 200)",
+          "oklch(0.62 0.047 200)",
+          "oklch(0.75 0.041 200)",
+          "oklch(0.88 0.035 200)",
+          "oklch(0.96 0.032 200)"
+        ]
+      },
+      "destructive": {
+        "role": "neutral",
+        "displayName": "Destructive Red",
+        "canonical": "oklch(0.5 0.22 27.3)",
+        "tonalRamp": [
+          "oklch(0.15 0.141 27.3)",
+          "oklch(0.25 0.161 27.3)",
+          "oklch(0.35 0.18 27.3)",
+          "oklch(0.5 0.21 27.3)",
+          "oklch(0.62 0.206 27.3)",
+          "oklch(0.75 0.18 27.3)",
+          "oklch(0.88 0.155 27.3)",
+          "oklch(0.96 0.139 27.3)"
+        ],
+        "note": "Value from src/index.css :root (0.5 0.22 27.3, 5.6:1 as text on its own tint); DESIGN.md frontmatter still lists 0.577 0.245 27.325."
+      },
+      "poster-5": {
+        "role": "tertiary",
+        "displayName": "Tent Marigold",
+        "canonical": "oklch(0.83 0.15 78)",
+        "tonalRamp": [
+          "oklch(0.15 0.096 78)",
+          "oklch(0.25 0.11 78)",
+          "oklch(0.35 0.123 78)",
+          "oklch(0.5 0.143 78)",
+          "oklch(0.62 0.141 78)",
+          "oklch(0.75 0.123 78)",
+          "oklch(0.88 0.105 78)",
+          "oklch(0.96 0.095 78)"
+        ]
+      },
+      "dark-background": {
+        "role": "neutral",
+        "displayName": "Dark Page",
+        "canonical": "oklch(0.165 0.022 205)",
+        "tonalRamp": [
+          "oklch(0.15 0.014 205)",
+          "oklch(0.25 0.016 205)",
+          "oklch(0.35 0.018 205)",
+          "oklch(0.5 0.021 205)",
+          "oklch(0.62 0.021 205)",
+          "oklch(0.75 0.018 205)",
+          "oklch(0.88 0.015 205)",
+          "oklch(0.96 0.014 205)"
+        ]
+      },
+      "dark-card": {
+        "role": "neutral",
+        "displayName": "Dark Card",
+        "canonical": "oklch(0.21 0.028 205)",
+        "tonalRamp": [
+          "oklch(0.15 0.018 205)",
+          "oklch(0.25 0.02 205)",
+          "oklch(0.35 0.023 205)",
+          "oklch(0.5 0.027 205)",
+          "oklch(0.62 0.026 205)",
+          "oklch(0.75 0.023 205)",
+          "oklch(0.88 0.02 205)",
+          "oklch(0.96 0.018 205)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Home hero headline only; two lines, each its own block."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Home section headings with a 32px icon."
+      },
+      "page-title": {
+        "displayName": "Page Title",
+        "purpose": "PageHeader: lg (2.25 to 3rem, 1.25) for public and account pages, md (1.5 to 1.875rem, 1.3) for dashboard and forms."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Event titles in cards, ledger and billboard; ticket-type names."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text, descriptions, rich text (1rem, 1.75, 68ch)."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Month, category, venue, time, badges."
+      },
+      "numeral": {
+        "displayName": "Date Numeral",
+        "purpose": "The recurring poster device: bold tabular day numbers and prices."
+      },
+      "ticket-code": {
+        "displayName": "Ticket Code",
+        "purpose": "The printed code under a QR, mono with 0.3em tracking."
+      }
+    },
+    "shadows": [
+      {
+        "name": "lift",
+        "value": "shadow-xl (0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1))",
+        "purpose": "Hero search field on its photograph; generated poster on an event hero."
+      },
+      {
+        "name": "floating",
+        "value": "shadow-2xl + ring-1 ring-foreground/5",
+        "purpose": "Dropdown menus, selects, popovers: solid fill, no blur."
+      },
+      {
+        "name": "raised",
+        "value": "shadow-lg",
+        "purpose": "Toasts and the dashboard save bar."
+      },
+      {
+        "name": "date-block-over-photo",
+        "value": "shadow-md",
+        "purpose": "Compact DateBlock over a card photograph."
+      },
+      {
+        "name": "ticket-outline",
+        "value": "--ticket-outline: drop-shadow(1px 0 0 C) drop-shadow(-1px 0 0 C) drop-shadow(0 1px 0 C) drop-shadow(0 -1px 0 C), C = color-mix(in oklab, var(--foreground) 38%, transparent) (22% in .dark)",
+        "purpose": "Outline of a notched ticket as four one-pixel drop-shadows on .ticket-h / .ticket-v; a mask would clip a border and one blurred shadow was too faint."
+      },
+      {
+        "name": "cursor-label",
+        "value": "0 0 0 1.5px color-mix(in oklab, var(--sun-foreground) 90%, transparent), 0 6px 16px rgb(0 0 0 / 0.28)",
+        "purpose": "Ring and lifted shadow on the marigold cursor label so it reads over a marigold poster."
+      },
+      {
+        "name": "scroll-hint-edge",
+        "value": "-10px 0 8px -8px color-mix(in oklab, var(--foreground) 22%, transparent)",
+        "purpose": "Sticky action column of a narrow data table, marking the edge with more behind it."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out-expo",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The one easing for everything that moves."
+      },
+      {
+        "name": "plate-wipe",
+        "value": "1400ms ease-out-expo 100ms backwards",
+        "purpose": "Hero photograph wipes in from the right (clip inset 45%, scale 1.08, fade)."
+      },
+      {
+        "name": "reveal",
+        "value": "600ms ease-out-expo, delay 60-420ms via --d (reveal(ms))",
+        "purpose": "Staggered rise (0.35em) and unblur (6px) of scene titles, hero details and auth headers."
+      },
+      {
+        "name": "dur-fast",
+        "value": "150ms",
+        "purpose": "Quick state changes."
+      },
+      {
+        "name": "dur-base",
+        "value": "300ms",
+        "purpose": "Hover fills and moves, navbar ink state."
+      },
+      {
+        "name": "dur-slow",
+        "value": "800ms",
+        "purpose": "Slow transitions."
+      },
+      {
+        "name": "card-entrance",
+        "value": "300ms fade + 2 rise, 70ms stagger per card up to 8",
+        "purpose": "EventCards arriving together (replaced on scrolled content by rise-in)."
+      },
+      {
+        "name": "rise-in",
+        "value": "rise-in linear both; animation-timeline: view(); animation-range: entry 0% entry 40%; from opacity 0, translate 0 1.75rem",
+        "purpose": "A heading, ledger row or event card eases up as it scrolls into view. Only under prefers-reduced-motion: no-preference and @supports (animation-timeline: view())."
+      },
+      {
+        "name": "lantern-lit",
+        "value": "--lit (registered <number>, initial 0) transition 600ms var(--ease-out-expo); data-lit=true sets --lit: 1; mask pool circle 17rem at var(--mx) var(--my)",
+        "purpose": "Home hero wash opens around the pointer. Fine pointer and no reduced motion only."
+      },
+      {
+        "name": "cursor-label",
+        "value": "opacity var(--dur-fast) 150ms, scale var(--dur-base) 300ms var(--ease-out-expo); scale 0.5 to 1",
+        "purpose": "Marigold label that appears over a cover with data-cursor."
+      },
+      {
+        "name": "cursor-ring",
+        "value": "opacity and background var(--dur-base) 300ms, scale var(--dur-base) var(--ease-out-expo); link 1.6, pressed 0.75",
+        "purpose": "Pointer ring on public pages; swells over links."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation and transition durations 0.01ms",
+        "purpose": "prefers-reduced-motion collapses all motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px",
+        "purpose": "Nav icons become icon-only labels collapse below; larger type; vertical rhythm rises to 96-112px."
+      },
+      {
+        "name": "lg",
+        "value": "1024px",
+        "purpose": "Detail columns and hero plate move to the side; dashboard sidebar is a drawer below this width."
+      },
+      {
+        "name": "table-container",
+        "value": "56rem (container query, name dt)",
+        "purpose": "Narrow-table rule decided by the table's own width: sticky action column, mobileHide dropped, mobileFold under the first cell."
+      },
+      {
+        "name": "sidebar-drawer",
+        "value": "1024px",
+        "purpose": "Dashboard sidebar collapses to a drawer below lg."
+      }
+    ],
+    "radii": [
+      {
+        "name": "chip",
+        "value": "4px",
+        "purpose": "CategoryChip only."
+      },
+      {
+        "name": "content",
+        "value": "6px to 8px (--radius-sm, --radius-md)",
+        "purpose": "Date blocks, posters, thumbnails, cards, alerts, ticket pieces."
+      },
+      {
+        "name": "floating",
+        "value": "10px (--radius-lg)",
+        "purpose": "Dialogs, popovers, menus, toasts, textarea."
+      },
+      {
+        "name": "control",
+        "value": "pill (rounded-4xl)",
+        "purpose": "Buttons, inputs, selects, input groups, tabs, badges."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Hero Search",
+      "kind": "input",
+      "refersTo": "search-field",
+      "description": "White field under the hero headline with a marigold submit.",
+      "html": "<form class=\"ds-search\"><input class=\"ds-search-input\" placeholder=\"Search events\" aria-label=\"Search\"><button class=\"ds-search-btn\" type=\"submit\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg>Search</button></form>",
+      "css": ".ds-search { display: flex; align-items: center; height: 56px; width: 36rem; max-width: 100%; padding-right: 8px; border-radius: 10px; background: var(--dusk-foreground); color: var(--sun-foreground); box-shadow: 0 20px 25px -5px rgb(0 0 0 / .1), 0 8px 10px -6px rgb(0 0 0 / .1); } .ds-search-input { flex: 1; height: 100%; padding-left: 20px; border: 0; outline: 0; background: transparent; font: inherit; font-size: 16px; color: inherit; } .ds-search-btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 20px; border: 0; border-radius: 8px; background: var(--sun); color: var(--sun-foreground); font: inherit; font-weight: 600; cursor: pointer; } .ds-search-btn:hover { background: color-mix(in oklab, var(--sun) 85%, transparent); } .ds-search-btn:focus-visible, .ds-search-input:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }"
+    },
+    {
+      "name": "Sun Button",
+      "kind": "button",
+      "refersTo": "button-sun",
+      "description": "Marigold action on any ink scene (home, event hero, 404).",
+      "html": "<button class=\"ds-btn-host\">Apply to host</button>",
+      "css": ".ds-btn-host { height: 48px; padding: 0 24px; border: 0; border-radius: 9999px; background: var(--sun); color: var(--sun-foreground); font: inherit; font-size: 16px; font-weight: 500; cursor: pointer; } .ds-btn-host:hover { background: color-mix(in oklab, var(--sun) 85%, transparent); } .ds-btn-host:focus-visible { background: var(--dusk-foreground); outline: 3px solid var(--sun); outline-offset: 2px; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "description": "Pill with the real 3:1 `input` border and a solid background; hover tints to muted. Filled variants carry border-transparent, the outline does not.",
+      "html": "<button class=\"ds-btn-outline\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"18\" cy=\"5\" r=\"3\"/><circle cx=\"6\" cy=\"12\" r=\"3\"/><circle cx=\"18\" cy=\"19\" r=\"3\"/><path d=\"m8.6 13.5 6.8 4M15.4 6.5l-6.8 4\"/></svg>Share</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 10px; border: 1px solid var(--input); border-radius: 9999px; background: var(--background); color: var(--foreground); font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer; outline: none; transition: all .15s; } .ds-btn-outline svg { width: 16px; height: 16px; flex-shrink: 0; } .ds-btn-outline:hover { background: var(--muted); } .ds-btn-outline:active { transform: translateY(1px); } .ds-btn-outline:focus-visible { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent); }"
+    },
+    {
+      "name": "Date Block",
+      "kind": "custom",
+      "description": "The date in the category's colourway; day in its ink, month under it. 6px radius with a faint ring.",
+      "html": "<span class=\"ds-date\"><b>14</b><i>NOV</i></span>",
+      "css": ".ds-date { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 104px; padding: 12px 0; border-radius: 6px; line-height: 1; background: var(--poster-2); box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent); } .ds-date b { font-size: 60px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--poster-2-ink); } .ds-date i { font-size: 14px; font-style: normal; font-weight: 600; color: var(--dusk-foreground); }",
+      "refersTo": "date-block"
+    },
+    {
+      "name": "Programme Item",
+      "kind": "custom",
+      "description": "Date numeral, title, venue and time on the dusk ground.",
+      "html": "<a class=\"ds-prog\" href=\"#\"><span class=\"ds-prog-date\"><b>14</b><i>NOV</i></span><span class=\"ds-prog-body\"><b>Night Market Live</b><span>Ratchada Rail Market</span><span>19:00</span></span></a>",
+      "css": ".ds-prog { display: grid; grid-template-columns: 3.75rem 1fr; gap: 16px; align-items: center; padding: 12px 0; background: var(--dusk); color: var(--dusk-foreground); text-decoration: none; border-top: 1px solid color-mix(in oklab, var(--dusk-foreground) 25%, transparent); } .ds-prog-date { display: flex; flex-direction: column; align-items: center; line-height: 1; } .ds-prog-date b { font-size: 48px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--sun); transition: transform .3s cubic-bezier(.16,1,.3,1); } .ds-prog-date i { margin-top: 6px; font-size: 12px; font-style: normal; font-weight: 600; } .ds-prog-body { display: flex; flex-direction: column; gap: 4px; font-size: 14px; } .ds-prog-body b { font-size: 18px; } .ds-prog:hover .ds-prog-date b { transform: translateY(-2px); } .ds-prog:hover .ds-prog-body b { text-decoration: underline; } .ds-prog:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }"
+    },
+    {
+      "name": "Kind Index Row",
+      "kind": "nav",
+      "description": "Category name set in type; the row fills with the category colourway on hover.",
+      "html": "<a class=\"ds-kind\" href=\"#\"><span class=\"ds-kind-chip\"></span><span class=\"ds-kind-name\">Music</span><svg width=\"28\" height=\"28\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 7h10v10\"/><path d=\"M7 17 17 7\"/></svg></a>",
+      "css": ".ds-kind { --g: var(--poster-3); display: flex; align-items: center; gap: 24px; padding: 20px 16px; border-top: 1px solid color-mix(in oklab, currentColor 20%, transparent); border-radius: 4px; text-decoration: none; color: var(--foreground); transition: background-color .3s, color .3s; } .ds-kind-chip { width: 72px; height: 48px; flex-shrink: 0; border-radius: 8px; background: var(--g); } .ds-kind-name { flex: 1; font-size: 48px; line-height: 1.2; font-weight: 700; letter-spacing: -0.025em; } .ds-kind svg { transition: transform .3s cubic-bezier(.16,1,.3,1); } .ds-kind:hover, .ds-kind:focus-visible { background: var(--g); color: var(--dusk-foreground); } .ds-kind:hover svg { transform: translate(4px, -4px); } .ds-kind:focus-visible { outline: 3px solid var(--ring); }"
+    },
+    {
+      "name": "Event Poster",
+      "kind": "custom",
+      "description": "Date as the poster: category ground, tide lines, oversized numeral.",
+      "html": "<div class=\"ds-poster\"><svg viewBox=\"0 0 100 60\" preserveAspectRatio=\"none\" class=\"ds-poster-tide\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.2\"><path vector-effect=\"non-scaling-stroke\" d=\"M-5 14 Q 20 4 45 14 T 95 14 T 145 14\"/><path vector-effect=\"non-scaling-stroke\" d=\"M-5 23 Q 20 13 45 23 T 95 23 T 145 23\"/><path vector-effect=\"non-scaling-stroke\" d=\"M-5 32 Q 20 22 45 32 T 95 32 T 145 32\"/><path vector-effect=\"non-scaling-stroke\" d=\"M-5 41 Q 20 31 45 41 T 95 41 T 145 41\"/><path vector-effect=\"non-scaling-stroke\" d=\"M-5 50 Q 20 40 45 50 T 95 50 T 145 50\"/></svg><span class=\"ds-poster-day\">14</span></div>",
+      "css": ".ds-poster { position: relative; overflow: hidden; container-type: size; width: 240px; height: 180px; background: var(--poster-4); color: var(--poster-4-ink); } .ds-poster-tide { position: absolute; left: 0; bottom: 0; width: 100%; height: 60%; opacity: .4; } .ds-poster-day { position: absolute; left: -3cqmin; bottom: -9cqmin; font-size: 80cqmin; line-height: .78; font-weight: 700; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; color: var(--poster-4-ink); }"
+    },
+    {
+      "name": "Form Field",
+      "kind": "input",
+      "description": "Pill control with the 3:1 `input` border and a solid fill; the label is words only.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Email</span><input class=\"ds-field-input\" placeholder=\"you@example.com\"></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 8px; max-width: 24rem; } .ds-field-label { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--foreground); } .ds-field-input { height: 36px; padding: 0 12px; border: 1px solid var(--input); border-radius: 9999px; background: var(--background); color: var(--foreground); font: inherit; font-size: 16px; outline: none; transition: border-color .15s; } .ds-field-input::placeholder { color: var(--muted-foreground); } .ds-field-input:hover, .ds-field-input:focus-visible { border-color: var(--ring); } .ds-field-input:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent); }",
+      "refersTo": "input-field"
+    },
+    {
+      "name": "Ticket Stub",
+      "kind": "card",
+      "description": "Two pieces torn along a dashed line with a 9px notch at each end; neutral card fill, price on the stub, outlined by four one-pixel drop-shadows.",
+      "html": "<div class=\"ds-ticket\"><div class=\"ds-ticket-stub\"><b>฿500</b><span>per ticket</span></div><div class=\"ds-ticket-body\"><b>General admission</b><span>120 seats left</span></div></div>",
+      "css": ".ds-ticket { --notch: 9px; display: flex; max-width: 28rem; --c: color-mix(in oklab, var(--foreground) 38%, transparent); filter: drop-shadow(1px 0 0 var(--c)) drop-shadow(-1px 0 0 var(--c)) drop-shadow(0 1px 0 var(--c)) drop-shadow(0 -1px 0 var(--c)); } .ds-ticket > * { background: var(--card); position: relative; mask-composite: intersect; } .ds-ticket-stub { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 112px; padding: 20px 12px; border-radius: 8px 0 0 8px; mask-image: radial-gradient(circle var(--notch) at 100% 0, #0000 98%, #000), radial-gradient(circle var(--notch) at 100% 100%, #0000 98%, #000); } .ds-ticket-stub b { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; } .ds-ticket-stub span { font-size: 12px; color: var(--muted-foreground); } .ds-ticket-body { display: flex; flex: 1; flex-direction: column; gap: 4px; padding: 20px; border-radius: 0 8px 8px 0; mask-image: radial-gradient(circle var(--notch) at 0 0, #0000 98%, #000), radial-gradient(circle var(--notch) at 0 100%, #0000 98%, #000); } .ds-ticket-body::before { content: ''; position: absolute; top: 15px; bottom: 15px; left: 0; border-left: 2px dashed color-mix(in oklab, var(--foreground) 24%, transparent); } .ds-ticket-body b { font-size: 18px; } .ds-ticket-body span { font-size: 14px; color: var(--muted-foreground); }",
+      "refersTo": "ticket-stub"
+    },
+    {
+      "name": "Category Ticket Stub",
+      "kind": "card",
+      "refersTo": "ticket-stub",
+      "description": "A ticket type on the event page: the stub wears the category colourway (stubStyle) with the price in its ink; the body stays the card fill.",
+      "html": "<div class=\"ds-cticket\"><div class=\"ds-cticket-stub\"><b>฿500</b><span>per ticket</span></div><div class=\"ds-cticket-body\"><b>General admission</b><span>120 seats left</span></div></div>",
+      "css": ".ds-cticket { --notch: 9px; --c: color-mix(in oklab, var(--foreground) 38%, transparent); display: flex; max-width: 28rem; filter: drop-shadow(1px 0 0 var(--c)) drop-shadow(-1px 0 0 var(--c)) drop-shadow(0 1px 0 var(--c)) drop-shadow(0 -1px 0 var(--c)); } .ds-cticket > * { position: relative; mask-composite: intersect; } .ds-cticket-stub { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 112px; padding: 20px 12px; border-radius: 8px 0 0 8px; background: var(--poster-4); color: var(--poster-4-ink); mask-image: radial-gradient(circle var(--notch) at 100% 0, #0000 98%, #000), radial-gradient(circle var(--notch) at 100% 100%, #0000 98%, #000); } .ds-cticket-stub b { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; } .ds-cticket-stub span { font-size: 12px; font-weight: 600; } .ds-cticket-body { display: flex; flex: 1; flex-direction: column; gap: 4px; padding: 20px; border-radius: 0 8px 8px 0; background: var(--card); color: var(--card-foreground); mask-image: radial-gradient(circle var(--notch) at 0 0, #0000 98%, #000), radial-gradient(circle var(--notch) at 0 100%, #0000 98%, #000); } .ds-cticket-body::before { content: ''; position: absolute; top: 15px; bottom: 15px; left: 0; border-left: 2px dashed color-mix(in oklab, var(--foreground) 24%, transparent); } .ds-cticket-body b { font-size: 18px; } .ds-cticket-body span { font-size: 14px; color: var(--muted-foreground); }"
+    },
+    {
+      "name": "Ticket QR Tile",
+      "kind": "custom",
+      "description": "The code on white: black on white with a printed code, away from every decoration so it scans.",
+      "html": "<div class=\"ds-qr\"><div class=\"ds-qr-tile\"><svg width=\"120\" height=\"120\" viewBox=\"0 0 8 8\" shape-rendering=\"crispEdges\"><path fill=\"#0a0a0a\" d=\"M1 1h2v2H1zM5 1h2v2H5zM1 5h2v2H1zM4 4h1v1H4zM6 5h1v2H6zM3 6h2v1H3z\"/></svg></div><span class=\"ds-qr-code\">K7M2Q9XA</span></div>",
+      "css": ".ds-qr { display: flex; flex-direction: column; align-items: center; gap: 12px; } .ds-qr-tile { overflow: hidden; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: #ffffff; } .ds-qr-code { font-family: 'Google Sans Code Variable', monospace; font-size: 20px; font-weight: 600; letter-spacing: .3em; }",
+      "refersTo": "qr-tile"
+    },
+    {
+      "name": "Canopy Edge",
+      "kind": "custom",
+      "description": "Where an ink scene ends: a strip in the next section's colour (--canopy-fill) cut into upward points, clamp(10px, 1.1vw, 16px) tall. A boundary, not a texture; none in dark mode.",
+      "html": "<div class=\"ds-canopy-page\"><div class=\"ds-canopy\"><span>Night Market Live</span></div></div>",
+      "css": ".ds-canopy-page { background: var(--background); } .ds-canopy { --canopy-h: clamp(10px, 1.1vw, 16px); position: relative; display: flex; align-items: center; height: 96px; padding: 0 24px; background: var(--dusk); color: var(--dusk-foreground); font-size: 24px; font-weight: 700; } .ds-canopy::after { content: ''; position: absolute; inset: auto 0 -1px 0; z-index: 1; height: var(--canopy-h); pointer-events: none; background: var(--canopy-fill, var(--background)); mask: conic-gradient(from 135deg at 50% 0, #000 90deg, #0000 0) 50% 0 / calc(var(--canopy-h) * 2) var(--canopy-h); }"
+    },
+    {
+      "name": "Hour Ruler",
+      "kind": "custom",
+      "description": "A day of 24 hours (ticks hourly, labels 00 06 12 18 24) with the event's span filled as a bar in the category ground. aria-hidden; the written time always sits beside it.",
+      "html": "<div class=\"ds-ruler\" aria-hidden=\"true\"><div class=\"ds-ruler-track\"><span class=\"ds-ruler-span\"></span><span class=\"ds-ruler-ticks\"></span></div><span class=\"ds-ruler-labels\"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></span></div>",
+      "css": ".ds-ruler { display: flex; flex-direction: column; gap: 6px; max-width: 24rem; color: var(--muted-foreground); } .ds-ruler-track { position: relative; height: 28px; } .ds-ruler-span { position: absolute; top: 0; left: 79.1667%; width: 12.5%; height: 16px; border-radius: 4px; background: var(--poster-2); } .ds-ruler-ticks { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; opacity: .7; background-image: repeating-linear-gradient(to right, currentColor 0 1px, transparent 1px calc(100% / 24)); background-size: calc(100% + 1px) 6px; background-repeat: no-repeat; background-position: 0 100%; } .ds-ruler-labels { display: flex; justify-content: space-between; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; } .dark .ds-ruler-span { box-shadow: 0 0 0 1px var(--poster-2-ink); }"
+    },
+    {
+      "name": "Cursor Label",
+      "kind": "custom",
+      "description": "The word that follows the pointer over a cover with data-cursor: a marigold disc with a dark ring and a lifted shadow. aria-hidden, pointer-events none, public pages only.",
+      "html": "<span class=\"ds-cursor-label\" aria-hidden=\"true\">View</span>",
+      "css": ".ds-cursor-label { display: inline-grid; place-items: center; min-width: 3.5rem; height: 3.5rem; padding: 0 .9rem; border-radius: 9999px; background: var(--sun); color: var(--sun-foreground); box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--sun-foreground) 90%, transparent), 0 6px 16px rgb(0 0 0 / .28); font-size: .875rem; font-weight: 700; line-height: 1; white-space: nowrap; pointer-events: none; transition: opacity 150ms, scale 300ms cubic-bezier(.16,1,.3,1); } .ds-cursor-label:hover { scale: 1.08; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Market Programme",
+    "overview": "**Creative North Star: \"The Night Market Programme\"**\n\nEventide reads as a night-market \"what's on\" programme. A market photograph is graded into a teal-black ground (dusk), the headline crosses its edge in white and marigold, and every event is a date numeral before it is a card. That scene is not confined to the home page. Any page whose first screen should feel like a place (home, an event's hero, the sign-in panel, a 404) opens in the same ink with the same marigold, and the navbar takes the ink's colour while the page is at the top. Everywhere else the product is a quiet, light-or-dark teal-tinted working surface: neutrals carry the ink's hue (205) at low chroma, so a form page and the hero belong to one family even though one is lit and one is not.\n\nType is Google Sans, bold, tightly tracked, with giant tabular numerals as the recurring device. Colour is coded by category: six poster colourways, taken from the tents of the hero photograph, follow a category onto its posters, date blocks, chips and index rows. The wave lines from the logo are the only decorative texture on objects. Each surface class is art-directed on purpose (see Components, \"Surface by surface\"): public surfaces get scene and flair, functional ones (tickets, orders, enrolment) stay legible, dashboards stay neutral.\n\nDensity is editorial on public pages (64 to 112px of vertical air, one large element beside a ledger of small ones) and operational in the dashboard.\n\n## Creative Direction\n\n**Chosen on 2026-10-26: \"The Night Programme\", an evolution of the Night Market Programme, not a replacement.** Three directions were weighed against the rendered product (home, listings, event page, tickets, auth, dashboard): a *Cultural Atlas* (maps, indexes, timelines), a *Living Poster Archive* (the date as poster across every surface) and *After-Hours Editorial* (cinematic, lit, layered). The atlas fits the data worst (events have no geography to draw) and the pure poster archive was already the incumbent's one trick, repeated on every card. The winner keeps the after-hours scene and the poster as the two registers the product already earns, and adds what the atlas does best: a **programme** that organises time. So listings are read as a printed programme (a billboard for the first event, then months set in type), an event states *when* as well as *which day* (the hour ruler), and the ink scenes end the way the photograph's tents do (the canopy edge). Each signature has a job: the numeral says which day, the ruler says which hours, the canopy says \"scene over, the working page begins\".\n\nWhat the direction asks of each surface class: public discovery is composed (a lead, then a rhythm of months), event detail is editorial (scene, then tickets in the category's colour, then the facts as an index), tickets are precise (ink stubs, a plain white QR), account pages are calm, dashboards are quiet. The same tokens carry all of it.",
+    "keyCharacteristics": [
+      "Dusk teal-black scenes with marigold as the single bright voice; sand as the one warm light ground.",
+      "The date numeral is the poster: bold, tabular, set large in the category's ink.",
+      "Six category colourways, stable per category, never per theme.",
+      "One radius rule: content blocks and cards 6 to 8px, floating surfaces 10px, things you press are pills.",
+      "Solid surfaces: no frosted glass; depth is tone, rings and a few named shadows.",
+      "Motion is an entrance (plate wipe, text reveal), rows that rise as the page is scrolled to them, and hover moves, on one easing; nothing ambient on public content.",
+      "Three recognisable signatures: the date numeral, the **canopy edge** (an ink scene ends in a row of tent roofs) and the **hour ruler** (a day of 24 hours with the event's span filled in its category colour)."
+    ],
+    "rules": [
+      {
+        "name": "The One Lamp Rule",
+        "body": "On ink and sand, marigold is the only bright accent. Teal is not a fill on a scene.",
+        "section": "colors"
+      },
+      {
+        "name": "The Category Colour Rule",
+        "body": "A category's colourway is the same on its poster, date block, chip, thumbnail and index row. Colourways mean a category; they are not status or button colours.",
+        "section": "colors"
+      },
+      {
+        "name": "The Scene Is Theme-Proof Rule",
+        "body": "Dusk, sun, sand and poster tokens are declared once in `:root` and never redefined in `.dark`. Sections that adapt (Upcoming, Kinds) switch ground with `dark:` classes.",
+        "section": "colors"
+      },
+      {
+        "name": "The Three-to-One Rule",
+        "body": "A control's border is `input` (at least 3:1 against its ground). `border` is for dividers and card outlines only.",
+        "section": "colors"
+      },
+      {
+        "name": "The Thai Line-Height Rule",
+        "body": "Large Thai headings never go tighter than 1.18; use 1.2 (hero, scene, headline), 1.25 (lg page titles, ticket title) and 1.3 (md and auth titles, route error). Never `leading-none` on text; only an oversized decorative numeral (0.78) is set tighter, and it is `aria-hidden`.",
+        "section": "typography"
+      },
+      {
+        "name": "The Numeral Rule",
+        "body": "Dates are bold tabular numerals; the day is the largest thing in an event's row, card or poster.",
+        "section": "typography"
+      },
+      {
+        "name": "The Solid Surface Rule",
+        "body": "A floating surface is an opaque fill with a ring. No backdrop blur on menus, bars or toolbars.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Graded Photograph Rule",
+        "body": "A photograph is washed into the ink with masks and gradients (`.hero-plate`, the auth panel's gradient, the band's `from-dusk`). It is never a framed, bordered or rounded picture on a scene. In a card or list a photograph is a plain cover with the theme radius.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** set every event date as a bold tabular numeral, largest in its row, card or poster.",
+      "**Do** colour posters, date blocks, chips, thumbnails and index rows from the category's colourway through `colourwayOf` and the `--poster-N` tokens.",
+      "**Do** keep marigold the one bright accent on ink and sand, with dark teal text on it, and teal for actions on the neutral ground.",
+      "**Do** follow the radius rule: 6 to 8px content, 10px floating, pills for controls, 4px for the chip.",
+      "**Do** put `InkScene` on a page whose first screen is ink, and open it with `reveal` and the one easing.",
+      "**Do** give a page its title through `PageHeader` (`lg` public and account, type alone; `md` dashboard, with its icon).",
+      "**Do** end an ink scene with the canopy edge, and tell a day's hours with the hour ruler beside the written time.",
+      "**Do** put `data-cursor=\"…\"` on a cover that opens something, with a translated word, and nothing else.",
+      "**Do** give an outline control its `input` border by letting the variant carry it (`border-transparent` lives on the filled variants, not on the button base), and check a restyled variant by its computed style.",
+      "**Do** border controls with `input` (3:1) and dividers with `border`.",
+      "**Do** keep a QR black on white with its printed code, and write the date and category as text beside any poster.",
+      "**Do** use `.on-sand` on sand, and give photographs their provenance in `docs/assets.md` with a credit on the page."
+    ],
+    "donts": [
+      "**Don't** use frosted glass or backdrop blur on menus, selects, bars or toolbars.",
+      "**Don't** put a photograph in a frame, border or rounded card on a scene; grade it into the ink.",
+      "**Don't** decorate, tint, round or animate a ticket's QR.",
+      "**Don't** redefine dusk, sun, sand or poster tokens in `.dark`.",
+      "**Don't** use the six colourways as status or button colours.",
+      "**Don't** carry the ink scene, marigold or pointer flair into the dashboard.",
+      "**Don't** add a second texture beside the wave lines, or ambient animation to public content. The canopy edge and the hour ruler are boundary and scale, not textures: do not repeat them as backgrounds.",
+      "**Don't** put an icon beside a label, heading or legend that already says the same in words.",
+      "**Don't** let a cursor label, ring or lantern take a click, hide a control or run on touch or under reduced motion."
+    ]
+  }
+}

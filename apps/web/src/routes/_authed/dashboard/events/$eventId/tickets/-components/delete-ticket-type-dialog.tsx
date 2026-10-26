@@ -14,6 +14,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { eventClient } from "@/lib/api";
+import { useT } from "@/i18n";
 import { problemMessage } from "@/lib/auth-errors";
 
 type DeleteTicketTypeDialogProps = {
@@ -27,6 +28,7 @@ type DeleteTicketTypeDialogProps = {
 
 /** A ticket type anyone enrolled in can't go; the service says so and the toast shows it. */
 export function DeleteTicketTypeDialog({ eventId, ticketType, open, onOpenChange, onDeleted }: DeleteTicketTypeDialogProps) {
+  const t = useT();
   const queryClient = useQueryClient();
   const remove = useMutation({
     mutationFn: async () => {
@@ -34,7 +36,7 @@ export function DeleteTicketTypeDialog({ eventId, ticketType, open, onOpenChange
       if (error) throw error;
     },
     onSuccess: async () => {
-      toast.add({ type: "success", title: `ลบ “${ticketType.name}” แล้ว` });
+      toast.add({ type: "success", title: t("eventAdmin.tickets.delete.done", { name: ticketType.name }) });
       onOpenChange(false);
       await onDeleted?.();
       await queryClient.invalidateQueries({ queryKey: ["ticket-types"] });
@@ -52,19 +54,19 @@ export function DeleteTicketTypeDialog({ eventId, ticketType, open, onOpenChange
           <AlertDialogMedia className="bg-destructive/10 text-destructive">
             <Trash2 />
           </AlertDialogMedia>
-          <AlertDialogTitle>ลบ “{ticketType.name}”?</AlertDialogTitle>
+          <AlertDialogTitle>{t("eventAdmin.tickets.delete.title", { name: ticketType.name })}</AlertDialogTitle>
           <AlertDialogDescription>
-            ประเภทตั๋วและแบบฟอร์มลงทะเบียนจะถูกลบถาวร ลบได้เฉพาะประเภทที่ยังไม่มีผู้ลงทะเบียน
+            {t("eventAdmin.tickets.delete.description")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={remove.isPending}>
             <ArrowLeft data-icon="inline-start" />
-            กลับ
+            {t("eventAdmin.tickets.delete.back")}
           </AlertDialogCancel>
           <AlertDialogAction variant="destructive" disabled={remove.isPending} onClick={() => remove.mutate()}>
             {remove.isPending ? <Spinner data-icon="inline-start" /> : <Trash2 data-icon="inline-start" />}
-            ลบประเภทตั๋ว
+            {t("eventAdmin.tickets.delete.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

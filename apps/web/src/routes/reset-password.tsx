@@ -1,6 +1,6 @@
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { CircleAlert, KeyRound, LockKeyhole, RotateCcwKey, ShieldCheck } from "lucide-react";
+import { CircleAlert, KeyRound, RotateCcwKey } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import { AuthLayout } from "@/components/auth-layout";
@@ -9,11 +9,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
 import { toast } from "@/components/ui/toast";
+import { t, useT } from "@/i18n";
 import { auth } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { redirectIfSignedIn } from "@/lib/session";
 
 export const Route = createFileRoute("/reset-password")({
+  staticData: { title: "pub.auth.reset.title" },
   // Better Auth redirects here with ?token=... (or ?error=INVALID_TOKEN) from the emailed link
   validateSearch: z.object({ token: z.string().optional(), error: z.string().optional() }),
   beforeLoad: ({ context }) => redirectIfSignedIn(context.queryClient),
@@ -22,15 +24,16 @@ export const Route = createFileRoute("/reset-password")({
 
 const resetSchema = z
   .object({
-    password: z.string().min(8, "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร").max(128, "รหัสผ่านยาวเกินไป"),
+    password: z.string().min(8, { error: () => t("pub.auth.errors.passwordMin") }).max(128, { error: () => t("pub.auth.errors.passwordMax") }),
     confirmPassword: z.string(),
   })
   .refine((value) => value.password === value.confirmPassword, {
-    message: "รหัสผ่านไม่ตรงกัน",
+    error: () => t("pub.auth.errors.passwordMismatch"),
     path: ["confirmPassword"],
   });
 
 function ResetPasswordPage() {
+  const t = useT();
   const { token, error } = Route.useSearch();
   const navigate = useNavigate();
   const [formError, setFormError] = useState<string | null>(null);
@@ -42,13 +45,13 @@ function ResetPasswordPage() {
       setFormError(null);
       const result = await auth.resetPassword({ newPassword: value.password, token });
       if (result.error) return setFormError(authErrorMessage(result.error));
-      toast.add({ type: "success", title: "ตั้งรหัสผ่านใหม่เรียบร้อย", description: "เข้าสู่ระบบด้วยรหัสผ่านใหม่ได้เลย" });
+      toast.add({ type: "success", title: t("pub.auth.reset.doneTitle"), description: t("pub.auth.reset.doneDescription") });
       await navigate({ to: "/login" });
     },
   });
 
   return (
-    <AuthLayout icon={RotateCcwKey} title="ตั้งรหัสผ่านใหม่" description="ตั้งรหัสผ่านใหม่สำหรับบัญชีของคุณ">
+    <AuthLayout title={t("pub.auth.reset.title")} description={t("pub.auth.reset.description")}>
       {!token || error ? (
         <>
           <Alert variant="destructive">
@@ -57,7 +60,7 @@ function ResetPasswordPage() {
           </Alert>
           <Link to="/forgot-password" className={buttonVariants({ variant: "outline", size: "lg" })}>
             <KeyRound data-icon="inline-start" />
-            ขอลิงก์ใหม่
+            {t("pub.auth.reset.requestNew")}
           </Link>
         </>
       ) : (
@@ -80,23 +83,22 @@ function ResetPasswordPage() {
                 {(field) => (
                   <TextField
                     field={field}
-                    label="รหัสผ่านใหม่"
-                    icon={LockKeyhole}
+                    label={t("pub.auth.reset.newPassword")}
                     type="password"
                     autoComplete="new-password"
-                    description="อย่างน้อย 8 ตัวอักษร"
+                    description={t("pub.auth.passwordHint")}
                   />
                 )}
               </form.Field>
               <form.Field name="confirmPassword">
                 {(field) => (
-                  <TextField field={field} label="ยืนยันรหัสผ่านใหม่" icon={ShieldCheck} type="password" autoComplete="new-password" />
+                  <TextField field={field} label={t("pub.auth.reset.confirmNewPassword")} type="password" autoComplete="new-password" />
                 )}
               </form.Field>
               <form.Subscribe selector={(state) => state.isSubmitting}>
                 {(isSubmitting) => (
                   <SubmitButton pending={isSubmitting} icon={RotateCcwKey} size="lg">
-                    ตั้งรหัสผ่านใหม่
+                    {t("pub.auth.reset.submit")}
                   </SubmitButton>
                 )}
               </form.Subscribe>

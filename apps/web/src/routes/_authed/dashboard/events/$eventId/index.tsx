@@ -1,30 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  Ban,
-  CalendarClock,
-  CalendarRange,
-  Circle,
-  CircleCheck,
-  Eye,
-  FileText,
-  Globe,
-  ImageIcon,
-  Info,
-  ListChecks,
-  MailPlus,
-  MapPin,
-  Percent,
-  Receipt,
-  ShieldAlert,
-  ShieldCheck,
-  Timer,
-  Trash2,
-  TriangleAlert,
-  Type,
-} from "lucide-react";
+import { ArrowLeft, Ban, CalendarRange, Circle, CircleCheck, Eye, FileText, ImageIcon, Info, ListChecks, MailPlus, MapPin, Receipt, ShieldAlert, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
 import { useRef, useState } from "react";
 import { CategorySelect } from "@/components/category-select";
 import { CoverImageField } from "@/components/cover-image-field";
@@ -64,6 +41,7 @@ import {
   type EventDetail,
   type EventStatus,
 } from "@/lib/events";
+import { useT } from "@/i18n";
 import { formatDuration } from "@/lib/format";
 import { hasRole, useSession } from "@/lib/session";
 import { DeleteEventDialog } from "../-components/delete-event-dialog";
@@ -80,11 +58,7 @@ import { useEventDetail } from "./-components/use-event-detail";
 export const Route = createFileRoute("/_authed/dashboard/events/$eventId/")({ component: EditEventPage });
 
 const ROOT = "[data-slot=event-editor]";
-const CUTOFF_PRESETS = [
-  { hours: "24", label: "1 วัน" },
-  { hours: "72", label: "3 วัน" },
-  { hours: "168", label: "7 วัน" },
-];
+const CUTOFF_HOURS = ["24", "72", "168"];
 const PERCENT_PRESETS = ["50", "80", "100"];
 
 function EditEventPage() {
@@ -93,6 +67,7 @@ function EditEventPage() {
 }
 
 function EventEditor({ event }: { event: EventDetail }) {
+  const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: session } = useSession();
@@ -123,7 +98,7 @@ function EventEditor({ event }: { event: EventDetail }) {
       },
     },
     onSubmitInvalid: () => {
-      toast.add({ type: "error", title: "กรุณาแก้ไขช่องที่ยังไม่ถูกต้อง" });
+      toast.add({ type: "error", title: t("eventAdmin.editor.invalid") });
       focusFirstInvalid(ROOT);
     },
     onSubmit: async ({ value }) => {
@@ -136,7 +111,7 @@ function EventEditor({ event }: { event: EventDetail }) {
       setBaseline(next);
       form.reset(next);
       previousStart.current = next.startsAt;
-      toast.add({ type: "success", title: "บันทึกแล้ว" });
+      toast.add({ type: "success", title: t("eventAdmin.editor.saved") });
       void refreshLists();
     },
   });
@@ -172,7 +147,7 @@ function EventEditor({ event }: { event: EventDetail }) {
       form.setFieldValue("status", saved.status);
       toast.add({
         type: "success",
-        title: saved.status === "suspended" ? "ระงับอีเวนต์แล้ว" : "ยกเลิกการระงับแล้ว อีเวนต์กลับเป็นฉบับร่าง",
+        title: saved.status === "suspended" ? t("eventAdmin.editor.suspendedToast") : t("eventAdmin.editor.liftedToast"),
       });
       void refreshLists();
     },
@@ -215,13 +190,13 @@ function EventEditor({ event }: { event: EventDetail }) {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Info className="size-5" />
-                  ข้อมูลพื้นฐาน
+                  {t("eventAdmin.editor.basic.title")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <FieldGroup>
                   <form.Field name="title">
-                    {(field) => <TextField field={field} label="ชื่ออีเวนต์" icon={Type} maxLength={150} disabled={locked} />}
+                    {(field) => <TextField field={field} label={t("eventAdmin.editor.basic.name")} maxLength={150} disabled={locked} />}
                   </form.Field>
                   <form.Field name="categoryId">
                     {(field) => (
@@ -244,9 +219,9 @@ function EventEditor({ event }: { event: EventDetail }) {
                       event.status === "public" && (
                         <Alert>
                           <TriangleAlert />
-                          <AlertTitle>ลิงก์เดิมจะใช้ไม่ได้</AlertTitle>
+                          <AlertTitle>{t("eventAdmin.editor.basic.slugChanged.title")}</AlertTitle>
                           <AlertDescription>
-                            เมื่อบันทึก ใครที่มีลิงก์ /events/{baseline.slug} จะเปิดอีเวนต์ไม่ได้อีก
+                            {t("eventAdmin.editor.basic.slugChanged.description", { slug: baseline.slug })}
                           </AlertDescription>
                         </Alert>
                       )
@@ -260,7 +235,7 @@ function EventEditor({ event }: { event: EventDetail }) {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <CalendarRange className="size-5" />
-                  วันและเวลา
+                  {t("eventAdmin.editor.when.title")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -277,7 +252,7 @@ function EventEditor({ event }: { event: EventDetail }) {
                       },
                     }}
                   >
-                    {(field) => <DateTimeField field={field} label="เริ่ม" icon={CalendarClock} disabled={locked} />}
+                    {(field) => <DateTimeField field={field} label={t("eventAdmin.editor.when.start")} disabled={locked} />}
                   </form.Field>
                   <form.Subscribe selector={(state) => state.values.startsAt}>
                     {(startsAt) => (
@@ -287,10 +262,9 @@ function EventEditor({ event }: { event: EventDetail }) {
                           return (
                             <DateTimeField
                               field={field}
-                              label="สิ้นสุด"
-                              icon={CalendarClock}
+                              label={t("eventAdmin.editor.when.end")}
                               disabled={locked}
-                              description={length > 0 ? `ระยะเวลา ${formatDuration(length)}` : undefined}
+                              description={length > 0 ? t("eventAdmin.editor.when.duration", { duration: formatDuration(length) }) : undefined}
                             />
                           );
                         }}
@@ -305,7 +279,7 @@ function EventEditor({ event }: { event: EventDetail }) {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <MapPin className="size-5" />
-                  สถานที่
+                  {t("eventAdmin.editor.venue.title")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -314,9 +288,8 @@ function EventEditor({ event }: { event: EventDetail }) {
                     {(field) => (
                       <TextField
                         field={field}
-                        label="ชื่อสถานที่"
-                        icon={MapPin}
-                        placeholder="เช่น ศูนย์การประชุมแห่งชาติสิริกิติ์"
+                        label={t("eventAdmin.editor.venue.name")}
+                        placeholder={t("eventAdmin.editor.venue.namePlaceholder")}
                         maxLength={200}
                         disabled={locked}
                       />
@@ -326,10 +299,9 @@ function EventEditor({ event }: { event: EventDetail }) {
                     {(field) => (
                       <TextField
                         field={field}
-                        label="รายละเอียดการเดินทาง (ไม่บังคับ)"
-                        icon={FileText}
+                        label={t("eventAdmin.editor.venue.directions")}
                         multiline
-                        placeholder="เช่น ฮอลล์ 5 ชั้น G ใกล้ MRT ศูนย์ฯ สิริกิติ์ ทางออก 3"
+                        placeholder={t("eventAdmin.editor.venue.directionsPlaceholder")}
                         disabled={locked}
                       />
                     )}
@@ -338,12 +310,11 @@ function EventEditor({ event }: { event: EventDetail }) {
                     {(field) => (
                       <TextField
                         field={field}
-                        label="ลิงก์แผนที่ (ไม่บังคับ)"
-                        icon={Globe}
+                        label={t("eventAdmin.editor.venue.mapUrl")}
                         type="url"
                         inputMode="url"
                         placeholder="https://maps.app.goo.gl/..."
-                        description="ผู้เข้าร่วมกดเปิดแผนที่ได้จากหน้าอีเวนต์"
+                        description={t("eventAdmin.editor.venue.mapUrlHint")}
                         disabled={locked}
                       />
                     )}
@@ -356,9 +327,9 @@ function EventEditor({ event }: { event: EventDetail }) {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <FileText className="size-5" />
-                  รายละเอียดอีเวนต์
+                  {t("eventAdmin.editor.description.title")}
                 </CardTitle>
-                <CardDescription>จัดรูปแบบข้อความและแทรกรูปภาพได้ (สูงสุด 20 รูปต่ออีเวนต์)</CardDescription>
+                <CardDescription>{t("eventAdmin.editor.description.hint")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <form.Field name="description">
@@ -388,9 +359,9 @@ function EventEditor({ event }: { event: EventDetail }) {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Eye className="size-5" />
-                  การเผยแพร่
+                  {t("eventAdmin.editor.publish.title")}
                 </CardTitle>
-                <CardDescription>ใครเห็นอีเวนต์นี้ได้บ้าง</CardDescription>
+                <CardDescription>{t("eventAdmin.editor.publish.hint")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <FieldGroup>
@@ -400,7 +371,7 @@ function EventEditor({ event }: { event: EventDetail }) {
                         value={field.state.value}
                         onValueChange={(value) => field.handleChange(value as EventStatus)}
                         disabled={locked}
-                        aria-label="สถานะ"
+                        aria-label={t("eventAdmin.editor.publish.status")}
                       >
                         {(["draft", "public", "invite"] as const).map((status) => {
                           const { icon: Icon, label, description } = statusInfo[status];
@@ -431,7 +402,7 @@ function EventEditor({ event }: { event: EventDetail }) {
                           className={buttonVariants({ variant: "outline", className: "self-start" })}
                         >
                           <MailPlus data-icon="inline-start" />
-                          จัดการผู้ได้รับเชิญ
+                          {t("eventAdmin.editor.publish.manageInvitations")}
                         </Link>
                       )
                     }
@@ -450,8 +421,8 @@ function EventEditor({ event }: { event: EventDetail }) {
                                   disabled={locked}
                                 />
                                 <FieldContent>
-                                  <FieldLabel htmlFor="schedulePublish">ตั้งเวลาเผยแพร่</FieldLabel>
-                                  <FieldDescription>ซ่อนไว้ก่อน แล้วแสดงในหน้าสำรวจเมื่อถึงเวลา</FieldDescription>
+                                  <FieldLabel htmlFor="schedulePublish">{t("eventAdmin.editor.publish.schedule")}</FieldLabel>
+                                  <FieldDescription>{t("eventAdmin.editor.publish.scheduleHint")}</FieldDescription>
                                 </FieldContent>
                               </Field>
                             )}
@@ -461,8 +432,7 @@ function EventEditor({ event }: { event: EventDetail }) {
                               {(field) => (
                                 <DateTimeField
                                   field={field}
-                                  label="เผยแพร่เมื่อ"
-                                  icon={Timer}
+                                  label={t("eventAdmin.editor.publish.publishAt")}
                                   fromDate={today}
                                   disabled={locked}
                                 />
@@ -481,13 +451,13 @@ function EventEditor({ event }: { event: EventDetail }) {
               {([description, startsAt]) => (
                 <Readiness
                   items={[
-                    { label: "ภาพปก", done: !!event.thumbnailUrl, hint: "ช่วยให้อีเวนต์โดดเด่นในหน้าสำรวจ" },
+                    { label: t("eventAdmin.editor.readiness.cover"), done: !!event.thumbnailUrl, hint: t("eventAdmin.editor.readiness.coverHint") },
                     {
-                      label: "รายละเอียดอีเวนต์",
+                      label: t("eventAdmin.editor.readiness.description"),
                       done: /<img/.test(description) || description.replace(/<[^>]*>/g, "").trim().length >= 50,
-                      hint: "อย่างน้อย 50 ตัวอักษร หรือมีรูปภาพ",
+                      hint: t("eventAdmin.editor.readiness.descriptionHint"),
                     },
-                    { label: "วันจัดงานยังไม่ผ่านไป", done: !!startsAt && new Date(startsAt) > now },
+                    { label: t("eventAdmin.editor.readiness.upcoming"), done: !!startsAt && new Date(startsAt) > now },
                   ]}
                 />
               )}
@@ -497,9 +467,9 @@ function EventEditor({ event }: { event: EventDetail }) {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <ImageIcon className="size-5" />
-                  ภาพปก
+                  {t("eventAdmin.editor.cover.title")}
                 </CardTitle>
-                <CardDescription>อัปโหลดแล้วใช้งานทันที ไม่ต้องกดบันทึก</CardDescription>
+                <CardDescription>{t("eventAdmin.editor.cover.hint")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <CoverImageField
@@ -515,7 +485,7 @@ function EventEditor({ event }: { event: EventDetail }) {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Receipt className="size-5" />
-                  นโยบายการคืนเงิน
+                  {t("eventAdmin.editor.refund.title")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -530,9 +500,9 @@ function EventEditor({ event }: { event: EventDetail }) {
                           disabled={locked}
                         />
                         <FieldContent>
-                          <FieldLabel htmlFor="isRefundAvailable">เปิดให้ขอคืนเงิน</FieldLabel>
+                          <FieldLabel htmlFor="isRefundAvailable">{t("eventAdmin.editor.refund.enable")}</FieldLabel>
                           <FieldDescription>
-                            ผู้ซื้อยกเลิกและรับเงินคืนเองได้ก่อนงานเริ่มตามเงื่อนไข การแก้ไขมีผลกับการลงทะเบียนใหม่เท่านั้น
+                            {t("eventAdmin.editor.refund.enableHint")}
                           </FieldDescription>
                         </FieldContent>
                       </Field>
@@ -551,17 +521,16 @@ function EventEditor({ event }: { event: EventDetail }) {
                               <div className="flex flex-col gap-2">
                                 <TextField
                                   field={field}
-                                  label="ขอคืนได้ก่อนงานเริ่มอย่างน้อย"
-                                  icon={Timer}
+                                  label={t("eventAdmin.editor.refund.cutoff")}
                                   type="number"
                                   inputMode="numeric"
-                                  suffix="ชั่วโมง"
+                                  suffix={t("eventAdmin.editor.refund.hours")}
                                   disabled={locked}
                                 />
                                 <Presets
-                                  label="ระยะเวลาที่ใช้บ่อย"
+                                  label={t("eventAdmin.editor.refund.cutoffPresets")}
                                   value={field.state.value}
-                                  options={CUTOFF_PRESETS.map((p) => ({ value: p.hours, label: p.label }))}
+                                  options={CUTOFF_HOURS.map((hours) => ({ value: hours, label: formatDuration(Number(hours) * 3_600_000) }))}
                                   onPick={field.handleChange}
                                   disabled={locked}
                                 />
@@ -573,15 +542,14 @@ function EventEditor({ event }: { event: EventDetail }) {
                               <div className="flex flex-col gap-2">
                                 <TextField
                                   field={field}
-                                  label="คืนเงิน"
-                                  icon={Percent}
+                                  label={t("eventAdmin.editor.refund.percent")}
                                   type="number"
                                   inputMode="numeric"
                                   suffix="%"
                                   disabled={locked}
                                 />
                                 <Presets
-                                  label="เปอร์เซ็นต์ที่ใช้บ่อย"
+                                  label={t("eventAdmin.editor.refund.percentPresets")}
                                   value={field.state.value}
                                   options={PERCENT_PRESETS.map((p) => ({ value: p, label: `${p}%` }))}
                                   onPick={field.handleChange}
@@ -591,14 +559,16 @@ function EventEditor({ event }: { event: EventDetail }) {
                             )}
                           </form.Field>
                           {/^\d+$/.test(hours) && /^\d+$/.test(percent) && Number(percent) <= 100 && (
-                            <p className="rounded-2xl bg-muted px-3 py-2 text-sm">
-                              ผู้ซื้อได้รับเงินคืน <strong>{percent}%</strong> เมื่อขอคืนก่อนงานเริ่มอย่างน้อย{" "}
-                              <strong>{formatDuration(Number(hours) * 3_600_000)}</strong>
+                            <p className="rounded-md bg-muted px-3 py-2 text-sm">
+                              {t("eventAdmin.editor.refund.summary", {
+                                percent: `${percent}%`,
+                                duration: formatDuration(Number(hours) * 3_600_000),
+                              })}
                             </p>
                           )}
                         </>
                       ) : (
-                        <p className="text-sm text-muted-foreground">อีเวนต์นี้ไม่รับคืนเงิน</p>
+                        <p className="text-sm text-muted-foreground">{t("eventAdmin.editor.refund.off")}</p>
                       )
                     }
                   </form.Subscribe>
@@ -619,14 +589,14 @@ function EventEditor({ event }: { event: EventDetail }) {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-destructive">
                   <Trash2 className="size-5" />
-                  ลบอีเวนต์
+                  {t("eventAdmin.editor.delete.title")}
                 </CardTitle>
-                <CardDescription>ลบอีเวนต์ รายละเอียด และรูปภาพทั้งหมดอย่างถาวร</CardDescription>
+                <CardDescription>{t("eventAdmin.editor.delete.hint")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <Button type="button" variant="destructive" disabled={locked} onClick={() => setDeleteOpen(true)}>
                   <Trash2 data-icon="inline-start" />
-                  ลบอีเวนต์นี้
+                  {t("eventAdmin.editor.delete.button")}
                 </Button>
               </CardContent>
             </Card>
@@ -694,16 +664,17 @@ function Presets({
 
 /** Checklist of what makes an event page complete. Advice only: publishing never waits on it. */
 function Readiness({ items }: { items: { label: string; done: boolean; hint?: string }[] }) {
+  const t = useT();
   const done = items.filter((item) => item.done).length;
   return (
     <Card size="sm">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ListChecks className="size-5" />
-          ความพร้อมของหน้าอีเวนต์
+          {t("eventAdmin.editor.readiness.title")}
         </CardTitle>
         <CardDescription>
-          {done === items.length ? "ครบถ้วน พร้อมเผยแพร่" : `เสร็จแล้ว ${done} จาก ${items.length} รายการ`}
+          {done === items.length ? t("eventAdmin.editor.readiness.complete") : t("eventAdmin.editor.readiness.progress", { done, total: items.length })}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -711,7 +682,7 @@ function Readiness({ items }: { items: { label: string; done: boolean; hint?: st
           {items.map((item) => (
             <li key={item.label} className="flex items-start gap-2">
               {item.done ? (
-                <CircleCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+                <CircleCheck className="mt-0.5 size-4 shrink-0 text-primary dark:text-chart-2" />
               ) : (
                 <Circle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
               )}
@@ -739,26 +710,27 @@ function Moderation({
   onSuspend: () => void;
   onLift: () => void;
 }) {
+  const t = useT();
   const [confirmOpen, setConfirmOpen] = useState(false);
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ShieldAlert className="size-5" />
-          การกำกับดูแล
+          {t("eventAdmin.editor.moderation.title")}
         </CardTitle>
-        <CardDescription>สำหรับผู้ดูแลระบบ มีผลทันทีโดยไม่ต้องกดบันทึก</CardDescription>
+        <CardDescription>{t("eventAdmin.editor.moderation.hint")}</CardDescription>
       </CardHeader>
       <CardContent>
         {suspended ? (
           <Button type="button" variant="outline" disabled={pending} onClick={onLift}>
             {pending ? <Spinner data-icon="inline-start" /> : <ShieldCheck data-icon="inline-start" />}
-            ยกเลิกการระงับ
+            {t("eventAdmin.editor.moderation.lift")}
           </Button>
         ) : (
           <Button type="button" variant="outline" disabled={pending} onClick={() => setConfirmOpen(true)}>
             <Ban data-icon="inline-start" />
-            ระงับอีเวนต์
+            {t("eventAdmin.editor.moderation.suspend")}
           </Button>
         )}
       </CardContent>
@@ -768,15 +740,15 @@ function Moderation({
             <AlertDialogMedia className="bg-destructive/10 text-destructive">
               <Ban />
             </AlertDialogMedia>
-            <AlertDialogTitle>ระงับอีเวนต์นี้?</AlertDialogTitle>
+            <AlertDialogTitle>{t("eventAdmin.editor.moderation.confirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              อีเวนต์จะถูกซ่อนจากทุกคนทันที และผู้จัดงานจะแก้ไขหรือลบไม่ได้จนกว่าคุณจะยกเลิกการระงับ
+              {t("eventAdmin.editor.moderation.confirmDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>
               <ArrowLeft data-icon="inline-start" />
-              กลับ
+              {t("eventAdmin.editor.moderation.back")}
             </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
@@ -786,7 +758,7 @@ function Moderation({
               }}
             >
               <Ban data-icon="inline-start" />
-              ระงับอีเวนต์
+              {t("eventAdmin.editor.moderation.suspend")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -10,7 +11,7 @@ const MAX_SIZE = 5 * 1024 * 1024;
 
 type CoverImageFieldProps = {
   imageUrl: string | null;
-  /** resolves once stored; throw (with a Thai message) to report a failure */
+  /** resolves once stored; throw (with a translated message) to report a failure */
   onUpload: (file: File) => Promise<unknown>;
   onRemove: () => Promise<unknown>;
   disabled?: boolean;
@@ -21,6 +22,7 @@ type CoverImageFieldProps = {
  * so the change is visible before the server answers.
  */
 export function CoverImageField({ imageUrl, onUpload, onRemove, disabled }: CoverImageFieldProps) {
+  const t = useT();
   const input = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState<"upload" | "remove" | null>(null);
@@ -30,15 +32,15 @@ export function CoverImageField({ imageUrl, onUpload, onRemove, disabled }: Cove
 
   async function upload(file: File | undefined) {
     if (!file || busy) return;
-    if (!ACCEPTED_TYPES.includes(file.type)) return void toast.add({ type: "error", title: "รองรับเฉพาะไฟล์ JPG, PNG และ WebP" });
-    if (file.size > MAX_SIZE) return void toast.add({ type: "error", title: "ไฟล์ต้องมีขนาดไม่เกิน 5 MB" });
+    if (!ACCEPTED_TYPES.includes(file.type)) return void toast.add({ type: "error", title: t("shared.coverImage.unsupportedType") });
+    if (file.size > MAX_SIZE) return void toast.add({ type: "error", title: t("shared.coverImage.tooLarge") });
     setPreview(URL.createObjectURL(file));
     setBusy("upload");
     try {
       await onUpload(file);
-      toast.add({ type: "success", title: "อัปโหลดภาพปกแล้ว" });
+      toast.add({ type: "success", title: t("shared.coverImage.uploaded") });
     } catch (error) {
-      toast.add({ type: "error", title: error instanceof Error ? error.message : "อัปโหลดภาพปกไม่สำเร็จ" });
+      toast.add({ type: "error", title: error instanceof Error ? error.message : t("shared.coverImage.uploadFailed") });
     } finally {
       setPreview(null);
       setBusy(null);
@@ -49,9 +51,9 @@ export function CoverImageField({ imageUrl, onUpload, onRemove, disabled }: Cove
     setBusy("remove");
     try {
       await onRemove();
-      toast.add({ type: "success", title: "ลบภาพปกแล้ว" });
+      toast.add({ type: "success", title: t("shared.coverImage.removed") });
     } catch (error) {
-      toast.add({ type: "error", title: error instanceof Error ? error.message : "ลบภาพปกไม่สำเร็จ" });
+      toast.add({ type: "error", title: error instanceof Error ? error.message : t("shared.coverImage.removeFailed") });
     } finally {
       setBusy(null);
     }
@@ -86,9 +88,9 @@ export function CoverImageField({ imageUrl, onUpload, onRemove, disabled }: Cove
           setDragging(false);
           if (!locked) void upload(e.dataTransfer.files[0]);
         }}
-        aria-label={shown ? "เปลี่ยนภาพปก" : "อัปโหลดภาพปก"}
+        aria-label={shown ? t("shared.coverImage.changeAria") : t("shared.coverImage.uploadAria")}
         className={cn(
-          "group relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed bg-muted/50 text-muted-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 enabled:hover:border-primary/50 enabled:hover:bg-muted disabled:cursor-not-allowed",
+          "group relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-md border-2 border-dashed bg-muted/50 text-muted-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 enabled:hover:border-primary/50 enabled:hover:bg-muted disabled:cursor-not-allowed",
           shown && "border-solid",
           dragging && "border-primary bg-primary/5",
         )}
@@ -99,13 +101,13 @@ export function CoverImageField({ imageUrl, onUpload, onRemove, disabled }: Cove
             {busy === "upload" ? (
               <span className="relative flex items-center gap-2 rounded-full bg-background/90 px-3 py-1.5 text-sm text-foreground">
                 <Spinner />
-                กำลังอัปโหลด...
+                {t("shared.coverImage.uploading")}
               </span>
             ) : (
               !disabled && (
                 <span className="relative flex items-center gap-2 rounded-full bg-background/90 px-3 py-1.5 text-sm text-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                   <RefreshCw className="size-4" />
-                  คลิกหรือลากรูปมาวางเพื่อเปลี่ยน
+                  {t("shared.coverImage.clickToChange")}
                 </span>
               )
             )}
@@ -113,8 +115,8 @@ export function CoverImageField({ imageUrl, onUpload, onRemove, disabled }: Cove
         ) : (
           <span className="flex flex-col items-center gap-2 p-4 text-center text-sm">
             <ImageUp className="size-8" />
-            <span className="font-medium text-foreground">ลากรูปมาวาง หรือคลิกเพื่อเลือก</span>
-            <span>JPG, PNG หรือ WebP ไม่เกิน 5 MB · แนะนำ 1920×1080</span>
+            <span className="font-medium text-foreground">{t("shared.coverImage.dropOrPick")}</span>
+            <span>{t("shared.coverImage.hint")}</span>
           </span>
         )}
       </button>
@@ -122,11 +124,11 @@ export function CoverImageField({ imageUrl, onUpload, onRemove, disabled }: Cove
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" disabled={locked} onClick={() => input.current?.click()}>
             <RefreshCw data-icon="inline-start" />
-            เปลี่ยนภาพ
+            {t("shared.coverImage.change")}
           </Button>
           <Button type="button" variant="ghost" size="sm" disabled={locked} onClick={remove}>
             {busy === "remove" ? <Spinner data-icon="inline-start" /> : <Trash2 data-icon="inline-start" />}
-            ลบภาพปก
+            {t("shared.coverImage.remove")}
           </Button>
         </div>
       )}

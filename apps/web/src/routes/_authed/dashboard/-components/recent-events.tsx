@@ -1,30 +1,38 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, CalendarDays } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { EventThumb } from "@/components/event-parts";
 import { EventStatusBadge } from "@/components/event-status-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { myEventsQueryOptions } from "@/lib/events";
+import { useT } from "@/i18n";
+import { myEventsQueryOptions, statusInfo, type EventStatus } from "@/lib/events";
 import { formatDateRange } from "@/lib/format";
 import { NoEventsYet } from "./no-events-yet";
 
 /** The five most recently edited events, or the first-event prompt. */
 export function RecentEvents({ title }: { title: string }) {
+  const t = useT();
   const { data, isPending } = useQuery(myEventsQueryOptions({ page: 1, pageSize: 5 }));
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <CalendarDays className="size-5 text-primary" />
-          {title}
-        </CardTitle>
-        <CardDescription>แก้ไขล่าสุด</CardDescription>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>
+          {t("dashboard.overview.recent.lastEdited")}
+          {/* how the events stand, from the counts the list already returns (zeros left out) */}
+          {data &&
+            (Object.keys(data.counts) as EventStatus[])
+              .filter((status) => data.counts[status] > 0)
+              .map((status) => ` · ${statusInfo[status].label} ${data.counts[status]}`)
+              .join("")}
+        </CardDescription>
         {!!data?.total && (
           <CardAction>
             <Link to="/dashboard/events" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-              ดูทั้งหมด ({data.total})
+              {t("dashboard.overview.recent.viewAll", { total: data.total })}
               <ArrowRight data-icon="inline-end" />
             </Link>
           </CardAction>
@@ -46,18 +54,12 @@ export function RecentEvents({ title }: { title: string }) {
                 <Link
                   to="/dashboard/events/$eventId"
                   params={{ eventId: event.id }}
-                  className="-mx-2 flex items-center gap-3 rounded-xl px-2 py-3 hover:bg-muted"
+                  className="-mx-2 flex items-center gap-3 rounded-md px-2 py-3 hover:bg-muted"
                 >
-                  <div className="flex aspect-video w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground">
-                    {event.thumbnailUrl ? (
-                      <img src={event.thumbnailUrl} alt="" loading="lazy" className="size-full object-cover" />
-                    ) : (
-                      <CalendarDays className="size-4" />
-                    )}
-                  </div>
+                  <EventThumb event={event} className="aspect-video w-16" />
                   <div className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate font-medium">{event.title}</span>
-                    <span className="truncate text-sm text-muted-foreground">
+                    <span className="text-sm text-muted-foreground sm:truncate">
                       {formatDateRange(event.startsAt, event.endsAt)}
                     </span>
                   </div>

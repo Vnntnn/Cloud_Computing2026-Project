@@ -15,6 +15,7 @@ import {
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { toast } from "@/components/ui/toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useT, type MessageKey } from "@/i18n";
 
 type ShareEventProps = {
   title: string;
@@ -27,6 +28,8 @@ type ShareEventProps = {
 
 type Channel = {
   name: string;
+  /** a translated name, for the networks that have no brand name */
+  nameKey?: MessageKey;
   icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean; title?: string }>;
   href: (url: string, title: string) => string;
 };
@@ -40,11 +43,12 @@ const channels: Channel[] = [
   { name: "X", icon: SiX, href: (url, title) => `https://x.com/intent/post?text=${e(title)}&url=${e(url)}` },
   { name: "WhatsApp", icon: SiWhatsapp, href: (url, title) => `https://wa.me/?text=${e(`${title} ${url}`)}` },
   { name: "Telegram", icon: SiTelegram, href: (url, title) => `https://t.me/share/url?url=${e(url)}&text=${e(title)}` },
-  { name: "อีเมล", icon: Mail, href: (url, title) => `mailto:?subject=${e(title)}&body=${e(`${title}\n${url}`)}` },
+  { name: "Email", nameKey: "shared.share.email", icon: Mail, href: (url, title) => `mailto:?subject=${e(title)}&body=${e(`${title}\n${url}`)}` },
 ];
 
 /** Copies `text`, and reports "copied" for two seconds so the button can show a check. */
 function useCopy() {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -56,9 +60,9 @@ function useCopy() {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      toast.add({ type: "success", title: "คัดลอกลิงก์แล้ว" });
+      toast.add({ type: "success", title: t("shared.share.copied") });
     } catch {
-      toast.add({ type: "error", title: "คัดลอกไม่สำเร็จ", description: "กรุณาคัดลอกลิงก์จากช่องด้านบนแทน" });
+      toast.add({ type: "error", title: t("shared.share.copyFailed"), description: t("shared.share.copyFailedHint") });
     }
   };
   return { copied, copy };
@@ -66,6 +70,7 @@ function useCopy() {
 
 /** Share card for the event page: social networks, the system share sheet, copy link and a QR code. */
 export function ShareEvent({ title, url, slug, notice }: ShareEventProps) {
+  const t = useT();
   const { copied, copy } = useCopy();
   const [qrOpen, setQrOpen] = useState(false);
   // the system share sheet (phones, Safari, Edge); desktop Chrome and Firefox mostly lack it
@@ -77,7 +82,7 @@ export function ShareEvent({ title, url, slug, notice }: ShareEventProps) {
     } catch (error) {
       // closing the sheet is not an error worth reporting
       if (!(error instanceof DOMException && error.name === "AbortError")) {
-        toast.add({ type: "error", title: "แชร์ไม่สำเร็จ" });
+        toast.add({ type: "error", title: t("shared.share.shareFailed") });
       }
     }
   }
@@ -86,22 +91,22 @@ export function ShareEvent({ title, url, slug, notice }: ShareEventProps) {
     <Card data-slot="share-event">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Share2 className="size-5 text-primary" />
-          แชร์อีเวนต์
+          <Share2 className="size-5 text-primary dark:text-chart-2" />
+          {t("shared.share.title")}
         </CardTitle>
-        <CardDescription>ชวนเพื่อนมาร่วมงานด้วยกัน</CardDescription>
+        <CardDescription>{t("shared.share.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {notice && (
-          <p className="flex items-start gap-2 rounded-2xl bg-muted px-3 py-2 text-sm text-muted-foreground">
+          <p className="flex items-start gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
             <Info className="mt-0.5 size-4 shrink-0" />
             {notice}
           </p>
         )}
 
         <TooltipProvider>
-          <ul className="flex flex-wrap gap-2" aria-label="แชร์ไปที่">
-            {channels.map(({ name, icon: Icon, href }) => (
+          <ul className="flex flex-wrap gap-2" aria-label={t("shared.share.shareTo")}>
+            {channels.map(({ name, nameKey, icon: Icon, href }) => (
               <li key={name}>
                 <Tooltip>
                   <TooltipTrigger
@@ -110,14 +115,14 @@ export function ShareEvent({ title, url, slug, notice }: ShareEventProps) {
                         href={href(url, title)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        aria-label={`แชร์ไปที่ ${name}`}
+                        aria-label={t("shared.share.shareToChannel", { name: nameKey ? t(nameKey) : name })}
                         className={buttonVariants({ variant: "outline", size: "icon" })}
                       />
                     }
                   >
                     <Icon aria-hidden title="" />
                   </TooltipTrigger>
-                  <TooltipContent>{name}</TooltipContent>
+                  <TooltipContent>{nameKey ? t(nameKey) : name}</TooltipContent>
                 </Tooltip>
               </li>
             ))}
@@ -128,13 +133,13 @@ export function ShareEvent({ title, url, slug, notice }: ShareEventProps) {
           <InputGroupInput
             readOnly
             value={url}
-            aria-label="ลิงก์อีเวนต์"
+            aria-label={t("shared.share.linkLabel")}
             onFocus={(e) => e.currentTarget.select()}
           />
           <InputGroupAddon align="inline-end">
-            <InputGroupButton size="xs" onClick={() => copy(url)}>
+            <InputGroupButton size="xs" className="max-sm:h-8 max-sm:px-3" onClick={() => copy(url)}>
               {copied ? <Check /> : <Copy />}
-              {copied ? "คัดลอกแล้ว" : "คัดลอก"}
+              {copied ? t("shared.share.copiedShort") : t("shared.share.copy")}
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
@@ -142,12 +147,12 @@ export function ShareEvent({ title, url, slug, notice }: ShareEventProps) {
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" className="flex-1" onClick={() => setQrOpen(true)}>
             <QrCode data-icon="inline-start" />
-            QR Code
+            {t("shared.share.qrCode")}
           </Button>
           {canShareNatively && (
             <Button type="button" variant="outline" className="flex-1" onClick={shareNatively}>
               <Share data-icon="inline-start" />
-              แชร์ผ่านแอปอื่น
+              {t("shared.share.native")}
             </Button>
           )}
         </div>
@@ -169,6 +174,7 @@ function QrDialog({
   slug,
   notice,
 }: ShareEventProps & { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const t = useT();
   const { copied, copy } = useCopy();
   const printable = useRef<HTMLCanvasElement>(null);
 
@@ -187,13 +193,13 @@ function QrDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <QrCode className="size-5" />
-            QR Code ของอีเวนต์
+            {t("shared.share.qrTitle")}
           </DialogTitle>
-          <DialogDescription>สแกนด้วยกล้องมือถือเพื่อเปิดหน้าอีเวนต์ หรือดาวน์โหลดไปใช้บนโปสเตอร์และสไลด์</DialogDescription>
+          <DialogDescription>{t("shared.share.qrDescription")}</DialogDescription>
         </DialogHeader>
         <figure className="flex flex-col items-center gap-3">
-          <div className="overflow-hidden rounded-2xl border">
-            <QRCodeSVG value={url} size={232} marginSize={2} title={`QR Code ของ ${title}`} {...QR} />
+          <div className="overflow-hidden rounded-md border">
+            <QRCodeSVG value={url} size={232} marginSize={2} title={t("shared.share.qrOf", { title })} {...QR} />
           </div>
           <figcaption className="flex flex-col items-center gap-0.5 text-center">
             <span className="font-medium text-balance">{title}</span>
@@ -206,11 +212,11 @@ function QrDialog({
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => copy(url)}>
             {copied ? <Check data-icon="inline-start" /> : <Copy data-icon="inline-start" />}
-            {copied ? "คัดลอกแล้ว" : "คัดลอกลิงก์"}
+            {copied ? t("shared.share.copiedShort") : t("shared.share.copyLink")}
           </Button>
           <Button type="button" onClick={download}>
             <Download data-icon="inline-start" />
-            ดาวน์โหลด PNG
+            {t("shared.share.download")}
           </Button>
         </DialogFooter>
       </DialogContent>

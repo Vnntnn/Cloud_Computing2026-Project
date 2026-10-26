@@ -14,17 +14,19 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/toast";
 import type { SessionUser } from "@/lib/auth-client";
+import { useT } from "@/i18n";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { hasRole, useSignOut } from "@/lib/session";
 
 export function UserMenu({ user }: { user: SessionUser }) {
+  const t = useT();
   const signOut = useSignOut();
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={<Button variant="ghost" size="icon-lg" className="rounded-full" />}
-        aria-label="เมนูผู้ใช้"
+        aria-label={t("common.userMenu.label")}
       >
         <UserAvatar user={user} />
       </DropdownMenuTrigger>
@@ -40,16 +42,16 @@ export function UserMenu({ user }: { user: SessionUser }) {
         <DropdownMenuGroup>
           <DropdownMenuItem render={<Link to="/tickets" />}>
             <Ticket />
-            ตั๋วของฉัน
+            {t("common.userMenu.tickets")}
           </DropdownMenuItem>
           <DropdownMenuItem render={<Link to="/profile" />}>
             <UserRound />
-            โปรไฟล์
+            {t("common.userMenu.profile")}
           </DropdownMenuItem>
           {hasRole(user, ["organizer", "admin"]) && (
             <DropdownMenuItem render={<Link to="/dashboard" />}>
               <LayoutDashboard />
-              แดชบอร์ด
+              {t("common.userMenu.dashboard")}
             </DropdownMenuItem>
           )}
         </DropdownMenuGroup>
@@ -65,7 +67,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
             }
           >
             <LogOut />
-            ออกจากระบบ
+            {t("common.userMenu.signOut")}
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

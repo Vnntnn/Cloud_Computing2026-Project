@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import { CircleCheckBig, CircleX, Clock, CreditCard, Hourglass, Undo2, type LucideIcon } from "lucide-react";
+import { t } from "@/i18n";
 import { registrationClient } from "./api";
 import { retryUnlessClientError } from "./events";
 
@@ -8,12 +9,12 @@ export type EnrollmentStatus = "pending" | "awaiting_payment" | "confirmed" | "r
 type BadgeVariant = "secondary" | "default" | "outline" | "destructive";
 
 export const enrollmentStatusInfo: Record<EnrollmentStatus, { label: string; icon: LucideIcon; variant: BadgeVariant }> = {
-  pending: { label: "รออนุมัติ", icon: Hourglass, variant: "outline" },
-  awaiting_payment: { label: "รอชำระเงิน", icon: CreditCard, variant: "secondary" },
-  confirmed: { label: "ยืนยันแล้ว", icon: CircleCheckBig, variant: "default" },
-  rejected: { label: "ไม่อนุมัติ", icon: CircleX, variant: "destructive" },
-  expired: { label: "หมดเวลา", icon: Clock, variant: "outline" },
-  cancelled: { label: "ยกเลิกแล้ว", icon: Undo2, variant: "outline" },
+  pending: { get label() { return t("shared.enrollmentStatus.pending"); }, icon: Hourglass, variant: "outline" },
+  awaiting_payment: { get label() { return t("shared.enrollmentStatus.awaiting_payment"); }, icon: CreditCard, variant: "secondary" },
+  confirmed: { get label() { return t("shared.enrollmentStatus.confirmed"); }, icon: CircleCheckBig, variant: "default" },
+  rejected: { get label() { return t("shared.enrollmentStatus.rejected"); }, icon: CircleX, variant: "destructive" },
+  expired: { get label() { return t("shared.enrollmentStatus.expired"); }, icon: Clock, variant: "outline" },
+  cancelled: { get label() { return t("shared.enrollmentStatus.cancelled"); }, icon: Undo2, variant: "outline" },
 };
 
 export const enrollmentsKey = ["enrollments"] as const;

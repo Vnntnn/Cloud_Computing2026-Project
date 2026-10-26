@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Tag } from "lucide-react";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useT } from "@/i18n";
 import { categoriesQueryOptions } from "@/lib/events";
 import { hasRole, useSession } from "@/lib/session";
 
@@ -16,6 +16,7 @@ type CategorySelectProps = {
 };
 
 export function CategorySelect({ value, onValueChange, onBlur, invalid, errors, disabled }: CategorySelectProps) {
+  const t = useT();
   const { data: categories, isPending } = useQuery(categoriesQueryOptions);
   const { data: session } = useSession();
   const items = (categories ?? []).map((category) => ({ value: category.id, label: category.name }));
@@ -23,10 +24,7 @@ export function CategorySelect({ value, onValueChange, onBlur, invalid, errors, 
 
   return (
     <Field data-invalid={invalid}>
-      <FieldLabel htmlFor="categoryId">
-        <Tag className="size-4 text-muted-foreground" />
-        หมวดหมู่
-      </FieldLabel>
+      <FieldLabel htmlFor="categoryId">{t("shared.categorySelect.label")}</FieldLabel>
       <Select
         items={items}
         value={value || null}
@@ -34,7 +32,7 @@ export function CategorySelect({ value, onValueChange, onBlur, invalid, errors, 
         disabled={disabled || none}
       >
         <SelectTrigger id="categoryId" className="w-full" aria-invalid={invalid} onBlur={onBlur}>
-          <SelectValue placeholder={isPending ? "กำลังโหลด..." : "เลือกหมวดหมู่"} />
+          <SelectValue placeholder={isPending ? t("shared.categorySelect.loading") : t("shared.categorySelect.placeholder")} />
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
@@ -48,11 +46,11 @@ export function CategorySelect({ value, onValueChange, onBlur, invalid, errors, 
       </Select>
       {none && (
         <FieldDescription>
-          ยังไม่มีหมวดหมู่ในระบบ{" "}
+          {t("shared.categorySelect.none")}{" "}
           {hasRole(session?.user, ["admin"]) ? (
-            <Link to="/dashboard/categories">เพิ่มหมวดหมู่</Link>
+            <Link to="/dashboard/categories">{t("shared.categorySelect.add")}</Link>
           ) : (
-            "กรุณาติดต่อผู้ดูแลระบบให้เพิ่มหมวดหมู่ก่อน"
+            t("shared.categorySelect.contactAdmin")
           )}
         </FieldDescription>
       )}

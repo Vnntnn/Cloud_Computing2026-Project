@@ -1,18 +1,18 @@
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import {
-  ArrowLeft, CalendarClock, ClipboardList, CreditCard, ListChecks, Mail, MapPin, Minus, Plus, RotateCcw, Send, Ticket,
-  TicketCheck, TicketX, Timer, TimerOff, UserRound,
-} from "lucide-react";
+import { ArrowLeft, CalendarClock, CreditCard, ListChecks, MapPin, Minus, Plus, RotateCcw, Send, Ticket, TicketCheck, TicketX, Timer, TimerOff } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { SubmitButton, TextField } from "@/components/form-field";
 import { LeaveGuard } from "@/components/leave-guard";
+import { InkScene } from "@/components/navbar";
+import { TicketStub } from "@/components/ticket-stub";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -20,11 +20,12 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { useT, type Translate } from "@/i18n";
 import { paymentClient, registrationClient } from "@/lib/api";
 import { problemMessage } from "@/lib/auth-errors";
 import { availabilityQueryOptions, enrollmentsKey, splitName, type Availability } from "@/lib/enrollments";
 import { eventQueryOptions, problemCode, type EventDetail } from "@/lib/events";
-import { formatDateRange, formatPrice } from "@/lib/format";
+import { formatDateRange, formatNumber, formatPrice } from "@/lib/format";
 import { isEmail } from "@/lib/invitations";
 import { useLiveSeats } from "@/lib/live-seats";
 import {
@@ -41,15 +42,8 @@ export const Route = createFileRoute("/_authed/events/$slug/enroll/$ticketTypeId
 
 const ROOT = "[data-slot=enroll-form]";
 
-const unavailable: Record<Exclude<Availability["state"], "open">, string> = {
-  sold_out: "ตั๋วประเภทนี้หมดแล้ว",
-  limit_reached: "คุณมีตั๋วประเภทนี้ครบจำนวนที่ซื้อได้ต่อบัญชีแล้ว",
-  invite_only: "ตั๋วประเภทนี้สำหรับผู้ได้รับเชิญเท่านั้น",
-  invitation_used: "คำเชิญของคุณถูกใช้ลงทะเบียนแล้ว",
-  closed: "อีเวนต์นี้ยังไม่เปิดหรือปิดรับลงทะเบียนแล้ว",
-};
-
 function EnrollPage() {
+  const t = useT();
   const { slug, ticketTypeId } = Route.useParams();
   const { data: event, isPending: eventPending, isError } = useQuery(eventQueryOptions(slug));
   const { data: types, isPending: typesPending } = useQuery(ticketTypesQueryOptions(slug));
@@ -69,14 +63,14 @@ function EnrollPage() {
   const back = (
     <Link to="/events/$slug" params={{ slug }} className={buttonVariants({ variant: "outline" })}>
       <ArrowLeft data-icon="inline-start" />
-      กลับไปหน้าอีเวนต์
+      {t("account.enroll.backToEvent")}
     </Link>
   );
 
   const holdPending = holdsSeats && state?.state === "open" && hold.isPending;
   if (eventPending || typesPending || (event && availabilityPending) || holdPending) {
     return (
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 py-4" aria-busy="true" aria-label="กำลังโหลด">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 py-4" aria-busy="true" aria-label={t("account.enroll.loading")}>
         <Skeleton className="h-10 w-2/3" />
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <Skeleton className="h-96" />
@@ -92,8 +86,8 @@ function EnrollPage() {
           <EmptyMedia variant="icon">
             <TicketX />
           </EmptyMedia>
-          <EmptyTitle>ไม่พบตั๋วนี้</EmptyTitle>
-          <EmptyDescription>ลิงก์อาจไม่ถูกต้อง หรือตั๋วถูกลบไปแล้ว</EmptyDescription>
+          <EmptyTitle>{t("account.enroll.notFound.title")}</EmptyTitle>
+          <EmptyDescription>{t("account.enroll.notFound.description")}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>{back}</EmptyContent>
       </Empty>
@@ -108,9 +102,9 @@ function EnrollPage() {
           <EmptyMedia variant="icon">
             {state.state === "limit_reached" ? <TicketCheck /> : <TicketX />}
           </EmptyMedia>
-          <EmptyTitle>ลงทะเบียน {ticketType.name} ไม่ได้</EmptyTitle>
+          <EmptyTitle>{t("account.enroll.cannotEnroll", { name: ticketType.name })}</EmptyTitle>
           <EmptyDescription>
-            {state.state !== "open" ? unavailable[state.state] : problemMessage(hold.error)}
+            {state.state !== "open" ? t(`account.enroll.unavailable.${state.state}`) : problemMessage(hold.error)}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent className="flex-row flex-wrap justify-center">
@@ -118,7 +112,7 @@ function EnrollPage() {
           {state.mine > 0 && (
             <Link to="/tickets" className={buttonVariants()}>
               <Ticket data-icon="inline-start" />
-              ตั๋วของฉัน
+              {t("account.enroll.myTickets")}
             </Link>
           )}
         </EmptyContent>
@@ -146,23 +140,27 @@ const emptyAttendee = (questions: Question[]): AttendeeValues => ({
 });
 
 /** Checks every attendee against the ticket type's own questions, like apps/registration does. */
-function enrollSchema(questions: Question[]) {
+function enrollSchema(questions: Question[], t: Translate) {
   const attendee = z.object({
-    firstName: z.string().trim().min(1, "กรุณากรอกชื่อ").max(100, "ยาวได้ไม่เกิน 100 ตัวอักษร"),
-    lastName: z.string().trim().min(1, "กรุณากรอกนามสกุล").max(100, "ยาวได้ไม่เกิน 100 ตัวอักษร"),
-    email: z.string().trim().refine(isEmail, "รูปแบบอีเมลไม่ถูกต้อง"),
+    firstName: z.string().trim().min(1, t("account.enroll.errors.firstNameRequired")).max(100, t("account.enroll.errors.maxLength100")),
+    lastName: z.string().trim().min(1, t("account.enroll.errors.lastNameRequired")).max(100, t("account.enroll.errors.maxLength100")),
+    email: z.string().trim().refine(isEmail, t("account.enroll.errors.invalidEmail")),
     answers: z.array(z.string()).superRefine((answers, ctx) => {
       questions.forEach((question, index) => {
         const value = answers[index]?.trim() ?? "";
         if (!value) {
           if (question.required) {
-            ctx.addIssue({ code: "custom", path: [index], message: question.type === "choice" ? "กรุณาเลือกคำตอบ" : "กรุณาตอบคำถามนี้" });
+            ctx.addIssue({
+              code: "custom",
+              path: [index],
+              message: question.type === "choice" ? t("account.enroll.errors.chooseAnswer") : t("account.enroll.errors.answerQuestion"),
+            });
           }
           return;
         }
         const max = question.type === "short_text" ? SHORT_TEXT_MAX : LONG_TEXT_MAX;
         if (value.length > max) {
-          ctx.addIssue({ code: "custom", path: [index], message: `ยาวได้ไม่เกิน ${max.toLocaleString()} ตัวอักษร` });
+          ctx.addIssue({ code: "custom", path: [index], message: t("account.enroll.errors.maxLength", { max: formatNumber(max) }) });
         }
       });
     }),
@@ -201,11 +199,12 @@ function EnrollForm({
   // the seats held while the form is filled in (first_come), from seatHoldQueryOptions
   hold: SeatHold | null;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: session } = useSession();
   const questions = ticketType.questions;
-  const schema = useMemo(() => enrollSchema(questions), [questions]);
+  const schema = useMemo(() => enrollSchema(questions, t), [questions, t]);
   const done = useRef(false);
   const [redirecting, setRedirecting] = useState(false);
   const paid = ticketType.price > 0;
@@ -231,7 +230,7 @@ function EnrollForm({
     mutationFn: (quantity: number) => startSeatHold(ticketType.id, quantity),
     onSuccess: (next) => {
       setHold(next);
-      toast.add({ type: "success", title: "จองที่นั่งใหม่แล้ว", description: "กรอกข้อมูลต่อได้เลย" });
+      toast.add({ type: "success", title: t("account.enroll.hold.againDone"), description: t("account.enroll.hold.againDoneHint") });
     },
     onError: (error) => {
       toast.add({ type: "error", title: problemMessage(error) });
@@ -260,12 +259,16 @@ function EnrollForm({
     defaultValues: defaults,
     schema,
     onSubmitInvalid: () => {
-      toast.add({ type: "error", title: "กรุณากรอกข้อมูลให้ครบถ้วน" });
+      toast.add({ type: "error", title: t("account.enroll.errors.incomplete") });
       focusFirstInvalid(ROOT);
     },
     onSubmit: async ({ value }) => {
       if (expired) {
-        return void toast.add({ type: "error", title: "หมดเวลาจองที่นั่งแล้ว", description: "กดจองที่นั่งใหม่เพื่อลงทะเบียนต่อ" });
+        return void toast.add({
+          type: "error",
+          title: t("account.enroll.hold.expiredToast"),
+          description: t("account.enroll.hold.expiredToastHint"),
+        });
       }
       const { data, error } = await registrationClient.api.regis.enrollments.post({
         ticketTypeId: ticketType.id,
@@ -296,14 +299,14 @@ function EnrollForm({
         toast.add({
           type: "error",
           title: problemMessage(checkoutError),
-          description: "ที่นั่งของคุณยังถูกจองไว้ ชำระเงินได้จากหน้านี้",
+          description: t("account.enroll.submit.checkoutFailedHint"),
         });
         return void toOrder(data.id);
       }
       toast.add(
         data.status === "pending"
-          ? { type: "success", title: "ส่งคำขอแล้ว", description: "เราจะแจ้งผลทางอีเมลเมื่อผู้จัดงานพิจารณา" }
-          : { type: "success", title: "ลงทะเบียนสำเร็จ", description: "ส่งตั๋วไปที่อีเมลของผู้เข้าร่วมแล้ว" },
+          ? { type: "success", title: t("account.enroll.submit.requestSent"), description: t("account.enroll.submit.requestSentHint") }
+          : { type: "success", title: t("account.enroll.submit.registered"), description: t("account.enroll.submit.registeredHint") },
       );
       await toOrder(data.id);
     },
@@ -316,20 +319,39 @@ function EnrollForm({
   const picksQuantity = max > 1 || quantity > 1;
   const dirty = JSON.stringify(values) !== JSON.stringify(defaults);
   const { icon: KindIcon, label: kindLabel } = kindInfo[ticketType.kind];
+  usePageTitle(t("common.pageTitle.register", { event: event.title }));
 
   return (
-    <div data-slot="enroll-form" className="mx-auto flex w-full max-w-5xl flex-col gap-6 py-4">
-      <header className="flex flex-col gap-3">
-        <Link to="/events/$slug" params={{ slug: event.slug }} className={buttonVariants({ variant: "ghost", size: "sm", className: "self-start" })}>
-          <ArrowLeft data-icon="inline-start" />
-          {event.title}
-        </Link>
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <ClipboardList className="size-6 shrink-0 text-primary" />
-          {approval ? "ขอเข้าร่วม" : "ลงทะเบียน"}: {ticketType.name}
-        </h1>
+    // the page's own padding is cancelled so the ink band runs edge to edge
+    <div data-slot="enroll-form" className="-m-4 flex flex-col">
+      <InkScene />
+      <header className="canopy relative bg-dusk text-dusk-foreground">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pt-5 pb-9 sm:pb-11">
+          <Link
+            to="/events/$slug"
+            params={{ slug: event.slug }}
+            className={buttonVariants({ variant: "ghost", size: "sm", className: "max-w-full self-start text-dusk-foreground hover:bg-dusk-foreground/10 hover:text-dusk-foreground focus-visible:ring-sun" })}
+          >
+            <ArrowLeft data-icon="inline-start" />
+            <span className="truncate">{event.title}</span>
+          </Link>
+          <h1 className="text-3xl leading-[1.25] font-bold tracking-tight text-balance sm:text-5xl sm:leading-[1.25]">
+            {t(approval ? "account.enroll.heading.approval" : "account.enroll.heading.register", { name: ticketType.name })}
+          </h1>
+          <p className="flex flex-wrap items-center gap-x-5 gap-y-1 text-base text-dusk-foreground/85">
+            <span className="flex items-center gap-2">
+              <CalendarClock className="size-4 shrink-0 text-sun" />
+              {formatDateRange(event.startsAt, event.endsAt)}
+            </span>
+            <span className="flex items-center gap-2">
+              <MapPin className="size-4 shrink-0 text-sun" />
+              {event.venue}
+            </span>
+          </p>
+        </div>
       </header>
 
+      <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-10">
       <form
         noValidate
         className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]"
@@ -347,18 +369,15 @@ function EnrollForm({
                     {picksQuantity && (
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex flex-col">
-                          <span className="flex items-center gap-2 font-medium">
-                            <Ticket className="size-4 text-muted-foreground" />
-                            จำนวนตั๋ว
-                          </span>
-                          <span className="text-sm text-muted-foreground">1 ใบต่อผู้เข้าร่วม 1 คน · เลือกได้สูงสุด {max} ใบ</span>
+                          <span className="font-medium">{t("account.enroll.quantity.label")}</span>
+                          <span className="text-sm text-muted-foreground">{t("account.enroll.quantity.hint", { max })}</span>
                         </div>
-                        <div className="flex items-center gap-3" role="group" aria-label="จำนวนตั๋ว">
+                        <div className="flex items-center gap-3" role="group" aria-label={t("account.enroll.quantity.label")}>
                           <Button
                             type="button"
                             variant="outline"
                             size="icon"
-                            aria-label="ลดจำนวนตั๋ว"
+                            aria-label={t("account.enroll.quantity.decrease")}
                             disabled={quantity <= 1 || resize.isPending}
                             onClick={() => changeQuantity(quantity - 1, () => field.removeValue(quantity - 1))}
                           >
@@ -371,7 +390,7 @@ function EnrollForm({
                             type="button"
                             variant="outline"
                             size="icon"
-                            aria-label="เพิ่มจำนวนตั๋ว"
+                            aria-label={t("account.enroll.quantity.increase")}
                             disabled={quantity >= max || resize.isPending}
                             onClick={() => changeQuantity(quantity + 1, () => field.pushValue(emptyAttendee(questions)))}
                           >
@@ -395,92 +414,97 @@ function EnrollForm({
         </form.Field>
 
         <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-21">
-          <Card>
-            {event.thumbnailUrl && <img src={event.thumbnailUrl} alt="" className="aspect-video w-full object-cover" />}
-            <CardHeader>
-              <CardTitle>{event.title}</CardTitle>
-              <CardDescription className="flex flex-col gap-1">
-                <span className="flex items-center gap-1.5">
-                  <CalendarClock className="size-4 shrink-0" />
-                  {formatDateRange(event.startsAt, event.endsAt)}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <MapPin className="size-4 shrink-0" />
-                  {event.venue}
-                </span>
-              </CardDescription>
-            </CardHeader>
-            <Separator />
-            <CardContent className="flex flex-col gap-2 text-sm">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium">{ticketType.name}</span>
-                <span>{formatPrice(ticketType.price)}</span>
-              </div>
-              {ticketType.kind !== "first_come" && (
-                <Badge variant="secondary" className="self-start">
-                  <KindIcon data-icon="inline-start" />
-                  {kindLabel}
-                </Badge>
-              )}
-              <div className="flex items-center justify-between gap-2 text-muted-foreground">
-                <span>จำนวน</span>
-                <span className="tabular-nums">× {quantity}</span>
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between gap-2 text-base font-semibold">
-                <span>ยอดรวม</span>
-                <span className="tabular-nums">{formatPrice(ticketType.price * quantity)}</span>
-              </div>
-            </CardContent>
-            <CardFooter className="flex flex-col items-stretch gap-3">
-              {approval && (
-                <Alert>
-                  <KindIcon />
-                  <AlertTitle>ต้องได้รับอนุมัติ</AlertTitle>
-                  <AlertDescription>
-                    {paid
-                      ? "ผู้จัดงานจะพิจารณาคำขอ หากอนุมัติ คุณจะได้รับอีเมลให้ชำระเงินภายใน 72 ชั่วโมง"
-                      : "ผู้จัดงานจะพิจารณาคำขอ และส่งตั๋วทางอีเมลเมื่ออนุมัติ"}
-                  </AlertDescription>
-                </Alert>
-              )}
-              {hold && timeLeft !== undefined && (
-                <p
-                  className={cn(
-                    "flex items-center justify-center gap-1.5 text-sm",
-                    timeLeft <= 60_000 ? "text-destructive" : "text-muted-foreground",
-                  )}
-                >
-                  {expired ? <TimerOff className="size-4" /> : <Timer className="size-4" />}
-                  {expired ? (
-                    "หมดเวลาจองที่นั่งแล้ว"
-                  ) : (
-                    <>
-                      เหลือเวลากรอกข้อมูล <span className="font-semibold tabular-nums">{formatTimeLeft(timeLeft)}</span>
-                    </>
-                  )}
+          {/* the order as a ticket: the event above the tear, the lines and the way to pay below it */}
+          <TicketStub
+            vertical
+            stub={
+              <div className="flex flex-col gap-3 p-5 pb-7">
+                {event.thumbnailUrl && <img src={event.thumbnailUrl} alt="" className="-mx-5 -mt-5 mb-1 max-lg:hidden aspect-[16/7] w-[calc(100%+2.5rem)] max-w-none rounded-t-md object-cover" />}
+                <h2 className="text-lg leading-snug font-bold">{event.title}</h2>
+                <p className="flex flex-col gap-1 text-sm text-muted-foreground">
+                  <span className="flex items-start gap-2">
+                    <CalendarClock className="mt-0.5 size-4 shrink-0" />
+                    {formatDateRange(event.startsAt, event.endsAt)}
+                  </span>
+                  <span className="flex items-start gap-2">
+                    <MapPin className="mt-0.5 size-4 shrink-0" />
+                    {event.venue}
+                  </span>
                 </p>
-              )}
-              {expired ? (
-                <HoldAgainButton pending={holdAgain.isPending} onClick={() => holdAgain.mutate(quantity)} className="w-full" />
-              ) : (
-                <SubmitButton
-                  pending={isSubmitting || redirecting}
-                  icon={approval ? Send : paid ? CreditCard : TicketCheck}
-                  className="w-full"
-                >
-                  {approval ? "ส่งคำขอ" : paid ? "ไปชำระเงิน" : "ยืนยันการลงทะเบียน"}
-                </SubmitButton>
-              )}
-              {paid && !approval && (
-                <p className="text-center text-xs text-muted-foreground">ระบบจองที่นั่งไว้ 30 นาทีระหว่างชำระเงินผ่าน Stripe</p>
-              )}
-            </CardFooter>
-          </Card>
+              </div>
+            }
+          >
+            <div className="flex flex-col gap-4 px-5 pt-7 pb-5">
+              <div className="flex flex-col gap-2 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{ticketType.name}</span>
+                  <span>{formatPrice(ticketType.price)}</span>
+                </div>
+                {ticketType.kind !== "first_come" && (
+                  <Badge variant="secondary" className="self-start">
+                    <KindIcon data-icon="inline-start" />
+                    {kindLabel}
+                  </Badge>
+                )}
+                <div className="flex items-center justify-between gap-2 text-muted-foreground">
+                  <span>{t("account.enroll.summary.quantity")}</span>
+                  <span className="tabular-nums">× {quantity}</span>
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between gap-2 text-xl font-bold">
+                  <span>{t("account.enroll.summary.total")}</span>
+                  <span className="tabular-nums">{formatPrice(ticketType.price * quantity)}</span>
+                </div>
+              </div>
+              <div className="flex flex-col items-stretch gap-3">
+                {approval && (
+                  <Alert>
+                    <KindIcon />
+                    <AlertTitle>{t("account.enroll.summary.approvalTitle")}</AlertTitle>
+                    <AlertDescription>
+                      {paid ? t("account.enroll.summary.approvalPaid") : t("account.enroll.summary.approvalFree")}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {hold && timeLeft !== undefined && (
+                  <p
+                    className={cn(
+                      "flex items-center justify-center gap-1.5 text-sm",
+                      timeLeft <= 60_000 ? "text-destructive" : "text-muted-foreground",
+                    )}
+                  >
+                    {expired ? <TimerOff className="size-4" /> : <Timer className="size-4" />}
+                    {expired ? (
+                      t("account.enroll.hold.expiredToast")
+                    ) : (
+                      <>
+                        {t("account.enroll.hold.timeLeft")} <span className="font-semibold tabular-nums">{formatTimeLeft(timeLeft)}</span>
+                      </>
+                    )}
+                  </p>
+                )}
+                {expired ? (
+                  <HoldAgainButton pending={holdAgain.isPending} onClick={() => holdAgain.mutate(quantity)} className="w-full" />
+                ) : (
+                  <SubmitButton
+                    pending={isSubmitting || redirecting}
+                    icon={approval ? Send : paid ? CreditCard : TicketCheck}
+                    className="w-full"
+                  >
+                    {approval ? t("account.enroll.submit.sendRequest") : paid ? t("account.enroll.submit.pay") : t("account.enroll.submit.confirm")}
+                  </SubmitButton>
+                )}
+                {paid && !approval && (
+                  <p className="text-center text-xs text-muted-foreground">{t("account.enroll.submit.stripeNote")}</p>
+                )}
+              </div>
+            </div>
+          </TicketStub>
         </aside>
       </form>
+      </div>
 
-      <LeaveGuard when={dirty} allowLeaveRef={done} description="ข้อมูลผู้เข้าร่วมที่กรอกไว้จะหายไป" />
+      <LeaveGuard when={dirty} allowLeaveRef={done} description={t("account.enroll.leaveGuard")} />
     </div>
   );
 }
@@ -490,6 +514,7 @@ function EnrollForm({
  * anyone's again; what was typed stays, and holding again carries on with it.
  */
 function HoldStatus({ timeLeft, pending, onHoldAgain }: { timeLeft: number; pending: boolean; onHoldAgain: () => void }) {
+  const t = useT();
   const expired = timeLeft === 0;
   const urgent = timeLeft <= 60_000;
   return (
@@ -497,12 +522,10 @@ function HoldStatus({ timeLeft, pending, onHoldAgain }: { timeLeft: number; pend
       <div className="flex flex-col">
         <span className={cn("flex items-center gap-2 font-medium", urgent && "text-destructive")}>
           {expired ? <TimerOff className="size-4" /> : <Timer className={cn("size-4", !urgent && "text-muted-foreground")} />}
-          {expired ? "หมดเวลาจองที่นั่ง" : "จองที่นั่งไว้ให้คุณแล้ว"}
+          {expired ? t("account.enroll.hold.expired") : t("account.enroll.hold.reserved")}
         </span>
         <span className="text-sm text-muted-foreground">
-          {expired
-            ? "ที่นั่งถูกปล่อยให้คนอื่นแล้ว ข้อมูลที่กรอกไว้ยังอยู่"
-            : "กรอกข้อมูลให้เสร็จก่อนหมดเวลา ไม่เช่นนั้นที่นั่งจะถูกปล่อยให้คนอื่น"}
+          {expired ? t("account.enroll.hold.expiredHint") : t("account.enroll.hold.reservedHint")}
         </span>
       </div>
       {expired ? (
@@ -511,7 +534,7 @@ function HoldStatus({ timeLeft, pending, onHoldAgain }: { timeLeft: number; pend
         // a timer, not a live region: announcing every second would drown out the form
         <span
           role="timer"
-          aria-label="เวลาจองที่นั่งที่เหลือ"
+          aria-label={t("account.enroll.hold.timerLabel")}
           className={cn("text-2xl font-semibold tabular-nums", urgent && "text-destructive")}
         >
           {formatTimeLeft(timeLeft)}
@@ -522,10 +545,11 @@ function HoldStatus({ timeLeft, pending, onHoldAgain }: { timeLeft: number; pend
 }
 
 function HoldAgainButton({ pending, ...props }: { pending: boolean } & React.ComponentProps<typeof Button>) {
+  const t = useT();
   return (
     <Button type="button" {...props} disabled={pending || props.disabled}>
       {pending ? <Spinner data-icon="inline-start" /> : <RotateCcw data-icon="inline-start" />}
-      จองที่นั่งใหม่
+      {t("account.enroll.hold.again")}
     </Button>
   );
 }
@@ -541,51 +565,47 @@ function AttendeeCard({
   questions: Question[];
   self: boolean;
 }) {
+  const t = useT();
   const name = `attendees[${index}]` as const;
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <UserRound className="size-5" />
-          ผู้เข้าร่วมคนที่ {index + 1}
-        </CardTitle>
+        <CardTitle>{t("account.enroll.attendee.title", { n: index + 1 })}</CardTitle>
         <CardDescription>
-          {self ? "เติมจากบัญชีของคุณแล้ว แก้ไขได้หากซื้อให้คนอื่น" : "ตั๋วจะถูกส่งไปที่อีเมลของผู้เข้าร่วมคนนี้"}
+          {self ? t("account.enroll.attendee.self") : t("account.enroll.attendee.other")}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <FieldGroup>
           <div className="grid gap-6 sm:grid-cols-2">
             <form.Field name={`${name}.firstName`}>
-              {(field) => <TextField field={field} label="ชื่อ" icon={UserRound} autoComplete={self ? "given-name" : "off"} maxLength={100} />}
+              {(field) => <TextField field={field} label={t("account.enroll.attendee.firstName")} autoComplete={self ? "given-name" : "off"} maxLength={100} />}
             </form.Field>
             <form.Field name={`${name}.lastName`}>
-              {(field) => <TextField field={field} label="นามสกุล" icon={UserRound} autoComplete={self ? "family-name" : "off"} maxLength={100} />}
+              {(field) => <TextField field={field} label={t("account.enroll.attendee.lastName")} autoComplete={self ? "family-name" : "off"} maxLength={100} />}
             </form.Field>
           </div>
           <form.Field name={`${name}.email`}>
             {(field) => (
               <TextField
                 field={field}
-                label="อีเมล"
-                icon={Mail}
+                label={t("account.enroll.attendee.email")}
                 type="email"
                 inputMode="email"
                 autoComplete={self ? "email" : "off"}
-                description="ส่งตั๋วไปที่อีเมลนี้ บัญชีที่ใช้อีเมลนี้จะเห็นตั๋วในหน้าตั๋วของฉันด้วย"
+                description={t("account.enroll.attendee.emailHint")}
               />
             )}
           </form.Field>
           {questions.map((question, questionIndex) => (
             <form.Field key={question.id} name={`${name}.answers[${questionIndex}]`}>
               {(field) => {
-                const label = question.required ? question.label : `${question.label} (ไม่บังคับ)`;
+                const label = question.required ? question.label : t("account.enroll.attendee.optional", { label: question.label });
                 if (question.type !== "choice") {
                   return (
                     <TextField
                       field={field}
                       label={label}
-                      icon={ClipboardList}
                       multiline={question.type === "long_text"}
                       maxLength={question.type === "short_text" ? SHORT_TEXT_MAX : LONG_TEXT_MAX}
                     />

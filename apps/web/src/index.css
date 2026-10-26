@@ -5,13 +5,33 @@
 @import "@fontsource-variable/google-sans/wght-italic.css";
 @import "@fontsource-variable/google-sans-code";
 @import "@fontsource-variable/google-sans-code/wght-italic.css";
+@import "./effects.css";
 
 @custom-variant dark (&:is(.dark *));
+
+/* the one easing for everything that moves: `ease-out-expo` in classes, var(--ease-out-expo) in CSS */
+@theme {
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
 
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Google Sans Variable', sans-serif;
     --font-mono: 'Google Sans Code Variable', 'Google Sans Variable', monospace;
+    --color-dusk: var(--dusk);
+    --color-dusk-mid: var(--dusk-mid);
+    --color-dusk-low: var(--dusk-low);
+    --color-dusk-foreground: var(--dusk-foreground);
+    --color-sun: var(--sun);
+    --color-sun-deep: var(--sun-deep);
+    --color-sun-foreground: var(--sun-foreground);
+    --color-sand: var(--sand);
+    --color-poster-1: var(--poster-1);
+    --color-poster-2: var(--poster-2);
+    --color-poster-3: var(--poster-3);
+    --color-poster-4: var(--poster-4);
+    --color-poster-5: var(--poster-5);
+    --color-poster-6: var(--poster-6);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -53,72 +73,96 @@
 }
 
 :root {
+    /* neutrals carry the ink hue (205) of the home scene at low chroma, so every page sits in the same family as the hero */
     --background: oklch(1 0 0);
-    --foreground: oklch(0.141 0.005 285.823);
+    --foreground: oklch(0.2 0.03 205);
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.141 0.005 285.823);
+    --card-foreground: oklch(0.2 0.03 205);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.141 0.005 285.823);
+    --popover-foreground: oklch(0.2 0.03 205);
     --primary: oklch(0.511 0.096 186.391);
     --primary-foreground: oklch(0.984 0.014 180.72);
-    --secondary: oklch(0.967 0.001 286.375);
-    --secondary-foreground: oklch(0.21 0.006 285.885);
-    --muted: oklch(0.967 0.001 286.375);
-    --muted-foreground: oklch(0.552 0.016 285.938);
-    --accent: oklch(0.967 0.001 286.375);
-    --accent-foreground: oklch(0.21 0.006 285.885);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.92 0.004 286.32);
-    --input: oklch(0.92 0.004 286.32);
-    --ring: oklch(0.705 0.015 286.067);
+    --secondary: oklch(0.965 0.008 205);
+    --secondary-foreground: oklch(0.25 0.035 205);
+    --muted: oklch(0.965 0.008 205);
+    --muted-foreground: oklch(0.49 0.03 205);
+    --accent: oklch(0.955 0.012 200);
+    --accent-foreground: oklch(0.25 0.035 205);
+    --destructive: oklch(0.5 0.22 27.3); /* 5.6:1 as red text on its own 10% tint (0.577 was 4.0:1) */
+    --border: oklch(0.915 0.01 205);
+    --input: oklch(0.64 0.02 205); /* form-control borders: 3.3:1 on white (WCAG 1.4.11) */
+    --ring: oklch(0.62 0.07 190);
     --chart-1: oklch(0.855 0.138 181.071);
     --chart-2: oklch(0.704 0.14 182.503);
     --chart-3: oklch(0.6 0.118 184.704);
     --chart-4: oklch(0.511 0.096 186.391);
     --chart-5: oklch(0.437 0.078 188.216);
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.141 0.005 285.823);
+    /* the dusk scene (home hero, closing band): a place of its own, the same in light and dark. Sun and sky come from the logo. */
+    --dusk: oklch(0.2 0.045 205);
+    --dusk-mid: oklch(0.3 0.07 196);
+    --dusk-low: oklch(0.45 0.095 188);
+    --dusk-foreground: oklch(0.985 0.012 185);
+    --sun: oklch(0.83 0.15 78);
+    --sun-deep: oklch(0.7 0.18 45);
+    --sun-foreground: oklch(0.24 0.05 200);
+    --sand: oklch(0.94 0.035 85);
+    /* generated posters: six colourways taken from the tents of the hero photograph. A poster is an object, so they don't change with the theme.
+       Each ground is dark enough for white text (4.5:1) except marigold, which takes dark text; --poster-N-ink is the numeral and the wave lines. */
+    --poster-1: oklch(0.2 0.045 205);
+    --poster-1-ink: oklch(0.83 0.15 78);
+    --poster-2: oklch(0.52 0.19 38);
+    --poster-2-ink: oklch(0.93 0.07 85);
+    --poster-3: oklch(0.45 0.2 328);
+    --poster-3-ink: oklch(0.88 0.12 70);
+    --poster-4: oklch(0.36 0.14 275);
+    --poster-4-ink: oklch(0.84 0.12 195);
+    --poster-5: oklch(0.83 0.15 78);
+    --poster-5-ink: oklch(0.5 0.19 29);
+    --poster-6: oklch(0.42 0.1 160);
+    --poster-6-ink: oklch(0.9 0.14 110);
+    --sidebar: oklch(0.975 0.008 205);
+    --sidebar-foreground: oklch(0.2 0.03 205);
     --sidebar-primary: oklch(0.6 0.118 184.704);
     --sidebar-primary-foreground: oklch(0.984 0.014 180.72);
-    --sidebar-accent: oklch(0.967 0.001 286.375);
-    --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-    --sidebar-border: oklch(0.92 0.004 286.32);
-    --sidebar-ring: oklch(0.705 0.015 286.067);
+    --sidebar-accent: oklch(0.94 0.014 200);
+    --sidebar-accent-foreground: oklch(0.25 0.035 205);
+    --sidebar-border: oklch(0.915 0.01 205);
+    --sidebar-ring: oklch(0.62 0.07 190);
 }
 
 .dark {
-    --background: oklch(0.141 0.005 285.823);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.21 0.006 285.885);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.21 0.006 285.885);
-    --popover-foreground: oklch(0.985 0 0);
+    --background: oklch(0.165 0.022 205);
+    --foreground: oklch(0.985 0.005 195);
+    --card: oklch(0.21 0.028 205);
+    --card-foreground: oklch(0.985 0.005 195);
+    --popover: oklch(0.23 0.03 205);
+    --popover-foreground: oklch(0.985 0.005 195);
     --primary: oklch(0.437 0.078 188.216);
     --primary-foreground: oklch(0.984 0.014 180.72);
-    --secondary: oklch(0.274 0.006 286.033);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.274 0.006 286.033);
-    --muted-foreground: oklch(0.705 0.015 286.067);
-    --accent: oklch(0.274 0.006 286.033);
-    --accent-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.27 0.03 205);
+    --secondary-foreground: oklch(0.985 0.005 195);
+    --muted: oklch(0.27 0.03 205);
+    --muted-foreground: oklch(0.73 0.03 200);
+    --accent: oklch(0.3 0.036 203);
+    --accent-foreground: oklch(0.985 0.005 195);
     --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.552 0.016 285.938);
+    --border: oklch(0.9 0.04 200 / 14%);
+    --input: oklch(0.78 0.03 200 / 55%); /* 3.4:1 on the dark page and cards */
+    --ring: oklch(0.6 0.07 190);
     --chart-1: oklch(0.855 0.138 181.071);
     --chart-2: oklch(0.704 0.14 182.503);
     --chart-3: oklch(0.6 0.118 184.704);
     --chart-4: oklch(0.511 0.096 186.391);
     --chart-5: oklch(0.437 0.078 188.216);
-    --sidebar: oklch(0.21 0.006 285.885);
-    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar: oklch(0.19 0.026 205);
+    --sidebar-foreground: oklch(0.985 0.005 195);
     --sidebar-primary: oklch(0.704 0.14 182.503);
     --sidebar-primary-foreground: oklch(0.277 0.046 192.524);
-    --sidebar-accent: oklch(0.274 0.006 286.033);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.552 0.016 285.938);
+    --sidebar-accent: oklch(0.28 0.034 203);
+    --sidebar-accent-foreground: oklch(0.985 0.005 195);
+    --sidebar-border: oklch(0.9 0.04 200 / 14%);
+    --sidebar-ring: oklch(0.6 0.07 190);
 }
 
 @layer base {
@@ -133,6 +177,35 @@
     }
   html {
     @apply font-sans;
+    }
+  html.dark {
+    color-scheme: dark;
+    }
+  /*
+   * The keyboard focus ring of anything that does not draw its own (a plain link, a summary): 2px in the element's own text colour,
+   * which already has at least 4.5:1 against its own ground in either theme and on the ink scenes, so the ring clears 3:1 (WCAG 1.4.11)
+   * wherever it lands. :where() keeps it at zero specificity, so a component's own ring or `outline-none` still wins.
+   */
+  :where(a, button, summary, [role="button"], [role="tab"], [role="menuitem"], [tabindex]):focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+    }
+  /* the parts the browser draws: selection, caret, native controls and scrollbars take the palette */
+  html {
+    accent-color: var(--primary);
+    caret-color: var(--primary);
+    scrollbar-color: color-mix(in oklab, var(--foreground) 32%, transparent) transparent;
+    }
+  html.dark {
+    caret-color: var(--chart-2);
+    }
+  /* Thai has no word spaces: let the browser even out the last line of a paragraph so a single word is not left alone */
+  p {
+    text-wrap: pretty;
+    }
+  ::selection {
+    background: var(--sun);
+    color: var(--sun-foreground);
     }
 }
 

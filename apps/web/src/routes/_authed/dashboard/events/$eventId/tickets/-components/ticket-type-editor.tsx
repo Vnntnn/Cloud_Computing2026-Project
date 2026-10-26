@@ -1,9 +1,7 @@
 import { useStore } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import {
-  ArrowLeft, Banknote, ClipboardList, Hash, Info, Lock, ShoppingCart, Ticket, TicketPlus, Trash2, Type, Users,
-} from "lucide-react";
+import { ArrowLeft, ClipboardList, Info, Lock, Ticket, TicketPlus, Trash2, Users } from "lucide-react";
 import { useRef, useState } from "react";
 import { TextField, SubmitButton } from "@/components/form-field";
 import { LeaveGuard } from "@/components/leave-guard";
@@ -14,10 +12,11 @@ import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldTit
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/components/ui/toast";
 import { eventClient } from "@/lib/api";
+import { useT } from "@/i18n";
 import { problemMessage } from "@/lib/auth-errors";
 import { enrollmentsKey, type Availability } from "@/lib/enrollments";
 import { eventDetailKey, problemCode, type EventDetail } from "@/lib/events";
-import { formatPrice } from "@/lib/format";
+import { formatNumber, formatPrice } from "@/lib/format";
 import { hasRole, useSession } from "@/lib/session";
 import { kindInfo, MIN_PAID_PRICE, ticketTypeProblemFields, type TicketKind, type TicketType } from "@/lib/ticket-types";
 import { focusFirstInvalid } from "../../../-components/event-form";
@@ -39,6 +38,7 @@ type TicketTypeEditorProps = {
 
 /** Creates a ticket type, or edits one (saving through the floating save bar, like the event editor). */
 export function TicketTypeEditor({ event, ticketType, availability }: TicketTypeEditorProps) {
+  const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: session } = useSession();
@@ -63,7 +63,7 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
   const form = useTicketTypeForm({
     defaultValues: baseline,
     onSubmitInvalid: () => {
-      toast.add({ type: "error", title: "กรุณาแก้ไขช่องที่ยังไม่ถูกต้อง" });
+      toast.add({ type: "error", title: t("eventAdmin.editor.invalid") });
       focusFirstInvalid(ROOT);
     },
     onSubmit: async ({ value }) => {
@@ -71,7 +71,7 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
       if (!ticketType) {
         const { data, error } = await tickets.post(toPayload(value));
         if (error) return showProblem(error);
-        toast.add({ type: "success", title: `สร้าง “${data.name}” แล้ว` });
+        toast.add({ type: "success", title: t("eventAdmin.typeEditor.created", { name: data.name }) });
         allowLeave.current = true;
         await refresh();
         await navigate({ to: "/dashboard/events/$eventId/tickets", params: listParams });
@@ -84,7 +84,7 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
       const next = toFormValues(data);
       setBaseline(next);
       form.reset(next);
-      toast.add({ type: "success", title: "บันทึกแล้ว" });
+      toast.add({ type: "success", title: t("eventAdmin.editor.saved") });
       void refresh();
     },
   });
@@ -116,11 +116,11 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
           className={buttonVariants({ variant: "ghost", size: "sm", className: "self-start" })}
         >
           <ArrowLeft data-icon="inline-start" />
-          ประเภทตั๋วทั้งหมด
+          {t("eventAdmin.ticketType.notFound.back")}
         </Link>
         <h2 className="flex min-w-0 items-center gap-2 text-xl font-bold">
-          {ticketType ? <Ticket className="size-5 shrink-0 text-primary" /> : <TicketPlus className="size-5 shrink-0 text-primary" />}
-          <span className="truncate">{ticketType ? ticketType.name : "เพิ่มประเภทตั๋ว"}</span>
+          {ticketType ? <Ticket className="size-5 shrink-0 text-primary dark:text-chart-2" /> : <TicketPlus className="size-5 shrink-0 text-primary dark:text-chart-2" />}
+          <span className="truncate">{ticketType ? ticketType.name : t("eventAdmin.tickets.add")}</span>
         </h2>
       </header>
 
@@ -138,25 +138,24 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Info className="size-5" />
-                  รายละเอียดตั๋ว
+                  {t("eventAdmin.typeEditor.details.title")}
                 </CardTitle>
-                <CardDescription>แสดงบนหน้าอีเวนต์ให้ผู้สนใจเลือก</CardDescription>
+                <CardDescription>{t("eventAdmin.typeEditor.details.hint")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <FieldGroup>
                   <form.Field name="name">
                     {(field) => (
-                      <TextField field={field} label="ชื่อตั๋ว" icon={Type} placeholder="เช่น บัตรทั่วไป, Early Bird" maxLength={100} disabled={locked} />
+                      <TextField field={field} label={t("eventAdmin.typeEditor.details.name")} placeholder={t("eventAdmin.typeEditor.details.namePlaceholder")} maxLength={100} disabled={locked} />
                     )}
                   </form.Field>
                   <form.Field name="description">
                     {(field) => (
                       <TextField
                         field={field}
-                        label="รายละเอียด (ไม่บังคับ)"
-                        icon={ClipboardList}
+                        label={t("eventAdmin.typeEditor.details.description")}
                         multiline
-                        placeholder="เช่น สิทธิ์ที่ได้รับ หรือเงื่อนไขของตั๋ว"
+                        placeholder={t("eventAdmin.typeEditor.details.descriptionPlaceholder")}
                         disabled={locked}
                       />
                     )}
@@ -166,12 +165,11 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
                       {(field) => (
                         <TextField
                           field={field}
-                          label="ราคาต่อใบ"
-                          icon={Banknote}
+                          label={t("eventAdmin.typeEditor.details.price")}
                           type="number"
                           inputMode="numeric"
-                          suffix="บาท"
-                          description={`ใส่ 0 สำหรับตั๋วฟรี · ตั๋วที่ขายราคาอย่างน้อย ฿${MIN_PAID_PRICE}`}
+                          suffix={t("eventAdmin.typeEditor.details.baht")}
+                          description={t("eventAdmin.typeEditor.details.priceHint", { min: MIN_PAID_PRICE })}
                           disabled={locked}
                         />
                       )}
@@ -180,12 +178,11 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
                       {(field) => (
                         <TextField
                           field={field}
-                          label="ซื้อได้สูงสุดต่อบัญชี"
-                          icon={ShoppingCart}
+                          label={t("eventAdmin.typeEditor.details.maxPerUser")}
                           type="number"
                           inputMode="numeric"
-                          suffix="ใบ"
-                          description="รวมทุกครั้งที่ลงทะเบียน 1–10 ใบ"
+                          suffix={t("eventAdmin.typeEditor.details.tickets")}
+                          description={t("eventAdmin.typeEditor.details.maxPerUserHint")}
                           disabled={locked}
                         />
                       )}
@@ -195,15 +192,14 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
                         {(field) => (
                           <TextField
                             field={field}
-                            label="จำนวนตั๋วทั้งหมด"
-                            icon={Hash}
+                            label={t("eventAdmin.typeEditor.details.quota")}
                             type="number"
                             inputMode="numeric"
-                            suffix="ใบ"
+                            suffix={t("eventAdmin.typeEditor.details.tickets")}
                             description={
                               availability?.remaining != null && ticketType
-                                ? `จองไปแล้ว ${taken.toLocaleString()} ใบ ลดได้ไม่ต่ำกว่านี้`
-                                : "ปิดรับเมื่อตั๋วหมด"
+                                ? t("eventAdmin.typeEditor.details.quotaTaken", { n: formatNumber(taken) })
+                                : t("eventAdmin.typeEditor.details.quotaHint")
                             }
                             disabled={locked}
                           />
@@ -219,10 +215,10 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <ClipboardList className="size-5" />
-                  แบบฟอร์มลงทะเบียน
+                  {t("eventAdmin.typeEditor.form.title")}
                 </CardTitle>
                 <CardDescription>
-                  ผู้ซื้อกรอกให้ผู้เข้าร่วมทีละคน ตั๋ว 1 ใบต่อผู้เข้าร่วม 1 คน ลากที่ไอคอนด้านซ้ายเพื่อเรียงลำดับคำถาม
+                  {t("eventAdmin.typeEditor.form.hint")}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -236,9 +232,9 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Users className="size-5" />
-                  รูปแบบการรับตั๋ว
+                  {t("eventAdmin.typeEditor.kind.title")}
                 </CardTitle>
-                <CardDescription>ใครได้ตั๋ว และได้เมื่อไร</CardDescription>
+                <CardDescription>{t("eventAdmin.typeEditor.kind.hint")}</CardDescription>
               </CardHeader>
               <CardContent>
                 <FieldGroup>
@@ -248,7 +244,7 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
                         value={field.state.value}
                         onValueChange={(value) => field.handleChange(value as TicketKind)}
                         disabled={locked || kindLocked}
-                        aria-label="รูปแบบการรับตั๋ว"
+                        aria-label={t("eventAdmin.typeEditor.kind.title")}
                         aria-invalid={field.state.meta.isTouched && !field.state.meta.isValid}
                       >
                         {(Object.keys(kindInfo) as TicketKind[]).map((kind) => {
@@ -274,15 +270,15 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
                   {kindLocked && (
                     <p className="flex items-start gap-2 text-sm text-muted-foreground">
                       <Lock className="mt-0.5 size-4 shrink-0" />
-                      มีผู้ลงทะเบียนแล้ว จึงเปลี่ยนรูปแบบไม่ได้
+                      {t("eventAdmin.typeEditor.kind.locked")}
                     </p>
                   )}
                   {values.kind === "invite" && event.status !== "invite" && (
                     <Alert>
                       <Info />
-                      <AlertTitle>เพิ่มรายชื่อในแท็บผู้ได้รับเชิญ</AlertTitle>
+                      <AlertTitle>{t("eventAdmin.typeEditor.kind.inviteTitle")}</AlertTitle>
                       <AlertDescription>
-                        ตั๋วนี้ลงทะเบียนได้เฉพาะอีเมลในรายชื่อผู้ได้รับเชิญของอีเวนต์ คนอื่นจะเห็นตั๋วแต่กดลงทะเบียนไม่ได้
+                        {t("eventAdmin.typeEditor.kind.inviteDescription")}
                       </AlertDescription>
                     </Alert>
                   )}
@@ -295,20 +291,21 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Ticket className="size-5" />
-                    ยอดลงทะเบียน
+                    {t("eventAdmin.typeEditor.stats.title")}
                   </CardTitle>
                   <CardDescription>
-                    {formatPrice(ticketType.price)}
-                    {ticketType.price > 0 && " ต่อใบ"}
+                    {ticketType.price > 0
+                      ? t("eventAdmin.typeEditor.stats.perTicket", { price: formatPrice(ticketType.price) })
+                      : formatPrice(ticketType.price)}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <dl className="grid grid-cols-2 gap-3 text-sm">
-                    <Stat label="ยืนยันแล้ว" value={availability.confirmed} />
-                    {ticketType.price > 0 && <Stat label="รอชำระเงิน" value={availability.reserved} />}
-                    {ticketType.kind === "first_come" && <Stat label="กำลังกรอกข้อมูล" value={availability.held} />}
-                    {ticketType.kind === "approval" && <Stat label="รออนุมัติ" value={availability.pending} />}
-                    {availability.remaining !== null && <Stat label="เหลือ" value={availability.remaining} />}
+                    <Stat label={t("eventAdmin.tickets.card.confirmed")} value={availability.confirmed} />
+                    {ticketType.price > 0 && <Stat label={t("eventAdmin.tickets.card.awaitingPayment")} value={availability.reserved} />}
+                    {ticketType.kind === "first_come" && <Stat label={t("eventAdmin.typeEditor.stats.filling")} value={availability.held} />}
+                    {ticketType.kind === "approval" && <Stat label={t("eventAdmin.tickets.card.pending")} value={availability.pending} />}
+                    {availability.remaining !== null && <Stat label={t("eventAdmin.tickets.card.remaining")} value={availability.remaining} />}
                   </dl>
                 </CardContent>
               </Card>
@@ -319,14 +316,14 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-destructive">
                     <Trash2 className="size-5" />
-                    ลบประเภทตั๋ว
+                    {t("eventAdmin.tickets.delete.confirm")}
                   </CardTitle>
-                  <CardDescription>ลบได้เฉพาะประเภทที่ยังไม่มีผู้ลงทะเบียน</CardDescription>
+                  <CardDescription>{t("eventAdmin.typeEditor.delete.hint")}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Button type="button" variant="destructive" disabled={locked || held > 0} onClick={() => setDeleteOpen(true)}>
                     <Trash2 data-icon="inline-start" />
-                    ลบประเภทตั๋วนี้
+                    {t("eventAdmin.typeEditor.delete.button")}
                   </Button>
                 </CardContent>
               </Card>
@@ -349,10 +346,10 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
               <CardFooter className="flex flex-wrap justify-end gap-2">
                 <Link to="/dashboard/events/$eventId/tickets" params={listParams} className={buttonVariants({ variant: "ghost" })}>
                   <ArrowLeft data-icon="inline-start" />
-                  ยกเลิก
+                  {t("eventAdmin.typeEditor.cancel")}
                 </Link>
                 <SubmitButton pending={isSubmitting} icon={TicketPlus} disabled={locked}>
-                  สร้างประเภทตั๋ว
+                  {t("eventAdmin.typeEditor.create")}
                 </SubmitButton>
               </CardFooter>
             </Card>
@@ -379,9 +376,9 @@ export function TicketTypeEditor({ event, ticketType, availability }: TicketType
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex flex-col gap-0.5 rounded-2xl bg-muted px-3 py-2">
+    <div className="flex flex-col gap-0.5 rounded-md bg-muted px-3 py-2">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-lg font-semibold tabular-nums">{value.toLocaleString()}</dd>
+      <dd className="text-lg font-semibold tabular-nums">{formatNumber(value)}</dd>
     </div>
   );
 }

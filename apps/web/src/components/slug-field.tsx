@@ -1,10 +1,11 @@
 import type { AnyFieldApi } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
-import { CircleCheck, CircleX, Link as LinkIcon } from "lucide-react";
+import { CircleCheck, CircleX } from "lucide-react";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useT } from "@/i18n";
 import { normalizeSlugInput, SLUG_REGEX, slugAvailableQueryOptions } from "@/lib/events";
 
 type SlugFieldProps = {
@@ -19,6 +20,7 @@ type SlugFieldProps = {
 
 /** `/events/<slug>` input that checks with the server, as you type, whether the link is free. */
 export function SlugField({ field, excludeId, current, optional, disabled }: SlugFieldProps) {
+  const t = useT();
   const value: string = field.state.value ?? "";
   const debounced = useDebouncedValue(value, 400);
   const wellFormed = value.length >= 3 && value.length <= 80 && SLUG_REGEX.test(value);
@@ -27,28 +29,28 @@ export function SlugField({ field, excludeId, current, optional, disabled }: Slu
   const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid;
 
   let status: React.ReactNode = null;
-  let hint: React.ReactNode = optional && !value ? "เว้นว่างไว้ ระบบจะสร้างลิงก์ให้อัตโนมัติ" : "ใช้ a-z, 0-9 และ - เช่น music-fest-2026";
+  let hint: React.ReactNode = optional && !value ? t("shared.slug.hintOptional") : t("shared.slug.hintFormat");
   if (value && !wellFormed) {
-    hint = "ยาว 3–80 ตัวอักษร ใช้ a-z, 0-9 และ - (ไม่ขึ้นต้นหรือลงท้ายด้วย -)";
+    hint = t("shared.slug.hintMalformed");
   } else if (value && value === current) {
-    hint = "ลิงก์ปัจจุบันของอีเวนต์นี้";
+    hint = t("shared.slug.hintCurrent");
   } else if (wellFormed && (isFetching || debounced !== value)) {
     status = <Spinner />;
-    hint = "กำลังตรวจสอบ...";
+    hint = t("shared.slug.hintChecking");
   } else if (checkable && available === true) {
-    status = <CircleCheck className="text-primary" />;
-    hint = "ใช้ลิงก์นี้ได้";
+    status = <CircleCheck className="text-primary dark:text-chart-2" />;
+    hint = t("shared.slug.hintAvailable");
   } else if (checkable && available === false) {
     status = <CircleX className="text-destructive" />;
-    hint = "ลิงก์นี้ถูกใช้แล้วหรือสงวนไว้ กรุณาเลือกลิงก์อื่น";
+    hint = t("shared.slug.hintTaken");
   }
   const taken = checkable && available === false;
 
   return (
     <Field data-invalid={isInvalid || taken}>
       <FieldLabel htmlFor={field.name}>
-        <LinkIcon className="size-4 text-muted-foreground" />
-        ลิงก์ของอีเวนต์{optional && " (ไม่บังคับ)"}
+        {t("shared.slug.label")}
+        {optional && t("shared.slug.optional")}
       </FieldLabel>
       <InputGroup data-disabled={disabled}>
         <InputGroupAddon>
