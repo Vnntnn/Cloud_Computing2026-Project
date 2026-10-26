@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, CalendarX, Clock, MapPin, Search, Telescope } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { HeroTicket3D } from "@/components/hero-ticket-3d";
+import { HeroTicket3D, type HeroCursor } from "@/components/hero-ticket-3d";
 import { InkScene } from "@/components/navbar";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +25,8 @@ export function HomeHero({ onSearch, edge = "sand" }: { onSearch: (query: string
   const section = useRef<HTMLElement>(null);
   const plate = useRef<HTMLDivElement>(null);
   const lamp = useRef({ x: 0, y: 0, tx: 0, ty: 0, raf: 0, on: false });
+  // the same mouse, in client pixels, for the 3D tickets' lamp: it lights them where the lantern pool opens on the photograph
+  const cursor = useRef<HeroCursor>({ x: 0, y: 0, on: false });
   useEffect(() => () => cancelAnimationFrame(lamp.current.raf), []);
 
   // the lantern: the pointer's place, measured on the photograph (the mask lives there), eases into two CSS variables, with no React state
@@ -41,6 +43,9 @@ export function HomeHero({ onSearch, edge = "sand" }: { onSearch: (query: string
     if (e.pointerType !== "mouse" || !matchMedia("(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)").matches) return;
     const box = plate.current?.getBoundingClientRect();
     if (!box || !section.current) return;
+    cursor.current.x = e.clientX;
+    cursor.current.y = e.clientY;
+    cursor.current.on = true;
     const l = lamp.current;
     l.tx = e.clientX - box.left;
     l.ty = e.clientY - box.top;
@@ -55,6 +60,7 @@ export function HomeHero({ onSearch, edge = "sand" }: { onSearch: (query: string
   };
   const putOut = () => {
     lamp.current.on = false;
+    cursor.current.on = false;
     delete section.current?.dataset.lit;
   };
 
@@ -83,7 +89,7 @@ export function HomeHero({ onSearch, edge = "sand" }: { onSearch: (query: string
           className="size-full object-cover object-[72%_50%]"
         />
       </div>
-      <HeroTicket3D className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[24rem] w-full lg:inset-y-0 lg:right-0 lg:left-auto lg:h-auto lg:w-[54%]" />
+      <HeroTicket3D cursor={cursor} className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[24rem] w-full transition-opacity duration-500 lg:inset-y-0 lg:right-0 lg:left-auto lg:h-auto lg:w-[54%]" />
 
       <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-10 px-4 pt-[17.5rem] pb-8 lg:justify-center lg:gap-12 lg:pt-16 lg:pb-10">
         <div className="flex flex-col gap-7 lg:gap-8">

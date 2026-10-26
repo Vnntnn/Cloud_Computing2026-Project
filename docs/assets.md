@@ -65,7 +65,7 @@ mapping from category to colourway is `colourwayOf()` in `apps/web/src/lib/poste
 
 ## Original artwork (no external source)
 
-The three glossy tickets over the home hero (`apps/web/src/components/hero-ticket-3d.tsx`) are modelled in code with three.js (an inflated extrusion of the ticket outline, a clear-coat material, three.js's built-in `RoomEnvironment` for the reflections) and wear the theme's colours; the printed wordmark is drawn on a canvas. No model or texture file, nothing to license.
+The three glossy tickets over the home hero (`apps/web/src/components/hero-ticket-3d.tsx`) are modelled in code with three.js (an inflated extrusion of the ticket outline, a clear-coat material), and wear the theme's colours. The reflections are a sky painted on a 2D canvas, the paper's fleck a generated roughness map, the printed wordmark and barcode drawn on canvases, the embers a point shader. No model, texture or HDRI file, nothing to license.
 
 The canopy edge (`.canopy` in `src/effects.css`), the hour ruler (`HourRuler`), the poster and the wave lines are drawn in CSS
 and inline SVG from geometry, so there is nothing to license or credit for them. No image was generated with an AI tool and
