@@ -472,7 +472,10 @@ export function HeroTicket3D({ className, cursor }: { className?: string; cursor
         camera.position.set(narrow ? 0.3 : 0, narrow ? -1 : 0, narrow ? 13 : 9);
         camera.updateProjectionMatrix();
         // the fog starts at the front ticket whatever the camera's distance, so the tickets behind fade, never the one in front
-        if (scene.fog instanceof THREE.Fog) (scene.fog.near = camera.position.z), (scene.fog.far = camera.position.z + 10);
+        if (scene.fog instanceof THREE.Fog) {
+          scene.fog.near = camera.position.z;
+          scene.fog.far = camera.position.z + 10;
+        }
         emberU.uFocus.value = camera.position.z;
         emberU.uPx.value = renderer.getPixelRatio() * ch * 0.5;
         emberU.uFadeY.value = narrow ? 0.32 : 0;
