@@ -17,8 +17,9 @@ mock.module("@app/auth-guard", () => ({
 
 const { registration: app } = await import("../src/app");
 const {
-  db, enrollments, eq, eventCategories, eventInvitations, events, inArray, ticketTypeQuestions, ticketTypes, users,
+  db, enrollments, eq, eventCategories, eventInvitations, events, inArray, notificationOutbox, ticketTypeQuestions, ticketTypes, users,
 } = await import("@app/db");
+const { dispatchNotifications } = await import("@app/tickets");
 
 const runId = crypto.randomUUID().slice(0, 8);
 const userIds: Record<string, string> = {};
@@ -297,6 +298,129 @@ describe("approval", () => {
     expect(rejected.status).toBe("rejected");
     // raw: the template escapes it
     expect(enqueueMail.mock.calls[0]![0]).toMatchObject({ template: "enrollment-rejected", props: { reason: "เต็มแล้ว <b>" } });
+  });
+
+  test("the decision mail is recorded with the decision: a queue that is down, or a crash after the commit, only delays it; it is sent once, and not when it has gone stale", async () => {
+    const eventId = await createEvent();
+    const type = await createType(eventId, { kind: "approval", price: 500 });
+    const outboxOf = (id: string) => db.select().from(notificationOutbox).where(eq(notificationOutbox.enrollmentId, id));
+
+    // approving a paid one with the queue down: the decision stands, the mail waits (the process "died" before sending it)
+    const first = await json(await enroll(type.id));
+    enqueueMail.mockClear();
+    enqueueMail.mockImplementation(async () => {
+      throw new Error("queue down");
+    });
+    const approvedWhileDown = await request("POST", `/enrollments/${first.id}/approve`, "owner");
+    expect((await json(approvedWhileDown)).status).toBe("awaiting_payment");
+    const [owed] = await outboxOf(first.id);
+    expect(owed).toMatchObject({ kind: "enrollment-approved", state: "pending", dedupeKey: `enrollment-approved:${first.id}` });
+    expect(owed!.attempts).toBe(1);
+    expect(owed!.nextAttemptAt!.getTime()).toBeGreaterThan(Date.now());
+
+    // later (a restarted worker, the backoff passed) and with the queue back: sent once
+    enqueueMail.mockImplementation(async () => {});
+    enqueueMail.mockClear();
+    await db.update(notificationOutbox).set({ nextAttemptAt: new Date(Date.now() - 1000) }).where(eq(notificationOutbox.enrollmentId, first.id));
+    expect(await dispatchNotifications({ enrollmentId: first.id })).toEqual({ sent: 1, failed: 0, skipped: 0 });
+    expect(await dispatchNotifications({ enrollmentId: first.id })).toEqual({ sent: 0, failed: 0, skipped: 0 });
+    expect(enqueueMail).toHaveBeenCalledTimes(1);
+    expect(enqueueMail.mock.calls[0]![0]).toMatchObject({ to: emailOf("buyer"), template: "enrollment-approved", props: { payBy: expect.any(String) } });
+
+    // a rejection with the queue down, sent later with its reason
+    const second = await json(await enroll(type.id));
+    enqueueMail.mockImplementation(async () => {
+      throw new Error("queue down");
+    });
+    expect((await json(await request("POST", `/enrollments/${second.id}/reject`, "owner", { note: "full" }))).status).toBe("rejected");
+    enqueueMail.mockImplementation(async () => {});
+    enqueueMail.mockClear();
+    await db.update(notificationOutbox).set({ nextAttemptAt: new Date(Date.now() - 1000) }).where(eq(notificationOutbox.enrollmentId, second.id));
+    expect(await dispatchNotifications({ enrollmentId: second.id })).toEqual({ sent: 1, failed: 0, skipped: 0 });
+    expect(enqueueMail.mock.calls[0]![0]).toMatchObject({ template: "enrollment-rejected", props: { reason: "full" } });
+
+    // an approval that is stale by the time it would be sent (the hold lapsed meanwhile) is skipped, not sent
+    const third = await json(await enroll(type.id));
+    enqueueMail.mockImplementation(async () => {
+      throw new Error("queue down");
+    });
+    await request("POST", `/enrollments/${third.id}/approve`, "owner");
+    await db.update(enrollments).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(enrollments.id, third.id));
+    enqueueMail.mockImplementation(async () => {});
+    enqueueMail.mockClear();
+    await db.update(notificationOutbox).set({ nextAttemptAt: new Date(Date.now() - 1000) }).where(eq(notificationOutbox.enrollmentId, third.id));
+    expect(await dispatchNotifications({ enrollmentId: third.id })).toEqual({ sent: 0, failed: 0, skipped: 1 });
+    expect(enqueueMail).not.toHaveBeenCalled();
+
+    // a decision that is refused leaves no mail behind (nothing rolled back is announced)
+    const before = (await outboxOf(first.id)).length;
+    expect((await request("POST", `/enrollments/${first.id}/approve`, "owner")).status).toBe(409);
+    expect((await request("POST", `/enrollments/${first.id}/reject`, "owner", {})).status).toBe(409);
+    expect((await outboxOf(first.id)).length).toBe(before);
+  });
+
+  test("only a pending enrollment can be approved or rejected, and only once", async () => {
+    const eventId = await createEvent();
+    const free = await createType(eventId, { kind: "approval", maxPerUser: 10 });
+    const paid = await createType(eventId, { kind: "approval", price: 500, maxPerUser: 10 });
+    const decide = async (id: string, action: "approve" | "reject", as = "owner") => {
+      const response = await request("POST", `/enrollments/${id}/${action}`, as, action === "reject" ? {} : undefined);
+      return response.status === 200 ? "ok" : (await json(response)).code;
+    };
+
+    // rejected: can't be approved or rejected again
+    const rejected = await json(await enroll(free.id));
+    expect(await decide(rejected.id, "reject")).toBe("ok");
+    expect(await decide(rejected.id, "approve")).toBe("ENROLLMENT_NOT_PENDING");
+    expect(await decide(rejected.id, "reject")).toBe("ENROLLMENT_NOT_PENDING");
+
+    // approved and confirmed: can't be rejected
+    const confirmed = await json(await enroll(free.id));
+    expect(await decide(confirmed.id, "approve")).toBe("ok");
+    expect(await decide(confirmed.id, "reject")).toBe("ENROLLMENT_NOT_PENDING");
+
+    // approved and waiting for payment: can't be rejected or approved again, even once the window lapsed
+    const waiting = await json(await enroll(paid.id));
+    expect(await decide(waiting.id, "approve")).toBe("ok");
+    expect(await decide(waiting.id, "reject")).toBe("ENROLLMENT_NOT_PENDING");
+    expect(await decide(waiting.id, "approve")).toBe("ENROLLMENT_NOT_PENDING");
+    await db.update(enrollments).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(enrollments.id, waiting.id));
+    expect((await json(await request("GET", `/enrollments/${waiting.id}`, "buyer"))).status).toBe("expired");
+    expect(await decide(waiting.id, "approve")).toBe("ENROLLMENT_NOT_PENDING");
+    expect(await decide(waiting.id, "reject")).toBe("ENROLLMENT_NOT_PENDING");
+
+    // cancelled (refunded): closed for good
+    const cancelled = await json(await enroll(free.id));
+    await db.update(enrollments).set({ status: "cancelled" }).where(eq(enrollments.id, cancelled.id));
+    expect(await decide(cancelled.id, "approve")).toBe("ENROLLMENT_NOT_PENDING");
+
+    expect(await decide(crypto.randomUUID(), "approve")).toBe("ENROLLMENT_NOT_FOUND");
+    for (const action of ["approve", "reject"] as const) {
+      const response = await request("POST", `/enrollments/${rejected.id}/${action}`, undefined, action === "reject" ? {} : undefined);
+      expect(response.status).toBe(401);
+    }
+  });
+
+  test("two approvals at once approve once and mail once", async () => {
+    const eventId = await createEvent();
+    const type = await createType(eventId, { kind: "approval" });
+    const enrollment = await json(await enroll(type.id));
+    enqueueMail.mockClear();
+    const [a, b] = await Promise.all([
+      request("POST", `/enrollments/${enrollment.id}/approve`, "owner"),
+      request("POST", `/enrollments/${enrollment.id}/approve`, "admin"),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    expect((await json(a.status === 409 ? a : b)).code).toBe("ENROLLMENT_NOT_PENDING");
+    expect(mailedTo()).toEqual([emailOf("buyer")]);
+
+    // approving and rejecting at once: one wins, never both
+    const second = await json(await enroll(type.id));
+    const [approve, reject] = await Promise.all([
+      request("POST", `/enrollments/${second.id}/approve`, "owner"),
+      request("POST", `/enrollments/${second.id}/reject`, "owner", {}),
+    ]);
+    expect([approve.status, reject.status].sort()).toEqual([200, 409]);
   });
 
   test("the organizer lists enrollments with counts per status, and finds attendees by email", async () => {

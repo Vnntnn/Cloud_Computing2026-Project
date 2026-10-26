@@ -5,7 +5,7 @@ const enqueueMail = mock(async () => {});
 mock.module("@app/mail", () => ({ enqueueMail }));
 
 const { authentication } = await import("../src/app");
-const { db, eq, inArray, users } = await import("@app/db");
+const { db, eq, inArray, notificationOutbox, organizerApplications, users } = await import("@app/db");
 
 const origin = process.env.BETTER_AUTH_URL ?? "http://localhost:5173";
 const runId = crypto.randomUUID().slice(0, 8);
@@ -58,6 +58,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // the decision mails these applications recorded (the outbox points at the application by id, not by a foreign key)
+  const ids = (await db.select({ id: users.id }).from(users).where(inArray(users.email, createdEmails))).map((r) => r.id);
+  if (ids.length) {
+    await db
+      .delete(notificationOutbox)
+      .where(inArray(notificationOutbox.subjectId, db.select({ id: organizerApplications.id }).from(organizerApplications).where(inArray(organizerApplications.userId, ids))));
+  }
   await db.delete(users).where(inArray(users.email, createdEmails));
 });
 

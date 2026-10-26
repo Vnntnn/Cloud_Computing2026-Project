@@ -17,9 +17,14 @@ export const sqs = new SQSClient({
 
 export const mailQueueUrl = process.env.MAIL_QUEUE_URL!;
 
-export async function enqueueMail(message: MailMessage) {
+// A queue that stops answering must fail the send (every caller retries it through the outbox or logs it), not hold a request, a
+// webhook or a shutdown. The SDK honours the abort signal, including across its own retries: the whole call ends at the timeout.
+export const SEND_TIMEOUT_MS = 10_000;
+
+export async function enqueueMail(message: MailMessage, { timeoutMs = SEND_TIMEOUT_MS }: { timeoutMs?: number } = {}) {
   await sqs.send(
     new SendMessageCommand({ QueueUrl: mailQueueUrl, MessageBody: JSON.stringify(message) }),
+    { abortSignal: AbortSignal.timeout(timeoutMs) },
   );
 }
 

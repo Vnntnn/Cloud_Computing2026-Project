@@ -1,4 +1,4 @@
-import { and, db, desc, eq, organizerApplications, users } from "@app/db";
+import { and, db, desc, dispatchNotifications, eq, organizerApplications, queueNotifications, users } from "@app/db";
 import { enqueueMail, type MailContent } from "@app/mail";
 import { HTTPError } from "elysia";
 import { revokeCachedSessions } from "../../libs/auth";
@@ -92,6 +92,20 @@ export async function listApplications({ status, userId }: OrganizerApplicationM
   return rows.map(({ application, applicant }) => ({ ...toApplication(application), applicant }));
 }
 
+/**
+ * The mail about an application's decision, recorded in the transaction that saves the decision (the notification outbox,
+ * packages/db), so a crash after the commit can't lose it. It is sent after the commit, and by the payment service's reconciler
+ * if that didn't happen; and when sent, the application is looked at again: it has to still be in the state the mail announces.
+ */
+async function recordDecisionMail(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], row: Row, kind: "organizer-approved" | "organizer-rejected", compose: (name: string) => MailContent) {
+  const [user] = await tx.select({ email: users.email, name: users.name }).from(users).where(eq(users.id, row.userId));
+  if (!user) return;
+  await queueNotifications(tx, [{ key: `${kind}:${row.id}`, kind, subjectId: row.id, message: { to: user.email, ...compose(user.name) } }]);
+}
+
+// Not awaited: the review is already saved and its mail recorded; a failure here is retried by the outbox.
+const sendDecisionMail = (row: Row) => void dispatchNotifications(enqueueMail, { subjectId: row.id });
+
 export async function approveApplication(id: string, reviewerId: string) {
   const approved = await db.transaction(async (tx) => {
     const [row] = await tx
@@ -105,40 +119,41 @@ export async function approveApplication(id: string, reviewerId: string) {
       .update(users)
       .set({ role: "organizer" })
       .where(and(eq(users.id, row.userId), eq(users.role, "user")));
+    await recordDecisionMail(tx, row, "organizer-approved", (name) => ({
+      template: "organizer-approved",
+      props: { name, organizationName: row.organizationName, url: `${appUrl}/dashboard` },
+    }));
     return row;
   });
   if (!approved) return reviewFailure(id);
 
   await revokeCachedSessions(approved.userId);
-  notifyApplicant(approved, (name) => ({
-    template: "organizer-approved",
-    props: { name, organizationName: approved.organizationName, url: `${appUrl}/dashboard` },
-  }));
+  sendDecisionMail(approved);
   return toApplication(approved);
 }
 
 export async function rejectApplication(id: string, reviewerId: string, note?: string) {
-  const [rejected] = await db
-    .update(organizerApplications)
-    .set({
-      status: "rejected",
-      reviewedBy: reviewerId,
-      reviewedAt: new Date(),
-      reviewNote: note?.trim() || null,
-    })
-    .where(isPending(id))
-    .returning();
+  const rejected = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(organizerApplications)
+      .set({
+        status: "rejected",
+        reviewedBy: reviewerId,
+        reviewedAt: new Date(),
+        reviewNote: note?.trim() || null,
+      })
+      .where(isPending(id))
+      .returning();
+    if (!row) return null;
+    await recordDecisionMail(tx, row, "organizer-rejected", (name) => ({
+      template: "organizer-rejected",
+      props: { name, organizationName: row.organizationName, note: row.reviewNote, url: `${appUrl}/profile/organizer` },
+    }));
+    return row;
+  });
   if (!rejected) return reviewFailure(id);
 
-  notifyApplicant(rejected, (name) => ({
-    template: "organizer-rejected",
-    props: {
-      name,
-      organizationName: rejected.organizationName,
-      note: rejected.reviewNote,
-      url: `${appUrl}/profile/organizer`,
-    },
-  }));
+  sendDecisionMail(rejected);
   return toApplication(rejected);
 }
 
@@ -151,12 +166,3 @@ async function reviewFailure(id: string) {
 }
 
 const appUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:5173";
-
-// Not awaited: the review is already saved, and the queue retries delivery on its own.
-function notifyApplicant(row: Row, compose: (name: string) => MailContent) {
-  db.select({ email: users.email, name: users.name })
-    .from(users)
-    .where(eq(users.id, row.userId))
-    .then(([user]) => user && enqueueMail({ to: user.email, ...compose(user.name) }))
-    .catch((error) => console.error("Failed to enqueue organizer application mail", error));
-}

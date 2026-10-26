@@ -8,6 +8,7 @@ import * as eventInvitation from "../emails/event-invitation";
 import * as orderCancelled from "../emails/order-cancelled";
 import * as organizerApproved from "../emails/organizer-approved";
 import * as organizerRejected from "../emails/organizer-rejected";
+import * as refundCanceled from "../emails/refund-canceled";
 import * as refundFailed from "../emails/refund-failed";
 import * as refundSystem from "../emails/refund-system";
 import * as resetPassword from "../emails/reset-password";
@@ -32,6 +33,7 @@ export const templates: { [K in MailTemplate]: Template<K> } = {
   "order-cancelled": orderCancelled,
   "ticket-cancelled": ticketCancelled,
   "refund-failed": refundFailed,
+  "refund-canceled": refundCanceled,
 };
 
 // The logo goes inline with every mail, so it shows without loading anything (even from localhost).

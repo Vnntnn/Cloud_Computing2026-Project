@@ -391,6 +391,82 @@ describe("refund webhooks", () => {
     });
     expect(unrecorded.status).toBe(500);
   });
+
+  test("a stale in-progress event delivered after the refund succeeded doesn't move it back", async () => {
+    nextStatus = "pending";
+    const { id, paymentId } = await order(await ticketType());
+    await buyerRefund(id);
+    const stripeRefundId = (await refundsOf(id))[0]!.stripeRefundId!;
+    const event = (status: string) => ({ id: stripeRefundId, object: "refund", status, metadata: { paymentId } });
+
+    await webhook("refund.updated", event("succeeded"));
+    await webhook("refund.updated", event("pending"));
+    await webhook("refund.updated", event("requires_action"));
+    expect((await refundsOf(id))[0]!.status).toBe("succeeded");
+
+    // a succeeded refund can still fail later
+    await webhook("refund.failed", event("failed"));
+    expect((await refundsOf(id))[0]!.status).toBe("failed");
+  });
+});
+
+describe("repeated requests and access", () => {
+  test("two refund requests at once refund once: the second is told it's already refunded", async () => {
+    const type = await ticketType();
+    const { id } = await order(type);
+    const [a, b] = await Promise.all([buyerRefund(id), buyerRefund(id)]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    expect((await json(a.status === 409 ? a : b)).code).toBe("ALREADY_REFUNDED");
+    expect(refundsCreate).toHaveBeenCalledTimes(1);
+    expect(await refundsOf(id)).toHaveLength(1);
+    expect(await seatsTaken(db, type.ticketTypeId)).toBe(0);
+    // one cancellation mail per recipient
+    expect(mailedTo()).toEqual([emailOf("buyer"), emailOf("guest")].sort());
+  });
+
+  test("the buyer and the organizer asking at once refund once; the organizer can't refund it again later", async () => {
+    const { id } = await order(await ticketType());
+    const [a, b] = await Promise.all([buyerRefund(id), organizerRefund(id)]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    expect(refundsCreate).toHaveBeenCalledTimes(1);
+    expect((await json(await organizerRefund(id))).code).toBe("ALREADY_REFUNDED");
+    expect((await json(await organizerRefund(id, "admin"))).code).toBe("ALREADY_REFUNDED");
+  });
+
+  test("an organizer can't refund an order that was never paid for", async () => {
+    const type = await ticketType();
+    expect((await json(await organizerRefund((await order(type, { paid: false })).id))).code).toBe("NOT_REFUNDABLE");
+    expect((await json(await organizerRefund((await order(type, { status: "pending" })).id))).code).toBe("NOT_REFUNDABLE");
+    const [row] = await db
+      .insert(enrollments)
+      .values({
+        ...type,
+        buyerId: userIds.buyer,
+        quantity: 1,
+        unitPrice: "300.00",
+        status: "awaiting_payment",
+        expiresAt: new Date(Date.now() + 35 * 60_000),
+      })
+      .returning({ id: enrollments.id });
+    expect((await json(await organizerRefund(row!.id))).code).toBe("NOT_REFUNDABLE");
+    expect((await json(await buyerRefund(row!.id))).code).toBe("NOT_REFUNDABLE");
+    expect(refundsCreate).not.toHaveBeenCalled();
+    // nothing was cancelled: the free order, the pending one and the held one still count
+    expect(await seatsTaken(db, type.ticketTypeId)).toBe(5);
+  });
+
+  test("signed-out callers are refused, and an unknown order is a 404", async () => {
+    const { id } = await order(await ticketType());
+    const buyer = await buyerRefund(id, "nobody");
+    expect(buyer.status).toBe(401);
+    expect((await json(buyer)).code).toBe("UNAUTHORIZED");
+    expect((await organizerRefund(id, "nobody")).status).toBe(401);
+    expect((await request("GET", `/events/${(await ticketType()).eventId}/refunds`, "nobody")).status).toBe(401);
+    expect((await json(await buyerRefund(crypto.randomUUID()))).code).toBe("ENROLLMENT_NOT_FOUND");
+    expect((await json(await organizerRefund(crypto.randomUUID()))).code).toBe("ENROLLMENT_NOT_FOUND");
+    expect((await enrollmentOf(id)).status).toBe("confirmed");
+    expect(refundsCreate).not.toHaveBeenCalled();
+  });
 });
 
 describe("event refund history", () => {
