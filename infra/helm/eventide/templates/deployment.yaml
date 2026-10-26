@@ -14,6 +14,10 @@ metadata:
     {{- include "eventide.labels" (dict "name" $name "root" $root) | nindent 4 }}
 spec:
   replicas: {{ $svc.replicas | default $root.Values.defaults.replicas }}
+  {{- if $svc.strategy }}
+  strategy:
+    {{- toYaml $svc.strategy | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ $name }}
@@ -22,6 +26,9 @@ spec:
       labels:
         {{- include "eventide.labels" (dict "name" $name "root" $root) | nindent 8 }}
     spec:
+      {{- if $svc.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ $svc.terminationGracePeriodSeconds }}
+      {{- end }}
       # Spread across nodes so one node loss can't take a whole service down.
       topologySpreadConstraints:
         - maxSkew: 1

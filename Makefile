@@ -44,6 +44,9 @@ ci-creds: ## store this lab session's infra/aws.env credentials as GitHub secret
 deploy: ## build+push the 7 images to ECR, create the k8s Secrets, helm upgrade (migrates first), roll out
 	$(AWSENV) bash scripts/deploy.sh
 
+rollback: ## gated Helm rollback (payment preflight first) — make rollback REV=<helm revision>
+	$(AWSENV) bash scripts/release.sh rollback $(REV)
+
 admin: ## promote a registered user to admin on the running cluster — make admin EMAIL=you@example.com
 	$(AWSENV) bash scripts/admin.sh $(EMAIL)
 

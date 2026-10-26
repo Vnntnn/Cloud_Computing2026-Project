@@ -10,6 +10,7 @@ One release, every workload of the v2 app:
 | `web` | Deployment + Service + Ingress `/` | `eventide/web` | Bun server: serves `dist/` + injects per-URL `<head>` (Open Graph); needs `BETTER_AUTH_URL`, `EVENT_SERVICE_URL` |
 | `files` | ExternalName Service + Ingress `/files/(.*)` | — | rewrites to `/<bucket>/$1` on S3 (EKS) or MinIO (k3d) |
 | `db-migrate` | Job, `pre-install,pre-upgrade` hook | `eventide/db-bootstrap` | `drizzle-kit migrate` before pods roll |
+| `payment` rollout | `strategy: Recreate`, grace 210 s | — | never two versions at once (refunds follow rules a release changes): `values.yaml` has the reason; `scripts/lib.test.sh` checks the rendered chart; steps in `docs/tickets.md` §10 |
 | `event` HPA | HorizontalPodAutoscaler | — | AWS overlay only, 2 → 8 on 60 % CPU |
 
 Not here: ingress-nginx and the NLB (cluster lifecycle — `20-platform/addons.tf`, `scripts/k3d-up.sh`).
