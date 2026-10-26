@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "PORT=3004 bun --env-file=../../.env --watch src/index.ts",
-    "test": "for f in test/*.test.ts; do bun --env-file=../../.env test $f || exit 1; done"
+    "test": "for f in test/*.test.ts; do bun --env-file=../../.env test $f || exit 1; done",
+    "preflight": "bun --env-file=../../.env scripts/preflight.ts"
   },
   "main": "src/index.ts",
   "dependencies": {

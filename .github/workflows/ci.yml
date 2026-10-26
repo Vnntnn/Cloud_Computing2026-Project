@@ -43,10 +43,14 @@ jobs:
           docker compose wait minio-init || true
       - run: bun install --frozen-lockfile
       - run: bash scripts/lib.test.sh
+      - run: bash scripts/release.test.sh
+      - run: bash scripts/scan-secrets.test.sh
+      - name: no credential-shaped string in a file git would share (prints where, never what)
+        run: bash scripts/scan-secrets.sh
       - run: bun run db:migrate
       - name: test the packages and services that have a test script
         run: |
-          for p in packages/auth-guard packages/storage apps/auth apps/event apps/registration apps/payment apps/mail-worker; do
+          for p in packages/auth-guard packages/storage packages/mail apps/auth apps/event apps/registration apps/payment apps/mail-worker; do
             echo "== $p =="
             (cd "$p" && bun run test) || exit 1
           done
