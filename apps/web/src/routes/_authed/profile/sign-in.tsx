@@ -1,7 +1,8 @@
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { CircleAlert, KeyRound, Link2, LockKeyhole, MailCheck, Save, ShieldCheck, Unlink } from "lucide-react";
+import { CircleAlert, KeyRound, Link2, MailCheck, Save, Unlink } from "lucide-react";
+import { useMemo } from "react";
 import { z } from "zod";
 import { SubmitButton, TextField } from "@/components/form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -11,6 +12,7 @@ import { FieldGroup } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { useT, type Translate } from "@/i18n";
 import { auth } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { providersQueryOptions } from "@/lib/providers";
@@ -19,6 +21,7 @@ import { Section } from "./-components/section";
 import { accountsQueryOptions, sessionsQueryOptions } from "./-components/queries";
 
 export const Route = createFileRoute("/_authed/profile/sign-in")({
+  staticData: { title: "account.profile.layout.nav.signIn" },
   // linkSocial comes back here with ?error=... when Google can't be linked
   validateSearch: z.object({ error: z.string().optional() }),
   component: SignInPage,
@@ -47,6 +50,7 @@ function SignInPage() {
 }
 
 function ConnectedAccountsSection({ email }: { email: string }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const { data: accounts, isPending } = useQuery(accountsQueryOptions);
   const { data: providers } = useQuery(providersQueryOptions);
@@ -75,7 +79,11 @@ function ConnectedAccountsSection({ email }: { email: string }) {
       if (error) throw error;
     },
     onSuccess: () =>
-      toast.add({ type: "success", title: "ส่งลิงก์ตั้งรหัสผ่านแล้ว", description: `ตรวจสอบอีเมล ${email}` }),
+      toast.add({
+        type: "success",
+        title: t("account.profile.signIn.connected.resetSent"),
+        description: t("account.profile.signIn.connected.resetSentHint", { email }),
+      }),
     onError: (error) => toast.add({ type: "error", title: authErrorMessage(error) }),
   });
 
@@ -88,7 +96,7 @@ function ConnectedAccountsSection({ email }: { email: string }) {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.add({ type: "success", title: "ยกเลิกการเชื่อมต่อ Google แล้ว" });
+      toast.add({ type: "success", title: t("account.profile.signIn.connected.unlinked") });
       return queryClient.invalidateQueries({ queryKey: accountsQueryOptions.queryKey });
     },
     onError: (error) => toast.add({ type: "error", title: authErrorMessage(error) }),
@@ -98,12 +106,12 @@ function ConnectedAccountsSection({ email }: { email: string }) {
     {
       key: "credential",
       icon: KeyRound,
-      label: "อีเมลและรหัสผ่าน",
+      label: t("account.profile.signIn.connected.emailPassword"),
       connected: hasCredential,
       action: hasCredential ? null : (
         <Button variant="outline" size="sm" disabled={createPassword.isPending} onClick={() => createPassword.mutate()}>
           {createPassword.isPending ? <Spinner data-icon="inline-start" /> : <MailCheck data-icon="inline-start" />}
-          สร้างรหัสผ่าน
+          {t("account.profile.signIn.connected.createPassword")}
         </Button>
       ),
     },
@@ -117,7 +125,7 @@ function ConnectedAccountsSection({ email }: { email: string }) {
         (accounts?.length ?? 0) > 1 && (
           <Button variant="outline" size="sm" disabled={unlink.isPending} onClick={() => unlink.mutate(google.id)}>
             {unlink.isPending ? <Spinner data-icon="inline-start" /> : <Unlink data-icon="inline-start" />}
-            ยกเลิกการเชื่อมต่อ
+            {t("account.profile.signIn.connected.unlink")}
           </Button>
         )
       ) : providers?.google ? (
@@ -128,24 +136,24 @@ function ConnectedAccountsSection({ email }: { email: string }) {
           onClick={() => link.mutate()}
         >
           {link.isPending || link.isSuccess ? <Spinner data-icon="inline-start" /> : <Link2 data-icon="inline-start" />}
-          เชื่อมต่อ Google
+          {t("account.profile.signIn.connected.linkGoogle")}
         </Button>
       ) : null,
     },
   ];
 
   return (
-    <Section icon={Link2} title="ช่องทางเข้าสู่ระบบ" description="เชื่อมต่อ Google เพื่อเข้าสู่ระบบได้ในคลิกเดียว">
+    <Section title={t("account.profile.signIn.connected.title")} description={t("account.profile.signIn.connected.description")}>
       {isPending ? (
         <Skeleton className="h-20" />
       ) : (
         <ul className="flex flex-col divide-y">
           {rows.map(({ key, icon: Icon, label, connected, action }) => (
-            <li key={key} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
-              <span className="flex items-center gap-2">
+            <li key={key} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3 first:pt-0 last:pb-0">
+              <span className="flex flex-wrap items-center gap-2">
                 <Icon className="size-4 text-muted-foreground" />
                 {label}
-                <Badge variant={connected ? "secondary" : "outline"}>{connected ? "เชื่อมต่อแล้ว" : "ยังไม่เชื่อมต่อ"}</Badge>
+                <Badge variant={connected ? "secondary" : "outline"}>{connected ? t("account.profile.signIn.connected.connected") : t("account.profile.signIn.connected.notConnected")}</Badge>
               </span>
               {action}
             </li>
@@ -156,22 +164,25 @@ function ConnectedAccountsSection({ email }: { email: string }) {
   );
 }
 
-const passwordSchema = z
-  .object({
-    currentPassword: z.string().min(1, "กรุณากรอกรหัสผ่านปัจจุบัน"),
-    newPassword: z.string().min(8, "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร").max(128, "รหัสผ่านยาวเกินไป"),
-    confirmPassword: z.string(),
-  })
-  .refine((value) => value.newPassword === value.confirmPassword, {
-    message: "รหัสผ่านไม่ตรงกัน",
-    path: ["confirmPassword"],
-  });
+const passwordSchema = (t: Translate) =>
+  z
+    .object({
+      currentPassword: z.string().min(1, t("account.profile.signIn.password.errors.currentRequired")),
+      newPassword: z.string().min(8, t("account.profile.signIn.password.errors.min")).max(128, t("account.profile.signIn.password.errors.max")),
+      confirmPassword: z.string(),
+    })
+    .refine((value) => value.newPassword === value.confirmPassword, {
+      message: t("account.profile.signIn.password.errors.mismatch"),
+      path: ["confirmPassword"],
+    });
 
 function ChangePasswordSection() {
+  const t = useT();
+  const schema = useMemo(() => passwordSchema(t), [t]);
   const queryClient = useQueryClient();
   const form = useForm({
     defaultValues: { currentPassword: "", newPassword: "", confirmPassword: "" },
-    validators: { onSubmit: passwordSchema },
+    validators: { onSubmit: schema },
     onSubmit: async ({ value }) => {
       const { error } = await auth.changePassword({
         currentPassword: value.currentPassword,
@@ -179,14 +190,18 @@ function ChangePasswordSection() {
         revokeOtherSessions: true,
       });
       if (error) return void toast.add({ type: "error", title: authErrorMessage(error) });
-      toast.add({ type: "success", title: "เปลี่ยนรหัสผ่านเรียบร้อย", description: "อุปกรณ์อื่นถูกออกจากระบบแล้ว" });
+      toast.add({
+        type: "success",
+        title: t("account.profile.signIn.password.changed"),
+        description: t("account.profile.signIn.password.changedHint"),
+      });
       form.reset();
       await queryClient.invalidateQueries({ queryKey: sessionsQueryOptions.queryKey });
     },
   });
 
   return (
-    <Section icon={LockKeyhole} title="เปลี่ยนรหัสผ่าน" description="เมื่อเปลี่ยนรหัสผ่าน อุปกรณ์อื่นทั้งหมดจะถูกออกจากระบบ">
+    <Section title={t("account.profile.signIn.password.title")} description={t("account.profile.signIn.password.description")}>
       <form
         noValidate
         onSubmit={(e) => {
@@ -197,30 +212,29 @@ function ChangePasswordSection() {
         <FieldGroup>
           <form.Field name="currentPassword">
             {(field) => (
-              <TextField field={field} label="รหัสผ่านปัจจุบัน" icon={KeyRound} type="password" autoComplete="current-password" />
+              <TextField field={field} label={t("account.profile.signIn.password.current")} type="password" autoComplete="current-password" />
             )}
           </form.Field>
           <form.Field name="newPassword">
             {(field) => (
               <TextField
                 field={field}
-                label="รหัสผ่านใหม่"
-                icon={LockKeyhole}
+                label={t("account.profile.signIn.password.new")}
                 type="password"
                 autoComplete="new-password"
-                description="อย่างน้อย 8 ตัวอักษร"
+                description={t("account.profile.signIn.password.newHint")}
               />
             )}
           </form.Field>
           <form.Field name="confirmPassword">
             {(field) => (
-              <TextField field={field} label="ยืนยันรหัสผ่านใหม่" icon={ShieldCheck} type="password" autoComplete="new-password" />
+              <TextField field={field} label={t("account.profile.signIn.password.confirm")} type="password" autoComplete="new-password" />
             )}
           </form.Field>
           <form.Subscribe selector={(state) => state.isSubmitting}>
             {(isSubmitting) => (
               <SubmitButton pending={isSubmitting} icon={Save} className="self-start">
-                เปลี่ยนรหัสผ่าน
+                {t("account.profile.signIn.password.submit")}
               </SubmitButton>
             )}
           </form.Subscribe>

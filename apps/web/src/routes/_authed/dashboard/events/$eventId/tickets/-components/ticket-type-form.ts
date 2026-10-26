@@ -1,5 +1,6 @@
 import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
+import { t } from "@/i18n";
 import {
   MAX_OPTIONS, MAX_QUESTIONS, MIN_PAID_PRICE, type QuestionType, type TicketKind, type TicketType,
 } from "@/lib/ticket-types";
@@ -92,47 +93,47 @@ const questionSchema = z
     key: z.string(),
     id: z.string().optional(),
     type: z.enum(["short_text", "long_text", "choice"]),
-    label: z.string().trim().min(1, "กรุณากรอกคำถาม").max(200, "คำถามยาวได้ไม่เกิน 200 ตัวอักษร"),
+    label: z.string().trim().min(1, { error: () => t("eventAdmin.form.errors.questionRequired") }).max(200, { error: () => t("eventAdmin.form.errors.questionTooLong") }),
     required: z.boolean(),
     options: z.array(z.string()),
   })
   .superRefine((q, ctx) => {
     if (q.type !== "choice") return;
     q.options.forEach((option, index) => {
-      if (!option.trim()) ctx.addIssue({ code: "custom", path: ["options", index], message: "กรุณากรอกตัวเลือก" });
+      if (!option.trim()) ctx.addIssue({ code: "custom", path: ["options", index], message: t("eventAdmin.form.errors.optionRequired") });
       else if (option.trim().length > 100) {
-        ctx.addIssue({ code: "custom", path: ["options", index], message: "ยาวได้ไม่เกิน 100 ตัวอักษร" });
+        ctx.addIssue({ code: "custom", path: ["options", index], message: t("eventAdmin.form.errors.optionTooLong") });
       }
     });
     const filled = q.options.map((option) => option.trim()).filter(Boolean);
-    if (q.options.length < 2) ctx.addIssue({ code: "custom", path: ["options"], message: "ต้องมีอย่างน้อย 2 ตัวเลือก" });
+    if (q.options.length < 2) ctx.addIssue({ code: "custom", path: ["options"], message: t("eventAdmin.form.errors.optionsMin") });
     if (q.options.length > MAX_OPTIONS) {
-      ctx.addIssue({ code: "custom", path: ["options"], message: `มีได้ไม่เกิน ${MAX_OPTIONS} ตัวเลือก` });
+      ctx.addIssue({ code: "custom", path: ["options"], message: t("eventAdmin.form.errors.optionsMax", { max: MAX_OPTIONS }) });
     }
     if (new Set(filled).size !== filled.length) {
-      ctx.addIssue({ code: "custom", path: ["options"], message: "ตัวเลือกต้องไม่ซ้ำกัน" });
+      ctx.addIssue({ code: "custom", path: ["options"], message: t("eventAdmin.form.errors.optionsUnique") });
     }
   });
 
 export const ticketTypeSchema = z
   .object({
     kind: z.enum(["first_come", "approval", "invite"]),
-    name: z.string().trim().min(1, "กรุณากรอกชื่อตั๋ว").max(100, "ชื่อยาวได้ไม่เกิน 100 ตัวอักษร"),
-    description: z.string().max(2000, "รายละเอียดยาวได้ไม่เกิน 2,000 ตัวอักษร"),
+    name: z.string().trim().min(1, { error: () => t("eventAdmin.form.errors.nameRequired") }).max(100, { error: () => t("eventAdmin.form.errors.nameTooLong") }),
+    description: z.string().max(2000, { error: () => t("eventAdmin.form.errors.descriptionTooLong") }),
     price: z
       .string()
-      .refine((v) => wholeNumber.test(v) && Number(v) <= 1_000_000, "ระบุราคาเป็นจำนวนเต็มบาท ไม่เกิน 1,000,000")
-      .refine((v) => Number(v) === 0 || Number(v) >= MIN_PAID_PRICE, `ตั๋วฟรีใส่ 0 ตั๋วที่ขายต้องราคาอย่างน้อย ฿${MIN_PAID_PRICE}`),
+      .refine((v) => wholeNumber.test(v) && Number(v) <= 1_000_000, { error: () => t("eventAdmin.form.errors.priceWhole") })
+      .refine((v) => Number(v) === 0 || Number(v) >= MIN_PAID_PRICE, { error: () => t("eventAdmin.form.errors.priceMin", { min: MIN_PAID_PRICE }) }),
     quota: z.string(),
     maxPerUser: z
       .string()
-      .refine((v) => wholeNumber.test(v) && Number(v) >= 1 && Number(v) <= 10, "ระบุ 1–10 ใบ"),
-    questions: z.array(questionSchema).max(MAX_QUESTIONS, `เพิ่มคำถามได้ไม่เกิน ${MAX_QUESTIONS} ข้อ`),
+      .refine((v) => wholeNumber.test(v) && Number(v) >= 1 && Number(v) <= 10, { error: () => t("eventAdmin.form.errors.maxPerUser") }),
+    questions: z.array(questionSchema).max(MAX_QUESTIONS, { error: () => t("eventAdmin.form.errors.questionsMax", { max: MAX_QUESTIONS }) }),
   })
   .superRefine((v, ctx) => {
     if (v.kind !== "first_come") return;
     if (!wholeNumber.test(v.quota) || Number(v.quota) < 1 || Number(v.quota) > 100_000) {
-      ctx.addIssue({ code: "custom", path: ["quota"], message: "ระบุจำนวนตั๋ว 1–100,000 ใบ" });
+      ctx.addIssue({ code: "custom", path: ["quota"], message: t("eventAdmin.form.errors.quota") });
     }
   });
 

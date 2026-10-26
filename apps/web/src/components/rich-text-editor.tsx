@@ -32,6 +32,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useT } from "@/i18n";
+import { formatNumber } from "@/lib/format";
 
 type RichTextEditorProps = {
   /** HTML. Changing it from outside (a reset, a save) replaces the editor's content. */
@@ -59,10 +61,12 @@ export function RichTextEditor({
   onChange,
   onUploadImage,
   allowedImagePrefix,
-  placeholder = "เล่าเรื่องราวของอีเวนต์: ไฮไลต์ กำหนดการ และสิ่งที่ผู้เข้าร่วมจะได้รับ",
+  placeholder,
   disabled,
   invalid,
 }: RichTextEditorProps) {
+  const t = useT();
+  const placeholderText = placeholder ?? t("shared.richText.placeholder");
   const fileInput = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(0);
   // the HTML this editor last emitted, to tell outside changes from its own echo
@@ -77,7 +81,7 @@ export function RichTextEditor({
 
   async function uploadImages(editor: Editor, files: File[], pos?: number) {
     const images = files.filter((file) => IMAGE_TYPES.includes(file.type));
-    if (images.length < files.length) toast.add({ type: "error", title: "แทรกได้เฉพาะรูป JPG, PNG และ WebP" });
+    if (images.length < files.length) toast.add({ type: "error", title: t("shared.richText.imageTypes") });
     setUploading((n) => n + images.length);
     // one at a time, so the images land in the order they were picked
     let at = pos;
@@ -93,7 +97,7 @@ export function RichTextEditor({
           at = editor.state.selection.to;
         }
       } catch (error) {
-        toast.add({ type: "error", title: error instanceof Error ? error.message : "อัปโหลดรูปไม่สำเร็จ" });
+        toast.add({ type: "error", title: error instanceof Error ? error.message : t("shared.richText.uploadFailed") });
       } finally {
         setUploading((n) => n - 1);
       }
@@ -107,7 +111,7 @@ export function RichTextEditor({
         link: { openOnClick: false, autolink: true, defaultProtocol: "https" },
       }),
       Image,
-      Placeholder.configure({ placeholder }),
+      Placeholder.configure({ placeholder: placeholderText }),
       CharacterCount,
       // uploadImages reads the latest onUploadImage from a ref when a file is dropped, never during render
       // oxlint-disable-next-line react/refs
@@ -120,7 +124,7 @@ export function RichTextEditor({
     content: value,
     editable: !disabled,
     editorProps: {
-      attributes: { "aria-label": "รายละเอียดอีเวนต์", class: "min-h-64 px-4 py-3 outline-none" },
+      attributes: { "aria-label": t("shared.richText.ariaLabel"), class: "min-h-64 px-4 py-3 outline-none" },
       // images pasted from other sites would be dropped on save; drop them now so what you see is what's kept
       transformPastedHTML: (html) =>
         html.replace(/<img\b[^>]*>/gi, (tag) => (tag.includes(`src="${allowedImagePrefix}`) ? tag : "")),
@@ -174,24 +178,24 @@ export function RichTextEditor({
     <div
       data-slot="rich-text-editor"
       aria-invalid={invalid}
-      className="rounded-2xl border border-input bg-input/30 transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 aria-invalid:border-destructive"
+      className="rounded-md border border-input bg-background transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 aria-invalid:border-destructive"
     >
       <TooltipProvider>
         {/* sticks under the 4.25rem navbar while a long description scrolls */}
-        <div className="sticky top-17 z-10 flex flex-wrap items-center gap-1 rounded-t-2xl border-b bg-background/95 p-1.5 backdrop-blur">
-          <ToolbarToggle label="ตัวหนา" icon={Bold} shortcut={`${mod}B`} pressed={state.bold} disabled={disabled} onToggle={() => chain().toggleBold().run()} />
-          <ToolbarToggle label="ตัวเอียง" icon={Italic} shortcut={`${mod}I`} pressed={state.italic} disabled={disabled} onToggle={() => chain().toggleItalic().run()} />
-          <ToolbarToggle label="ขีดเส้นใต้" icon={Underline} shortcut={`${mod}U`} pressed={state.underline} disabled={disabled} onToggle={() => chain().toggleUnderline().run()} />
-          <ToolbarToggle label="ขีดทับ" icon={Strikethrough} pressed={state.strike} disabled={disabled} onToggle={() => chain().toggleStrike().run()} />
+        <div className="sticky top-17 z-10 flex flex-wrap items-center gap-1 rounded-t-md border-b bg-background p-1.5">
+          <ToolbarToggle label={t("shared.richText.bold")} icon={Bold} shortcut={`${mod}B`} pressed={state.bold} disabled={disabled} onToggle={() => chain().toggleBold().run()} />
+          <ToolbarToggle label={t("shared.richText.italic")} icon={Italic} shortcut={`${mod}I`} pressed={state.italic} disabled={disabled} onToggle={() => chain().toggleItalic().run()} />
+          <ToolbarToggle label={t("shared.richText.underline")} icon={Underline} shortcut={`${mod}U`} pressed={state.underline} disabled={disabled} onToggle={() => chain().toggleUnderline().run()} />
+          <ToolbarToggle label={t("shared.richText.strike")} icon={Strikethrough} pressed={state.strike} disabled={disabled} onToggle={() => chain().toggleStrike().run()} />
           <Separator orientation="vertical" className="mx-1 h-5 data-vertical:self-auto" />
-          <ToolbarToggle label="หัวข้อใหญ่" icon={Heading2} pressed={state.h2} disabled={disabled} onToggle={() => chain().toggleHeading({ level: 2 }).run()} />
-          <ToolbarToggle label="หัวข้อรอง" icon={Heading3} pressed={state.h3} disabled={disabled} onToggle={() => chain().toggleHeading({ level: 3 }).run()} />
-          <ToolbarToggle label="รายการ" icon={List} pressed={state.bullet} disabled={disabled} onToggle={() => chain().toggleBulletList().run()} />
-          <ToolbarToggle label="รายการเลขลำดับ" icon={ListOrdered} pressed={state.ordered} disabled={disabled} onToggle={() => chain().toggleOrderedList().run()} />
-          <ToolbarToggle label="ข้อความอ้างอิง" icon={Quote} pressed={state.quote} disabled={disabled} onToggle={() => chain().toggleBlockquote().run()} />
+          <ToolbarToggle label={t("shared.richText.h2")} icon={Heading2} pressed={state.h2} disabled={disabled} onToggle={() => chain().toggleHeading({ level: 2 }).run()} />
+          <ToolbarToggle label={t("shared.richText.h3")} icon={Heading3} pressed={state.h3} disabled={disabled} onToggle={() => chain().toggleHeading({ level: 3 }).run()} />
+          <ToolbarToggle label={t("shared.richText.bullet")} icon={List} pressed={state.bullet} disabled={disabled} onToggle={() => chain().toggleBulletList().run()} />
+          <ToolbarToggle label={t("shared.richText.ordered")} icon={ListOrdered} pressed={state.ordered} disabled={disabled} onToggle={() => chain().toggleOrderedList().run()} />
+          <ToolbarToggle label={t("shared.richText.quote")} icon={Quote} pressed={state.quote} disabled={disabled} onToggle={() => chain().toggleBlockquote().run()} />
           <Separator orientation="vertical" className="mx-1 h-5 data-vertical:self-auto" />
           <LinkButton editor={editor} active={state.link} disabled={disabled} />
-          <ToolbarButton label="แทรกรูปภาพ" icon={ImagePlus} disabled={disabled} onClick={() => fileInput.current?.click()} />
+          <ToolbarButton label={t("shared.richText.insertImage")} icon={ImagePlus} disabled={disabled} onClick={() => fileInput.current?.click()} />
           <input
             ref={fileInput}
             type="file"
@@ -204,20 +208,20 @@ export function RichTextEditor({
             }}
           />
           <Separator orientation="vertical" className="mx-1 h-5 data-vertical:self-auto" />
-          <ToolbarButton label="เลิกทำ" icon={Undo2} shortcut={`${mod}Z`} disabled={disabled || !state.canUndo} onClick={() => chain().undo().run()} />
-          <ToolbarButton label="ทำซ้ำ" icon={Redo2} shortcut={isMac ? "⇧⌘Z" : "Ctrl+Y"} disabled={disabled || !state.canRedo} onClick={() => chain().redo().run()} />
+          <ToolbarButton label={t("shared.richText.undo")} icon={Undo2} shortcut={`${mod}Z`} disabled={disabled || !state.canUndo} onClick={() => chain().undo().run()} />
+          <ToolbarButton label={t("shared.richText.redo")} icon={Redo2} shortcut={isMac ? "⇧⌘Z" : "Ctrl+Y"} disabled={disabled || !state.canRedo} onClick={() => chain().redo().run()} />
           {uploading > 0 && (
             <span className="ml-auto flex items-center gap-2 px-2 text-sm text-muted-foreground" aria-live="polite">
               <Spinner />
-              กำลังอัปโหลด {uploading} รูป
+              {t("shared.richText.uploading", { n: uploading })}
             </span>
           )}
         </div>
       </TooltipProvider>
       <EditorContent editor={editor} className="rich-text" />
       <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
-        <span>ลากรูปมาวางหรือวางจากคลิปบอร์ดเพื่อแทรกรูปได้</span>
-        <span className="tabular-nums">{state.characters.toLocaleString("th-TH")} ตัวอักษร</span>
+        <span>{t("shared.richText.dropHint")}</span>
+        <span className="tabular-nums">{t("shared.richText.characters", { n: formatNumber(state.characters) })}</span>
       </div>
     </div>
   );
@@ -274,6 +278,7 @@ const isUrl = (value: string) => /^(https?:\/\/\S+|mailto:\S+@\S+)$/i.test(value
 
 /** Toolbar button with a small popover to add, change or remove the link on the selection. */
 function LinkButton({ editor, active, disabled }: { editor: Editor; active: boolean; disabled?: boolean }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
   const invalid = url !== "" && !isUrl(url);
@@ -301,14 +306,14 @@ function LinkButton({ editor, active, disabled }: { editor: Editor; active: bool
           render={
             <PopoverTrigger
               render={
-                <Toggle size="sm" aria-label="ลิงก์" pressed={active} disabled={disabled} />
+                <Toggle size="sm" aria-label={t("shared.richText.link")} pressed={active} disabled={disabled} />
               }
             />
           }
         >
           <LinkIcon />
         </TooltipTrigger>
-        <TooltipContent>ลิงก์</TooltipContent>
+        <TooltipContent>{t("shared.richText.link")}</TooltipContent>
       </Tooltip>
       <PopoverContent align="start" className="w-80">
         <form
@@ -323,7 +328,7 @@ function LinkButton({ editor, active, disabled }: { editor: Editor; active: bool
           <Field data-invalid={invalid}>
             <FieldLabel htmlFor="rich-text-link">
               <LinkIcon className="size-4 text-muted-foreground" />
-              ลิงก์
+              {t("shared.richText.link")}
             </FieldLabel>
             <Input
               id="rich-text-link"
@@ -333,18 +338,18 @@ function LinkButton({ editor, active, disabled }: { editor: Editor; active: bool
               placeholder="https://example.com"
               onChange={(e) => setUrl(e.target.value.trim())}
             />
-            <FieldDescription>{invalid ? "ต้องขึ้นต้นด้วย https://, http:// หรือ mailto:" : "เปิดในแท็บใหม่"}</FieldDescription>
+            <FieldDescription>{invalid ? t("shared.richText.linkInvalid") : t("shared.richText.linkHint")}</FieldDescription>
           </Field>
           <div className="flex justify-end gap-2">
             {active && (
               <Button type="button" variant="ghost" size="sm" onClick={remove}>
                 <Unlink data-icon="inline-start" />
-                ลบลิงก์
+                {t("shared.richText.removeLink")}
               </Button>
             )}
             <Button type="submit" size="sm" disabled={!url || invalid}>
               <Check data-icon="inline-start" />
-              ใช้ลิงก์
+              {t("shared.richText.applyLink")}
             </Button>
           </div>
         </form>

@@ -1,7 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { CircleAlert, KeyRound, LogIn, Mail } from "lucide-react";
+import { CircleAlert, LogIn } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import { AuthLayout } from "@/components/auth-layout";
@@ -9,11 +9,13 @@ import { SubmitButton, TextField } from "@/components/form-field";
 import { GoogleSignIn } from "@/components/google-sign-in";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FieldGroup } from "@/components/ui/field";
+import { t, useT } from "@/i18n";
 import { auth } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { redirectIfSignedIn, refreshSession, safeRedirect } from "@/lib/session";
 
 export const Route = createFileRoute("/login")({
+  staticData: { title: "pub.auth.login.title" },
   validateSearch: z.object({
     redirect: z.string().optional(),
     // set by Better Auth when a Google sign-in fails
@@ -24,11 +26,12 @@ export const Route = createFileRoute("/login")({
 });
 
 const loginSchema = z.object({
-  email: z.email("กรุณากรอกอีเมลให้ถูกต้อง"),
-  password: z.string().min(1, "กรุณากรอกรหัสผ่าน"),
+  email: z.email({ error: () => t("pub.auth.errors.email") }),
+  password: z.string().min(1, { error: () => t("pub.auth.errors.passwordRequired") }),
 });
 
 function LoginPage() {
+  const t = useT();
   const search = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -51,14 +54,13 @@ function LoginPage() {
 
   return (
     <AuthLayout
-      icon={LogIn}
-      title="เข้าสู่ระบบ"
-      description="เข้าสู่ระบบเพื่อจองตั๋วและจัดการอีเวนต์ของคุณ"
+      title={t("pub.auth.login.title")}
+      description={t("pub.auth.login.description")}
       footer={
         <>
-          ยังไม่มีบัญชี?
-          <Link to="/register" search={{ redirect: search.redirect }} className="font-medium text-primary hover:underline">
-            สมัครสมาชิก
+          {t("pub.auth.login.noAccount")}
+          <Link to="/register" search={{ redirect: search.redirect }} className="font-medium text-primary dark:text-chart-2 hover:underline">
+            {t("pub.auth.login.register")}
           </Link>
         </>
       }
@@ -80,21 +82,21 @@ function LoginPage() {
         <FieldGroup>
           <form.Field name="email">
             {(field) => (
-              <TextField field={field} label="อีเมล" icon={Mail} type="email" autoComplete="email" placeholder="you@example.com" />
+              <TextField field={field} label={t("pub.auth.email")} type="email" autoComplete="email" placeholder="you@example.com" />
             )}
           </form.Field>
           <form.Field name="password">
             {(field) => (
-              <TextField field={field} label="รหัสผ่าน" icon={KeyRound} type="password" autoComplete="current-password" />
+              <TextField field={field} label={t("pub.auth.password")} type="password" autoComplete="current-password" />
             )}
           </form.Field>
           <Link to="/forgot-password" className="-mt-4 self-end text-sm text-muted-foreground hover:text-primary hover:underline">
-            ลืมรหัสผ่าน?
+            {t("pub.auth.login.forgot")}
           </Link>
           <form.Subscribe selector={(state) => state.isSubmitting}>
             {(isSubmitting) => (
               <SubmitButton pending={isSubmitting} icon={LogIn} size="lg">
-                เข้าสู่ระบบ
+                {t("pub.auth.login.submit")}
               </SubmitButton>
             )}
           </form.Subscribe>

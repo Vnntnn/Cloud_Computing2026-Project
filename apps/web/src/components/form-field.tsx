@@ -10,7 +10,6 @@ import { Textarea } from "@/components/ui/textarea";
 type TextFieldProps = {
   field: AnyFieldApi;
   label: string;
-  icon: LucideIcon;
   description?: React.ReactNode;
   multiline?: boolean;
   /** unit shown inside the input's end, e.g. "ชั่วโมง" */
@@ -22,7 +21,6 @@ type TextFieldProps = {
 export function TextField({
   field,
   label,
-  icon: Icon,
   description,
   multiline,
   suffix,
@@ -41,10 +39,7 @@ export function TextField({
 
   return (
     <Field data-invalid={isInvalid}>
-      <FieldLabel htmlFor={field.name}>
-        <Icon className="size-4 text-muted-foreground" />
-        {label}
-      </FieldLabel>
+      <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
       {multiline ? (
         <Textarea
           {...controlProps}

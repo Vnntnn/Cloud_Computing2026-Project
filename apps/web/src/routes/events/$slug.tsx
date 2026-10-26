@@ -3,37 +3,37 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
   CalendarClock,
-  CalendarX,
   ExternalLink,
   Eye,
-  FileText,
   LogIn,
   MailCheck,
   MapPin,
   Pencil,
   Receipt,
-  Tag,
   UserPlus,
 } from "lucide-react";
+import { EventHero } from "@/components/event-hero";
+import { NotFound, NoticeScene } from "@/components/route-states";
+import { HourRuler } from "@/components/event-parts";
+import { CategoryChip } from "@/components/event-poster";
 import { EventStatusBadge } from "@/components/event-status-badge";
 import { ShareEvent } from "@/components/share-event";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { useT } from "@/i18n";
 import { eventQueryOptions, eventUrl, hasEnded, isLive, isScheduled, problemCode, statusInfo } from "@/lib/events";
 import { formatDateRange, formatDateTime, formatDuration } from "@/lib/format";
 import { hasRole, useSession } from "@/lib/session";
 import { OrganizerByline, OrganizerSection } from "./-components/organizer";
+import { YourTickets } from "./-components/your-tickets";
 import { EventTickets } from "./-components/ticket-types";
 
 export const Route = createFileRoute("/events/$slug")({ component: EventPage });
 
 function EventPage() {
+  const t = useT();
   const { slug } = Route.useParams();
   const { data: event, isPending, isError, error } = useQuery(eventQueryOptions(slug));
   const { data: session } = useSession();
@@ -41,32 +41,24 @@ function EventPage() {
 
   if (isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 py-4" aria-busy="true">
-        <Skeleton className="aspect-[21/9] w-full rounded-3xl" />
-        <Skeleton className="h-10 w-2/3" />
-        <Skeleton className="h-64" />
+      <div className="-m-4 flex flex-col" aria-busy="true">
+        <div className="bg-dusk">
+          <div className="mx-auto flex min-h-[22rem] max-w-7xl flex-col justify-end gap-4 px-4 pb-12">
+            <Skeleton className="h-6 w-40 bg-dusk-foreground/15" />
+            <Skeleton className="h-14 w-2/3 bg-dusk-foreground/15" />
+            <Skeleton className="h-6 w-1/3 bg-dusk-foreground/15" />
+          </div>
+        </div>
+        <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <Skeleton className="h-64" />
+          <Skeleton className="h-64" />
+        </div>
       </div>
     );
   }
   if (isError) {
     if (problemCode(error) === "INVITE_ONLY") return <InviteOnly slug={slug} email={session?.user.email} />;
-    return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <CalendarX />
-          </EmptyMedia>
-          <EmptyTitle>ไม่พบอีเวนต์นี้</EmptyTitle>
-          <EmptyDescription>ลิงก์อาจไม่ถูกต้อง อีเวนต์อาจยังไม่เผยแพร่ หรือถูกลบไปแล้ว</EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <Link to="/events" className={buttonVariants({ variant: "outline" })}>
-            <ArrowLeft data-icon="inline-start" />
-            ไปหน้าสำรวจอีเวนต์
-          </Link>
-        </EmptyContent>
-      </Empty>
-    );
+    return <NotFound title={t("pub.event.notFound.title")} description={t("pub.event.notFound.description")} />;
   }
 
   const user = session?.user;
@@ -77,185 +69,171 @@ function EventPage() {
   // only the organizer, admins and (for invite-only) invitees reach a page that isn't public; tell them who else can open the link
   const shareNotice =
     event.status === "draft"
-      ? "อีเวนต์ยังเป็นฉบับร่าง คนอื่นจะเปิดลิงก์ได้เมื่อเผยแพร่แล้ว"
+      ? t("pub.event.shareNotice.draft")
       : event.status === "invite"
-        ? "อีเวนต์นี้เปิดให้เฉพาะผู้ได้รับเชิญ ผู้ที่ไม่ได้รับเชิญจะเปิดลิงก์ไม่ได้"
+        ? t("pub.event.shareNotice.invite")
         : event.status === "suspended"
-          ? "อีเวนต์ถูกระงับ คนอื่นจะเปิดลิงก์ไม่ได้จนกว่าจะยกเลิกการระงับ"
+          ? t("pub.event.shareNotice.suspended")
           : isScheduled(event) && event.publishAt
-          ? `คนอื่นจะเปิดลิงก์ได้ตั้งแต่ ${formatDateTime(event.publishAt)}`
+          ? t("pub.event.shareNotice.scheduled", { date: formatDateTime(event.publishAt) })
           : undefined;
 
-  return (
-    <article className="mx-auto flex w-full max-w-6xl flex-col gap-6 py-4">
-      <Link to="/events" className={buttonVariants({ variant: "ghost", size: "sm", className: "self-start" })}>
-        <ArrowLeft data-icon="inline-start" />
-        สำรวจอีเวนต์
-      </Link>
-
-      {/* an invitee also opens an invite-only event; they get a welcome instead of the editor's status */}
-      {!canEdit && event.status === "invite" && (
-        <Alert>
-          <MailCheck />
-          <AlertTitle>คุณได้รับเชิญเข้าร่วมอีเวนต์นี้</AlertTitle>
-          <AlertDescription>อีเวนต์นี้ไม่แสดงในหน้าสำรวจ และเปิดได้เฉพาะผู้ได้รับเชิญ</AlertDescription>
-        </Alert>
+  const badges = (
+    <>
+      <span className="flex items-center gap-2 rounded-full bg-dusk-foreground/12 px-3 py-1 text-sm font-semibold">
+        <CategoryChip slug={event.category.slug} className="size-4" />
+        {event.category.name}
+      </span>
+      {isLive(event) && <span className="rounded-full bg-sun px-3 py-1 text-sm font-bold text-sun-foreground">{t("pub.event.badge.live")}</span>}
+      {hasEnded(event) && <span className="rounded-full border border-dusk-foreground/40 px-3 py-1 text-sm">{t("pub.event.badge.ended")}</span>}
+      {preview && (
+        <span className="rounded-full bg-background p-0.5">
+          <EventStatusBadge status={event.status} publishAt={event.publishAt} />
+        </span>
       )}
-      {canEdit && (
-        <Alert>
-          <Eye />
-          <AlertTitle>
-            {preview ? "ตัวอย่าง: คนทั่วไปยังไม่เห็นหน้านี้" : `สถานะ: ${statusInfo[event.status].label}`}
-          </AlertTitle>
-          <AlertDescription>
-            {event.status === "suspended"
-              ? statusInfo.suspended.description
-              : isScheduled(event) && event.publishAt
-                ? `จะเผยแพร่ ${formatDateTime(event.publishAt)}`
-                : statusInfo[event.status].description}
-          </AlertDescription>
-          {canEdit && (
+    </>
+  );
+
+  return (
+    // the page's own padding is cancelled so the hero runs edge to edge
+    <article className="-m-4 flex flex-col">
+      <EventHero event={event} badges={badges} byline={<OrganizerByline organizerId={event.organizerId} tone="ink" />} />
+
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-10 lg:py-14">
+        {/* an invitee also opens an invite-only event; they get a welcome instead of the editor's status */}
+        {!canEdit && event.status === "invite" && (
+          <Alert>
+            <MailCheck />
+            <AlertTitle>{t("pub.event.invited.title")}</AlertTitle>
+            <AlertDescription>{t("pub.event.invited.description")}</AlertDescription>
+          </Alert>
+        )}
+        {canEdit && (
+          <Alert>
+            <Eye />
+            <AlertTitle>
+              {preview ? t("pub.event.editor.preview") : t("pub.event.editor.status", { status: statusInfo[event.status].label })}
+            </AlertTitle>
+            <AlertDescription>
+              {event.status === "suspended"
+                ? statusInfo.suspended.description
+                : isScheduled(event) && event.publishAt
+                  ? t("pub.event.editor.publishesAt", { date: formatDateTime(event.publishAt) })
+                  : statusInfo[event.status].description}
+            </AlertDescription>
             <AlertAction>
-              <Link
-                to="/dashboard/events/$eventId"
-                params={{ eventId: event.id }}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
+              <Link to="/dashboard/events/$eventId" params={{ eventId: event.id }} className={buttonVariants({ variant: "outline", size: "sm" })}>
                 <Pencil data-icon="inline-start" />
-                แก้ไข
+                {t("pub.event.editor.edit")}
               </Link>
             </AlertAction>
-          )}
-        </Alert>
-      )}
+          </Alert>
+        )}
 
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">
-            <Tag data-icon="inline-start" />
-            {event.category.name}
-          </Badge>
-          {isLive(event) && <Badge>กำลังจัดอยู่ตอนนี้</Badge>}
-          {hasEnded(event) && <Badge variant="outline">อีเวนต์นี้จบแล้ว</Badge>}
-          {preview && <EventStatusBadge status={event.status} publishAt={event.publishAt} />}
+        <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-16">
+          <div className="flex min-w-0 flex-col gap-14">
+            <EventTickets event={event} />
+            <YourTickets eventId={event.id} ended={hasEnded(event)} />
+
+            {event.description ? (
+              <section className="flex flex-col gap-4" aria-labelledby="about">
+                <h2 id="about" className="text-2xl font-bold tracking-tight sm:text-3xl">
+                  {t("pub.event.about")}
+                </h2>
+                {/* sanitized by the event service on write (apps/event/src/libs/sanitize.ts) */}
+                <div className="rich-text max-w-[68ch]" dangerouslySetInnerHTML={{ __html: event.description }} />
+              </section>
+            ) : (
+              <p className="text-muted-foreground">{t("pub.event.noDescription")}</p>
+            )}
+
+            <OrganizerSection organizerId={event.organizerId} eventId={event.id} />
+          </div>
+
+          <div className="flex flex-col gap-6 lg:sticky lg:top-21">
+            <div className="flex flex-col divide-y rounded-md border bg-card">
+              <InfoRow icon={CalendarClock} title={t("pub.event.when")}>
+                <p className="font-medium">{formatDateRange(event.startsAt, event.endsAt)}</p>
+                {length > 0 && <p className="text-muted-foreground">{t("pub.event.duration", { duration: formatDuration(length) })}</p>}
+                <HourRuler start={event.startsAt} end={event.endsAt} slug={event.category.slug} className="mt-2" />
+              </InfoRow>
+              <InfoRow icon={MapPin} title={t("pub.event.where")}>
+                <p className="font-medium">{event.venue}</p>
+                {event.venueDescription && <p className="whitespace-pre-line text-muted-foreground">{event.venueDescription}</p>}
+                {event.venueUrl && (
+                  <a
+                    href={event.venueUrl}
+                    target="_blank"
+                    rel="noopener noreferrer nofollow"
+                    className={buttonVariants({ variant: "outline", size: "sm", className: "mt-1 self-start" })}
+                  >
+                    <ExternalLink data-icon="inline-start" />
+                    {t("pub.event.openMap")}
+                  </a>
+                )}
+              </InfoRow>
+              <InfoRow icon={Receipt} title={t("pub.event.refund.heading")}>
+                <p className="text-muted-foreground">
+                  {event.isRefundAvailable && event.refundCutoffHours !== null && event.refundPercent !== null
+                    ? t("pub.event.refund.available", {
+                        percent: event.refundPercent,
+                        duration: formatDuration(event.refundCutoffHours * 3_600_000),
+                      })
+                    : t("pub.event.refund.none")}
+                </p>
+              </InfoRow>
+            </div>
+            <ShareEvent title={event.title} url={eventUrl(event.slug)} slug={event.slug} notice={shareNotice} />
+          </div>
         </div>
-        <h1 className="text-3xl font-bold text-balance sm:text-4xl">{event.title}</h1>
-        <OrganizerByline organizerId={event.organizerId} />
-      </header>
-
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="flex min-w-0 flex-col gap-6">
-          <EventTickets event={event} />
-
-          {event.description ? (
-            <section className="flex flex-col gap-3" aria-labelledby="about">
-              <h2 id="about" className="flex items-center gap-2 text-xl font-bold">
-                <FileText className="size-5 text-primary" />
-                เกี่ยวกับอีเวนต์
-              </h2>
-              {/* sanitized by the event service on write (apps/event/src/libs/sanitize.ts) */}
-              <div className="rich-text" dangerouslySetInnerHTML={{ __html: event.description }} />
-            </section>
-          ) : (
-            <p className="text-muted-foreground">ผู้จัดงานยังไม่ได้เพิ่มรายละเอียด</p>
-          )}
-
-          <OrganizerSection organizerId={event.organizerId} eventId={event.id} />
-        </div>
-
-        {/* phones: the cover and the when/where come before the long description */}
-        <aside className="order-first flex flex-col gap-4 lg:sticky lg:top-21 lg:order-none">
-          <Card>
-            {event.thumbnailUrl && <img src={event.thumbnailUrl} alt="" className="aspect-video w-full object-cover" />}
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CalendarClock className="size-5 text-primary" />
-                วันและเวลา
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-1 text-sm">
-              <p className="font-medium">{formatDateRange(event.startsAt, event.endsAt)}</p>
-              {length > 0 && <p className="text-muted-foreground">ระยะเวลา {formatDuration(length)}</p>}
-            </CardContent>
-            <Separator />
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="size-5 text-primary" />
-                สถานที่
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-2 text-sm">
-              <p className="font-medium">{event.venue}</p>
-              {event.venueDescription && (
-                <p className="whitespace-pre-line text-muted-foreground">{event.venueDescription}</p>
-              )}
-              {event.venueUrl && (
-                <a
-                  href={event.venueUrl}
-                  target="_blank"
-                  rel="noopener noreferrer nofollow"
-                  className={buttonVariants({ variant: "outline", size: "sm", className: "self-start" })}
-                >
-                  <ExternalLink data-icon="inline-start" />
-                  เปิดแผนที่
-                </a>
-              )}
-            </CardContent>
-            <Separator />
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Receipt className="size-5 text-primary" />
-                การคืนเงิน
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              {event.isRefundAvailable && event.refundCutoffHours !== null && event.refundPercent !== null
-                ? `คืนเงิน ${event.refundPercent}% เมื่อขอคืนก่อนงานเริ่มอย่างน้อย ${formatDuration(event.refundCutoffHours * 3_600_000)}`
-                : "อีเวนต์นี้ไม่รับคืนเงิน"}
-            </CardContent>
-          </Card>
-          <ShareEvent title={event.title} url={eventUrl(event.slug)} slug={event.slug} notice={shareNotice} />
-        </aside>
       </div>
     </article>
   );
 }
 
+/** One row of the event's facts: an icon and a heading, then whatever the fact needs. */
+function InfoRow({ icon: Icon, title, children }: { icon: typeof MapPin; title: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2 p-5 text-sm">
+      <h2 className="flex items-center gap-2 text-base font-bold">
+        <Icon className="size-5 text-primary dark:text-chart-2" />
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
 /** An invite-only event the viewer isn't invited to (or can't tell yet, signed out). The service reveals nothing else. */
 function InviteOnly({ slug, email }: { slug: string; email: string | undefined }) {
+  const t = useT();
   const redirect = `/events/${slug}`;
   return (
-    <Empty>
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <MailCheck />
-        </EmptyMedia>
-        <EmptyTitle>อีเวนต์นี้เปิดให้เฉพาะผู้ได้รับเชิญ</EmptyTitle>
-        <EmptyDescription>
-          {email
-            ? `คุณเข้าสู่ระบบด้วย ${email} ซึ่งไม่ได้รับเชิญ หากได้รับเชิญด้วยอีเมลอื่น กรุณาเข้าสู่ระบบด้วยอีเมลนั้น`
-            : "หากคุณได้รับเชิญ กรุณาเข้าสู่ระบบ หรือสมัครสมาชิกด้วยอีเมลที่ได้รับเชิญ"}
-        </EmptyDescription>
-      </EmptyHeader>
-      <EmptyContent className="flex-row flex-wrap justify-center">
-        {email ? (
-          <Link to="/events" className={buttonVariants({ variant: "outline" })}>
-            <ArrowLeft data-icon="inline-start" />
-            ไปหน้าสำรวจอีเวนต์
+    <NoticeScene
+      title={t("pub.event.inviteOnly.title")}
+      description={email ? t("pub.event.inviteOnly.signedIn", { email }) : t("pub.event.inviteOnly.signedOut")}
+    >
+      {email ? (
+        <Link to="/events" className={buttonVariants({ variant: "sun", size: "xl" })}>
+          <ArrowLeft data-icon="inline-start" />
+          {t("pub.event.inviteOnly.toBrowse")}
+        </Link>
+      ) : (
+        <>
+          <Link to="/login" search={{ redirect }} className={buttonVariants({ variant: "sun", size: "xl" })}>
+            <LogIn data-icon="inline-start" />
+            {t("pub.event.inviteOnly.login")}
           </Link>
-        ) : (
-          <>
-            <Link to="/login" search={{ redirect }} className={buttonVariants()}>
-              <LogIn data-icon="inline-start" />
-              เข้าสู่ระบบ
-            </Link>
-            <Link to="/register" search={{ redirect }} className={buttonVariants({ variant: "outline" })}>
-              <UserPlus data-icon="inline-start" />
-              สมัครสมาชิก
-            </Link>
-          </>
-        )}
-      </EmptyContent>
-    </Empty>
+          <Link
+            to="/register"
+            search={{ redirect }}
+            className={buttonVariants({ variant: "inkOutline", size: "xl" })}
+          >
+            <UserPlus data-icon="inline-start" />
+            {t("pub.event.inviteOnly.register")}
+          </Link>
+        </>
+      )}
+    </NoticeScene>
   );
 }

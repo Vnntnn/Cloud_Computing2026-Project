@@ -1,0 +1,379 @@
+/* Surface and motion: the hero's photograph, the entrance of its text, a quiet dot grid under the page. Plain CSS, no JS. */
+
+:root {
+  --dot: color-mix(in oklab, var(--foreground) 22%, transparent);
+  /* three speeds for everything that moves; the easing, --ease-out-expo, is a Tailwind theme variable (index.css) */
+  --dur-fast: 150ms;
+  --dur-base: 300ms;
+  --dur-slow: 800ms;
+}
+
+/* Dot grid behind the top of the events listing (see DotGrid in routes/__root.tsx); scrolls away with the page. */
+.page-backdrop {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: -1;
+  height: 36rem;
+  pointer-events: none;
+  background-image: radial-gradient(var(--dot) 1px, transparent 1.5px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 70% 100% at 50% 0%, #000 20%, transparent 75%);
+}
+
+/*
+ * The hero's photograph. On a wide screen it fills the right 72% of the hero and fades into the ink on its left edge;
+ * on a phone it is a band across the top that fades out underneath. A second wash darkens the part the headline
+ * crosses, and a third settles it into the ink along the bottom, where the programme is set.
+ * The photograph arrives once, a wipe from the right that settles from a slight zoom.
+ */
+.hero-plate {
+  mask-image: linear-gradient(to bottom, #000 62%, transparent);
+}
+
+.hero-plate::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, color-mix(in oklab, var(--dusk) 70%, transparent), transparent 22%),
+    linear-gradient(to top, var(--dusk) 0%, color-mix(in oklab, var(--dusk) 55%, transparent) 38%, transparent 70%),
+    color-mix(in oklab, var(--dusk) 28%, transparent);
+}
+
+.hero-plate img {
+  animation: plate-in 1400ms var(--ease-out-expo) 100ms backwards;
+}
+
+@keyframes plate-in {
+  from {
+    clip-path: inset(0 0 0 45%);
+    scale: 1.08;
+    opacity: 0;
+  }
+}
+
+@media (min-width: 1024px) {
+  .hero-plate {
+    mask-image: linear-gradient(to right, transparent, #000 46%);
+  }
+
+  .hero-plate::after {
+    background:
+      linear-gradient(to bottom, color-mix(in oklab, var(--dusk) 70%, transparent), transparent 18%),
+      linear-gradient(to top, var(--dusk) 0%, color-mix(in oklab, var(--dusk) 70%, transparent) 26%, transparent 58%),
+      linear-gradient(to right, color-mix(in oklab, var(--dusk) 60%, transparent), color-mix(in oklab, var(--dusk) 18%, transparent) 70%);
+  }
+}
+
+/* The navbar over an ink scene (see InkScene in navbar.tsx): the scene's colour while the page is at the top. */
+html[data-scene="ink"] [data-slot="navbar"][data-top="true"] {
+  border-color: transparent;
+  background-color: var(--dusk);
+  color: var(--dusk-foreground);
+}
+
+/* the bar's outline button (log in) is white-filled elsewhere; on the ink bar it takes the bar's own colours */
+html[data-scene="ink"] [data-slot="navbar"][data-top="true"] .nav-outline {
+  background-color: transparent;
+  border-color: color-mix(in oklab, var(--dusk-foreground) 40%, transparent);
+  color: var(--dusk-foreground);
+}
+
+/* A section on the sand ground in light mode: the theme's grey for secondary text would fall below 4.5:1 on it, so it takes the ink. */
+html:not(.dark) .on-sand {
+  --muted-foreground: color-mix(in oklab, var(--sun-foreground) 78%, var(--sand));
+}
+
+/*
+ * A ticket is two pieces torn along a dashed line, with a half-circle notch at each end of the tear. Each piece masks its own
+ * corners, so whatever is behind shows through the notches; the outline is a drop-shadow on the wrapper (a mask would clip a
+ * border). `.ticket-h` puts the pieces side by side (a ticket type, a ticket in a list), `.ticket-v` one above the other (the ticket itself).
+ */
+.ticket-h,
+.ticket-v {
+  --notch: 9px;
+  --ticket-outline-color: color-mix(in oklab, var(--foreground) 38%, transparent);
+  --ticket-outline: drop-shadow(1px 0 0 var(--ticket-outline-color)) drop-shadow(-1px 0 0 var(--ticket-outline-color)) drop-shadow(0 1px 0 var(--ticket-outline-color)) drop-shadow(0 -1px 0 var(--ticket-outline-color));
+  display: flex;
+  /* a 1px outline drawn as four one-pixel shadows (a blur is too faint to outline a white piece on a white page, and a border would be clipped by the mask) */
+  filter: var(--ticket-outline);
+}
+
+.dark .ticket-h,
+.dark .ticket-v {
+  --ticket-outline-color: color-mix(in oklab, var(--foreground) 22%, transparent);
+}
+
+.ticket-h > *,
+.ticket-v > * {
+  position: relative;
+  mask-composite: intersect;
+}
+
+.ticket-h > :first-child {
+  mask-image:
+    radial-gradient(circle var(--notch) at 100% 0, #0000 98%, #000),
+    radial-gradient(circle var(--notch) at 100% 100%, #0000 98%, #000);
+}
+
+.ticket-h > :last-child {
+  mask-image:
+    radial-gradient(circle var(--notch) at 0 0, #0000 98%, #000),
+    radial-gradient(circle var(--notch) at 0 100%, #0000 98%, #000);
+}
+
+.ticket-h > :last-child::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--notch) + 6px);
+  bottom: calc(var(--notch) + 6px);
+  left: 0;
+  border-left: 2px dashed color-mix(in oklab, var(--foreground) 24%, transparent);
+  pointer-events: none;
+}
+
+.ticket-v {
+  flex-direction: column;
+}
+
+.ticket-v > :first-child {
+  mask-image:
+    radial-gradient(circle var(--notch) at 0 100%, #0000 98%, #000),
+    radial-gradient(circle var(--notch) at 100% 100%, #0000 98%, #000);
+}
+
+.ticket-v > :last-child {
+  mask-image:
+    radial-gradient(circle var(--notch) at 0 0, #0000 98%, #000),
+    radial-gradient(circle var(--notch) at 100% 0, #0000 98%, #000);
+}
+
+.ticket-v > :last-child::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: calc(var(--notch) + 8px);
+  right: calc(var(--notch) + 8px);
+  border-top: 2px dashed color-mix(in oklab, var(--foreground) 24%, transparent);
+  pointer-events: none;
+}
+
+/* Entrance for the hero's text and controls, staggered with --d (ms). Short, so nothing waits on it. */
+.reveal {
+  animation: reveal 600ms var(--ease-out-expo) calc(var(--d, 0) * 1ms) backwards;
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    translate: 0 0.35em;
+    filter: blur(6px);
+  }
+}
+
+/* In a narrow table (under 56rem of its own width, see DataTable) the row's action (the last column) stays on screen while the table scrolls under it. */
+@container dt (max-width: 56rem) {
+  [data-slot="data-table"] tr > :last-child:not([colspan]) {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    background-color: var(--background);
+    /* a hairline plus a soft shadow: the shadow alone does not show on the dark page */
+    box-shadow:
+      -1px 0 0 var(--border),
+      -10px 0 8px -8px color-mix(in oklab, var(--foreground) 22%, transparent);
+  }
+}
+
+/* A table wider than its box scrolls sideways; a soft shadow on the edge that has more behind it says so (pure CSS, no scroll listener). */
+[data-slot="table-container"],
+.scroll-hint {
+  background:
+    linear-gradient(to right, var(--background) 30%, transparent) left center / 2.5rem 100% no-repeat local,
+    linear-gradient(to left, var(--background) 30%, transparent) right center / 2.5rem 100% no-repeat local,
+    linear-gradient(to right, color-mix(in oklab, var(--foreground) 22%, transparent), transparent) left center / 0.9rem 100% no-repeat scroll,
+    linear-gradient(to left, color-mix(in oklab, var(--foreground) 22%, transparent), transparent) right center / 0.9rem 100% no-repeat scroll;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Ring that trails the pointer (CursorRing). The native cursor is left alone. Position is the `translate` property, which composes outside `scale`; a transform would be multiplied by it. */
+.cursor-ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 101;
+  width: 32px;
+  height: 32px;
+  margin: -16px 0 0 -16px;
+  border: 1.5px solid color-mix(in oklab, var(--primary) 70%, transparent);
+  border-radius: 9999px;
+  pointer-events: none;
+  opacity: 0;
+  scale: 1;
+  transition:
+    opacity var(--dur-base),
+    scale var(--dur-base) var(--ease-out-expo),
+    background-color var(--dur-base);
+}
+
+.cursor-ring[data-show="true"] {
+  opacity: 1;
+}
+
+.cursor-ring[data-state="link"] {
+  scale: 1.6;
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+}
+
+.cursor-ring[data-state="text"] {
+  opacity: 0;
+}
+
+.cursor-ring[data-down="true"] {
+  scale: 0.75;
+}
+
+.dark .cursor-ring {
+  border-color: color-mix(in oklab, var(--chart-2) 75%, transparent);
+}
+
+/*
+ * The canopy edge: where an ink scene ends, its last row is cut like a row of tent roofs, the shape of the photograph's
+ * canopies. A strip in the next section's colour (`--canopy-fill`, the page ground by default) sits on the scene's bottom edge,
+ * masked to a row of upward points; it is a boundary, not a texture, and carries no content.
+ */
+.canopy {
+  --canopy-h: clamp(10px, 1.1vw, 16px);
+}
+
+/* on the dark page the ink scene and the page are the same family, so the cut would be a dark point on a dark ground: there is none */
+.dark .canopy::after {
+  content: none;
+}
+
+.canopy::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px 0;
+  z-index: 1;
+  height: var(--canopy-h);
+  pointer-events: none;
+  background: var(--canopy-fill, var(--background));
+  mask: conic-gradient(from 135deg at 50% 0, #000 90deg, #0000 0) 50% 0 / calc(var(--canopy-h) * 2) var(--canopy-h);
+}
+
+/* Entrance on scroll for a heading or a row that arrives as the page is read. Decorative, so browsers without scroll timelines simply show it. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    translate: 0 1.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports ((animation-timeline: view()) and (animation-range: entry)) {
+    .rise-in {
+      animation: rise-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 40%;
+    }
+  }
+}
+
+/*
+ * The lantern: over the home hero, the wash that darkens the photograph opens around the pointer, as if a lantern were carried
+ * through the market. `--lit` (0 to 1, registered so it can transition) fades the pool in and out; HomeHero sets --mx and --my
+ * (in the photograph's own coordinates, the mask is on it) and data-lit. Fine pointers without reduced motion only.
+ */
+@property --lit {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .lantern {
+    transition: --lit 600ms var(--ease-out-expo);
+  }
+
+  .lantern[data-lit="true"] {
+    --lit: 1;
+  }
+
+  .lantern .hero-plate::after {
+    mask-image: radial-gradient(
+      circle 17rem at var(--mx, 50%) var(--my, 50%),
+      rgb(0 0 0 / calc(1 - 0.95 * var(--lit))) 0%,
+      rgb(0 0 0 / calc(1 - 0.6 * var(--lit))) 35%,
+      rgb(0 0 0 / calc(1 - 0.2 * var(--lit))) 70%,
+      #000 100%
+    );
+  }
+}
+
+/* The hour ruler: a day of 24 hours with the event's span filled in the category's colour. A measuring scale, so ticks are earned. */
+.hour-ruler {
+  background-image: repeating-linear-gradient(to right, currentColor 0 1px, transparent 1px calc(100% / 24));
+  background-size: calc(100% + 1px) 6px;
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+}
+
+/* A label that follows the pointer over a cover (CursorRing): what a click will do, in words. */
+.cursor-label {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 102;
+  display: grid;
+  place-items: center;
+  min-width: 3.5rem;
+  height: 3.5rem;
+  margin: -1.75rem 0 0 -1.75rem;
+  padding: 0 0.9rem;
+  border-radius: 9999px;
+  background: var(--sun);
+  color: var(--sun-foreground);
+  /* a dark ring and a lifted shadow, so the disc still reads over a marigold poster */
+  box-shadow:
+    0 0 0 1.5px color-mix(in oklab, var(--sun-foreground) 90%, transparent),
+    0 6px 16px rgb(0 0 0 / 0.28);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  scale: 0.5;
+  transition:
+    opacity var(--dur-fast),
+    scale var(--dur-base) var(--ease-out-expo);
+}
+
+.cursor-label[data-show="true"] {
+  opacity: 1;
+  scale: 1;
+}
+
+/* over ink the ring is marigold, since teal would sink into it */
+.cursor-ring[data-tone="ink"] {
+  border-color: color-mix(in oklab, var(--sun) 85%, transparent);
+}
+
+.cursor-ring[data-tone="ink"][data-state="link"] {
+  background: color-mix(in oklab, var(--sun) 18%, transparent);
+}
+
+.cursor-ring[data-labelled="true"] {
+  opacity: 0;
+}

@@ -1,9 +1,6 @@
 import { DragDropProvider } from "@dnd-kit/react";
 import { isSortable, useSortable } from "@dnd-kit/react/sortable";
-import {
-  ArrowDown, ArrowUp, ChevronDown, CircleDot, Copy, GripVertical, Lock, Mail, MessageCircleQuestion, MoreHorizontal,
-  Plus, Trash2, UserRound, X, type LucideIcon,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, CircleDot, Copy, GripVertical, Lock, Mail, MoreHorizontal, Plus, Trash2, UserRound, X, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { TextField } from "@/components/form-field";
 import { Badge } from "@/components/ui/badge";
@@ -20,18 +17,19 @@ import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from "@/componen
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useT, type MessageKey } from "@/i18n";
 import { MAX_OPTIONS, MAX_QUESTIONS, questionTypeInfo, type QuestionType } from "@/lib/ticket-types";
 import { cn } from "@/lib/utils";
 import { emptyQuestion, type QuestionValues, type TicketTypeForm } from "./ticket-type-form";
 
-const SYSTEM_QUESTIONS: { label: string; icon: LucideIcon; hint: string }[] = [
-  { label: "ชื่อ", icon: UserRound, hint: "ดึงจากบัญชีผู้ซื้อ แก้ไขได้ตอนลงทะเบียน" },
-  { label: "นามสกุล", icon: UserRound, hint: "ดึงจากบัญชีผู้ซื้อ แก้ไขได้ตอนลงทะเบียน" },
-  { label: "อีเมล", icon: Mail, hint: "ส่งตั๋วไปที่อีเมลนี้ และแสดงในบัญชีที่ใช้อีเมลนี้" },
+const SYSTEM_QUESTIONS: { label: MessageKey; icon: LucideIcon; hint: MessageKey }[] = [
+  { label: "eventAdmin.builder.system.firstName", icon: UserRound, hint: "eventAdmin.builder.system.nameHint" },
+  { label: "eventAdmin.builder.system.lastName", icon: UserRound, hint: "eventAdmin.builder.system.nameHint" },
+  { label: "eventAdmin.builder.system.email", icon: Mail, hint: "eventAdmin.builder.system.emailHint" },
 ];
 
-const questionTypes = Object.entries(questionTypeInfo) as [QuestionType, (typeof questionTypeInfo)[QuestionType]][];
-const typeItems = questionTypes.map(([value, { label }]) => ({ value, label }));
+// read per render, not at import: the labels follow the language
+const questionTypeEntries = () => Object.entries(questionTypeInfo) as [QuestionType, (typeof questionTypeInfo)[QuestionType]][];
 
 /** Focuses a control by id once React has rendered it (ids hold brackets, so no CSS selector). */
 const focusLater = (id: string) => requestAnimationFrame(() => document.getElementById(id)?.focus());
@@ -46,20 +44,22 @@ const focusLater = (id: string) => requestAnimationFrame(() => document.getEleme
  * (dnd-kit has measured it already), so it doesn't jump away from the pointer.
  */
 export function QuestionBuilder({ form, disabled }: { form: TicketTypeForm; disabled?: boolean }) {
+  const t = useT();
+  const questionTypes = questionTypeEntries();
   const [dragging, setDragging] = useState(false);
   return (
     <div className="flex flex-col gap-4">
-      <ul className="flex flex-col gap-2" aria-label="ข้อมูลพื้นฐานที่ทุกตั๋วต้องกรอก">
+      <ul className="flex flex-col gap-2" aria-label={t("eventAdmin.builder.system.label")}>
         {SYSTEM_QUESTIONS.map(({ label, icon: Icon, hint }) => (
-          <li key={label} className="flex items-center gap-3 rounded-3xl border border-dashed bg-muted/50 px-4 py-3 text-sm">
+          <li key={label} className="flex items-center gap-3 rounded-md border border-dashed bg-muted/50 px-4 py-3 text-sm">
             <Icon className="size-4 shrink-0 text-muted-foreground" />
             <span className="flex min-w-0 flex-1 flex-col">
-              <span className="font-medium">{label}</span>
-              <span className="text-xs text-muted-foreground">{hint}</span>
+              <span className="font-medium">{t(label)}</span>
+              <span className="text-xs text-muted-foreground">{t(hint)}</span>
             </span>
             <Badge variant="outline">
               <Lock data-icon="inline-start" />
-              จำเป็น
+              {t("eventAdmin.builder.system.required")}
             </Badge>
           </li>
         ))}
@@ -86,7 +86,7 @@ export function QuestionBuilder({ form, disabled }: { form: TicketTypeForm; disa
                     }
                   }}
                 >
-                  <ol className="flex flex-col gap-3" aria-label="คำถามเพิ่มเติม">
+                  <ol className="flex flex-col gap-3" aria-label={t("eventAdmin.builder.extra")}>
                     {questions.map((question, index) => (
                       <QuestionCard
                         key={question.key}
@@ -117,7 +117,7 @@ export function QuestionBuilder({ form, disabled }: { form: TicketTypeForm; disa
                     render={<Button type="button" variant="outline" disabled={disabled || questions.length >= MAX_QUESTIONS} />}
                   >
                     <Plus data-icon="inline-start" />
-                    เพิ่มคำถาม
+                    {t("eventAdmin.builder.add")}
                     <ChevronDown data-icon="inline-end" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-48">
@@ -133,8 +133,8 @@ export function QuestionBuilder({ form, disabled }: { form: TicketTypeForm; disa
                 </DropdownMenu>
                 <span className="text-sm text-muted-foreground">
                   {questions.length === 0
-                    ? "ถามข้อมูลเพิ่มจากผู้เข้าร่วมแต่ละคนได้ เช่น ไซซ์เสื้อ หรือข้อจำกัดด้านอาหาร"
-                    : `${questions.length} จาก ${MAX_QUESTIONS} คำถาม`}
+                    ? t("eventAdmin.builder.hint")
+                    : t("eventAdmin.builder.count", { n: questions.length, max: MAX_QUESTIONS })}
                 </span>
               </div>
               {field.state.meta.errors.length > 0 && <FieldError errors={field.state.meta.errors} />}
@@ -160,6 +160,9 @@ type QuestionCardProps = {
 };
 
 function QuestionCard({ form, question, index, total, disabled, collapsed, onMove, onDuplicate, onRemove }: QuestionCardProps) {
+  const t = useT();
+  const questionTypes = questionTypeEntries();
+  const typeItems = questionTypes.map(([value, { label }]) => ({ value, label }));
   const { ref, handleRef, isDragging } = useSortable({ id: question.key, index, disabled });
   const compact = collapsed && !isDragging;
   const name = `questions[${index}]` as const;
@@ -170,7 +173,7 @@ function QuestionCard({ form, question, index, total, disabled, collapsed, onMov
       ref={ref}
       data-slot="question-card"
       data-dragging={isDragging || undefined}
-      className={cn("flex gap-1 rounded-3xl border bg-card py-3 pr-3 pl-1 transition-shadow", isDragging && "shadow-lg")}
+      className={cn("flex gap-1 rounded-md border bg-card py-3 pr-3 pl-1 transition-shadow", isDragging && "shadow-lg")}
     >
       <Button
         ref={handleRef}
@@ -178,7 +181,7 @@ function QuestionCard({ form, question, index, total, disabled, collapsed, onMov
         variant="ghost"
         size="icon-sm"
         className="mt-0.5 shrink-0 cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
-        aria-label={`ลากเพื่อย้ายคำถามข้อ ${index + 1}`}
+        aria-label={t("eventAdmin.builder.card.drag", { n: index + 1 })}
         disabled={disabled}
       >
         <GripVertical />
@@ -186,14 +189,14 @@ function QuestionCard({ form, question, index, total, disabled, collapsed, onMov
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         {compact ? (
           <div className="flex h-8 min-w-0 items-center gap-2 text-sm">
-            <Badge variant="secondary">ข้อ {index + 1}</Badge>
+            <Badge variant="secondary">{t("eventAdmin.builder.card.number", { n: index + 1 })}</Badge>
             <TypeIcon className="size-4 shrink-0 text-muted-foreground" />
-            <span className="truncate font-medium">{question.label.trim() || "คำถามที่ยังไม่ได้กรอก"}</span>
-            {question.required && <span className="shrink-0 text-xs text-muted-foreground">· จำเป็นต้องตอบ</span>}
+            <span className="truncate font-medium">{question.label.trim() || t("eventAdmin.builder.card.untitled")}</span>
+            {question.required && <span className="shrink-0 text-xs text-muted-foreground">· {t("eventAdmin.builder.card.required")}</span>}
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">ข้อ {index + 1}</Badge>
+            <Badge variant="secondary">{t("eventAdmin.builder.card.number", { n: index + 1 })}</Badge>
             <form.Field
               name={`${name}.type`}
               listeners={{
@@ -212,7 +215,7 @@ function QuestionCard({ form, question, index, total, disabled, collapsed, onMov
                   onValueChange={(next) => next && field.handleChange(next as QuestionType)}
                   disabled={disabled}
                 >
-                  <SelectTrigger size="sm" className="w-40" aria-label={`รูปแบบคำตอบของข้อ ${index + 1}`}>
+                  <SelectTrigger size="sm" className="w-40" aria-label={t("eventAdmin.builder.card.answerType", { n: index + 1 })}>
                     <TypeIcon className="text-muted-foreground" />
                     <SelectValue />
                   </SelectTrigger>
@@ -240,7 +243,7 @@ function QuestionCard({ form, question, index, total, disabled, collapsed, onMov
                       disabled={disabled}
                     />
                     <FieldLabel htmlFor={field.name} className="font-normal whitespace-nowrap">
-                      จำเป็นต้องตอบ
+                      {t("eventAdmin.builder.card.required")}
                     </FieldLabel>
                   </Field>
                 )}
@@ -248,7 +251,7 @@ function QuestionCard({ form, question, index, total, disabled, collapsed, onMov
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={<Button type="button" variant="ghost" size="icon-sm" disabled={disabled} />}
-                  aria-label={`จัดการคำถามข้อ ${index + 1}`}
+                  aria-label={t("eventAdmin.builder.card.manage", { n: index + 1 })}
                 >
                   <MoreHorizontal />
                 </DropdownMenuTrigger>
@@ -256,22 +259,22 @@ function QuestionCard({ form, question, index, total, disabled, collapsed, onMov
                   <DropdownMenuGroup>
                     <DropdownMenuItem disabled={index === 0} onClick={() => onMove(index - 1)}>
                       <ArrowUp />
-                      เลื่อนขึ้น
+                      {t("eventAdmin.builder.card.moveUp")}
                     </DropdownMenuItem>
                     <DropdownMenuItem disabled={index === total - 1} onClick={() => onMove(index + 1)}>
                       <ArrowDown />
-                      เลื่อนลง
+                      {t("eventAdmin.builder.card.moveDown")}
                     </DropdownMenuItem>
                     <DropdownMenuItem disabled={total >= MAX_QUESTIONS} onClick={onDuplicate}>
                       <Copy />
-                      ทำสำเนา
+                      {t("eventAdmin.builder.card.duplicate")}
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
                     <DropdownMenuItem variant="destructive" onClick={onRemove}>
                       <Trash2 />
-                      ลบคำถาม
+                      {t("eventAdmin.builder.card.remove")}
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
@@ -285,9 +288,8 @@ function QuestionCard({ form, question, index, total, disabled, collapsed, onMov
             {(field) => (
               <TextField
                 field={field}
-                label="คำถาม"
-                icon={MessageCircleQuestion}
-                placeholder="เช่น ไซซ์เสื้อที่ต้องการ"
+                label={t("eventAdmin.builder.card.question")}
+                placeholder={t("eventAdmin.builder.card.questionPlaceholder")}
                 maxLength={200}
                 disabled={disabled}
               />
@@ -301,6 +303,7 @@ function QuestionCard({ form, question, index, total, disabled, collapsed, onMov
 }
 
 function ChoiceOptions({ form, index, disabled }: { form: TicketTypeForm; index: number; disabled?: boolean }) {
+  const t = useT();
   const name = `questions[${index}].options` as const;
   return (
     <form.Field name={name} mode="array">
@@ -308,7 +311,7 @@ function ChoiceOptions({ form, index, disabled }: { form: TicketTypeForm; index:
         const options = optionsField.state.value;
         return (
           <FieldSet>
-            <FieldLegend variant="label">ตัวเลือก (ผู้ตอบเลือกได้ 1 ข้อ)</FieldLegend>
+            <FieldLegend variant="label">{t("eventAdmin.builder.options.legend")}</FieldLegend>
             <div className="flex flex-col gap-2">
               {options.map((_, optionIndex) => (
                 <form.Field key={optionIndex} name={`${name}[${optionIndex}]`}>
@@ -322,8 +325,8 @@ function ChoiceOptions({ form, index, disabled }: { form: TicketTypeForm; index:
                           </InputGroupAddon>
                           <InputGroupInput
                             id={field.name}
-                            aria-label={`ตัวเลือกที่ ${optionIndex + 1}`}
-                            placeholder={`ตัวเลือกที่ ${optionIndex + 1}`}
+                            aria-label={t("eventAdmin.builder.options.option", { n: optionIndex + 1 })}
+                            placeholder={t("eventAdmin.builder.options.option", { n: optionIndex + 1 })}
                             maxLength={100}
                             value={field.state.value}
                             onBlur={field.handleBlur}
@@ -343,7 +346,8 @@ function ChoiceOptions({ form, index, disabled }: { form: TicketTypeForm; index:
                           <InputGroupAddon align="inline-end">
                             <InputGroupButton
                               size="icon-xs"
-                              aria-label={`ลบตัวเลือกที่ ${optionIndex + 1}`}
+                              className="max-sm:size-8"
+                              aria-label={t("eventAdmin.builder.options.remove", { n: optionIndex + 1 })}
                               disabled={disabled || options.length <= 2}
                               onClick={() => optionsField.removeValue(optionIndex)}
                             >
@@ -370,7 +374,7 @@ function ChoiceOptions({ form, index, disabled }: { form: TicketTypeForm; index:
               }}
             >
               <Plus data-icon="inline-start" />
-              เพิ่มตัวเลือก
+              {t("eventAdmin.builder.options.add")}
             </Button>
             {optionsField.state.meta.errors.length > 0 && <FieldError errors={optionsField.state.meta.errors} />}
           </FieldSet>

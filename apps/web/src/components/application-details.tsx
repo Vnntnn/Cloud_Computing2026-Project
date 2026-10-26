@@ -1,4 +1,5 @@
 import { Building2, CalendarClock, MessageSquareText, MessageSquareWarning, Phone, type LucideIcon } from "lucide-react";
+import { useT } from "@/i18n";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -12,13 +13,14 @@ type Details = {
 
 /** What an applicant submitted, one labelled row per field; long reasons keep their line breaks. */
 export function ApplicationDetails({ application, className }: { application: Details; className?: string }) {
+  const t = useT();
   const rows: { icon: LucideIcon; label: string; value: string }[] = [
-    { icon: Building2, label: "ชื่อองค์กรหรือชื่อผู้จัดงาน", value: application.organizationName },
-    { icon: Phone, label: "ช่องทางติดต่อ", value: application.contact },
-    { icon: MessageSquareText, label: "อีเวนต์ที่วางแผนจะจัด", value: application.reason },
-    { icon: CalendarClock, label: "ส่งเมื่อ", value: formatDateTime(application.createdAt) },
+    { icon: Building2, label: t("shared.applicationDetails.organizationName"), value: application.organizationName },
+    { icon: Phone, label: t("shared.applicationDetails.contact"), value: application.contact },
+    { icon: MessageSquareText, label: t("shared.applicationDetails.reason"), value: application.reason },
+    { icon: CalendarClock, label: t("shared.applicationDetails.submittedAt"), value: formatDateTime(application.createdAt) },
     ...(application.reviewNote
-      ? [{ icon: MessageSquareWarning, label: "หมายเหตุจากผู้พิจารณา", value: application.reviewNote }]
+      ? [{ icon: MessageSquareWarning, label: t("shared.applicationDetails.reviewNote"), value: application.reviewNote }]
       : []),
   ];
 

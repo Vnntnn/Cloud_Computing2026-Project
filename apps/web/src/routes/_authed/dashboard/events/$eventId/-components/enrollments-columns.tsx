@@ -1,9 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createColumnHelper } from "@tanstack/react-table";
-import {
-  ArrowLeft, BadgeCheck, Check, ClipboardCheck, Eye, Mail, MessageSquareText, Ticket, Undo2, UserRound, UserX, X,
-} from "lucide-react";
+import { ArrowLeft, BadgeCheck, Check, ClipboardCheck, Eye, Mail, Ticket, Undo2, UserRound, UserX, X } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import type { DataTableFeatures } from "@/components/data-table/data-table-features";
@@ -37,6 +35,7 @@ import { FieldGroup } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { paymentClient, registrationClient } from "@/lib/api";
+import { t as translate, useT, type Translate } from "@/i18n";
 import { problemMessage } from "@/lib/auth-errors";
 import { enrollmentsKey, type Enrollment } from "@/lib/enrollments";
 import { formatBaht, formatDateTime, formatPrice } from "@/lib/format";
@@ -45,16 +44,16 @@ import { kindInfo } from "@/lib/ticket-types";
 const columnHelper = createColumnHelper<DataTableFeatures, Enrollment>();
 
 /** `locked`: the event is suspended and the viewer isn't an admin, so nothing can be reviewed. */
-export const enrollmentColumns = (locked: boolean) =>
+export const enrollmentColumns = (t: Translate, locked: boolean) =>
   columnHelper.columns([
     columnHelper.display({
       id: "buyer",
-      header: "ผู้ลงทะเบียน",
+      header: t("eventAdmin.participants.columns.buyer"),
       cell: ({ row }) => <Buyer enrollment={row.original} />,
     }),
     columnHelper.display({
       id: "ticket",
-      header: "ตั๋ว",
+      header: t("eventAdmin.participants.columns.ticket"),
       cell: ({ row }) => {
         const { ticketType, quantity } = row.original;
         const { icon: Icon } = kindInfo[ticketType.kind];
@@ -68,31 +67,32 @@ export const enrollmentColumns = (locked: boolean) =>
       },
     }),
     columnHelper.accessor("status", {
-      header: "สถานะ",
+      header: t("eventAdmin.participants.columns.status"),
       cell: ({ row }) => <EnrollmentStatusBadge enrollment={row.original} />,
     }),
     columnHelper.accessor("total", {
-      header: "ยอดรวม",
+      header: t("eventAdmin.participants.columns.total"),
       cell: ({ row }) => <span className="tabular-nums">{formatPrice(row.original.total)}</span>,
     }),
     columnHelper.accessor("createdAt", {
-      header: "ลงทะเบียนเมื่อ",
+      header: t("eventAdmin.participants.columns.createdAt"),
       cell: ({ row }) => <span className="whitespace-nowrap">{formatDateTime(row.original.createdAt)}</span>,
     }),
     columnHelper.display({
       id: "actions",
-      header: () => <span className="sr-only">จัดการ</span>,
+      header: () => <span className="sr-only">{t("eventAdmin.participants.columns.actions")}</span>,
       cell: ({ row }) => <EnrollmentDialog enrollment={row.original} locked={locked} />,
     }),
   ]);
 
 function Buyer({ enrollment }: { enrollment: Enrollment }) {
+  const t = useT();
   const { buyer } = enrollment;
   if (!buyer) {
     return (
       <span className="flex items-center gap-2 text-muted-foreground">
         <UserX className="size-4" />
-        บัญชีถูกลบแล้ว
+        {t("eventAdmin.participants.accountDeleted")}
       </span>
     );
   }
@@ -115,12 +115,13 @@ function useReviewed() {
  * refunding open a nested confirm dialog, and DialogContent sinks back behind it (data-nested-dialog-open).
  */
 function EnrollmentDialog({ enrollment, locked }: { enrollment: Enrollment; locked: boolean }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const reviewable = enrollment.status === "pending" && !locked;
   const refundable = enrollment.status === "confirmed" && enrollment.total > 0 && !locked;
   const close = () => setOpen(false);
-  const buyerName = enrollment.buyer?.name ?? "ผู้ใช้ที่ลบบัญชีแล้ว";
+  const buyerName = enrollment.buyer?.name ?? t("eventAdmin.participants.deletedUser");
 
   return (
     <div className="flex justify-end">
@@ -132,7 +133,7 @@ function EnrollmentDialog({ enrollment, locked }: { enrollment: Enrollment; lock
       >
         <DialogTrigger render={<Button size="sm" variant={reviewable ? "default" : "outline"} />}>
           {reviewable ? <ClipboardCheck data-icon="inline-start" /> : <Eye data-icon="inline-start" />}
-          {reviewable ? "พิจารณา" : "ดูรายละเอียด"}
+          {reviewable ? t("eventAdmin.participants.dialog.review") : t("eventAdmin.participants.dialog.details")}
         </DialogTrigger>
         <DialogContent>
           {rejecting ? (
@@ -140,7 +141,7 @@ function EnrollmentDialog({ enrollment, locked }: { enrollment: Enrollment; lock
           ) : (
             <>
               <DialogHeader>
-                <DialogTitle>การลงทะเบียนของ {buyerName}</DialogTitle>
+                <DialogTitle>{t("eventAdmin.participants.dialog.title", { name: buyerName })}</DialogTitle>
                 <DialogDescription>
                   {enrollment.ticketType.name} × {enrollment.quantity} · {formatPrice(enrollment.total)} · {formatDateTime(enrollment.createdAt)}
                 </DialogDescription>
@@ -150,14 +151,14 @@ function EnrollmentDialog({ enrollment, locked }: { enrollment: Enrollment; lock
                 {enrollment.refunds.map((refund) => (
                   <div key={refund.id} className="flex flex-wrap items-center gap-2 text-sm">
                     <Undo2 className="size-4 text-muted-foreground" />
-                    คืนเงิน {formatBaht(refund.amount)} ({refund.percent}%)
+                    {t("eventAdmin.participants.dialog.refund", { amount: formatBaht(refund.amount), percent: refund.percent })}
                     <RefundStatusBadge status={refund.status} />
                     <span className="text-xs text-muted-foreground">{formatDateTime(refund.createdAt)}</span>
                   </div>
                 ))}
                 <ol className="flex flex-col gap-3">
                   {enrollment.tickets.map((ticket, index) => (
-                    <li key={ticket.id} className="flex flex-col gap-3 rounded-2xl border p-4 text-sm">
+                    <li key={ticket.id} className="flex flex-col gap-3 rounded-md border p-4 text-sm">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="flex items-center gap-2 font-medium">
                           <UserRound className="size-4 text-muted-foreground" />
@@ -165,7 +166,7 @@ function EnrollmentDialog({ enrollment, locked }: { enrollment: Enrollment; lock
                         </span>
                         <Badge variant="outline">
                           <Ticket data-icon="inline-start" />
-                          ใบที่ {index + 1}
+                          {t("eventAdmin.participants.dialog.ticketNo", { n: index + 1 })}
                         </Badge>
                       </div>
                       <span className="flex items-center gap-2 text-muted-foreground">
@@ -174,7 +175,7 @@ function EnrollmentDialog({ enrollment, locked }: { enrollment: Enrollment; lock
                       </span>
                       {ticket.code && <span className="font-mono tracking-widest">{ticket.code}</span>}
                       {ticket.answers.length > 0 && (
-                        <dl className="flex flex-col gap-2 rounded-xl bg-muted px-3 py-2">
+                        <dl className="flex flex-col gap-2 rounded-md bg-muted px-3 py-2">
                           {ticket.answers.map((answer) => (
                             <div key={answer.questionId} className="flex flex-col">
                               <dt className="text-xs text-muted-foreground">{answer.label}</dt>
@@ -191,7 +192,7 @@ function EnrollmentDialog({ enrollment, locked }: { enrollment: Enrollment; lock
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setRejecting(true)}>
                     <X data-icon="inline-start" />
-                    ไม่อนุมัติ
+                    {t("eventAdmin.participants.dialog.reject")}
                   </Button>
                   <ApproveButton enrollment={enrollment} buyerName={buyerName} onDone={close} />
                 </DialogFooter>
@@ -210,6 +211,7 @@ function EnrollmentDialog({ enrollment, locked }: { enrollment: Enrollment; lock
 }
 
 function ApproveButton({ enrollment, buyerName, onDone }: { enrollment: Enrollment; buyerName: string; onDone: () => void }) {
+  const t = useT();
   const reviewed = useReviewed();
   const paid = enrollment.total > 0;
   const approve = useMutation({
@@ -221,8 +223,8 @@ function ApproveButton({ enrollment, buyerName, onDone }: { enrollment: Enrollme
     onSuccess: () => {
       toast.add({
         type: "success",
-        title: `อนุมัติ ${buyerName} แล้ว`,
-        description: paid ? "ระบบส่งอีเมลให้ชำระเงินแล้ว" : "ระบบส่งตั๋วถึงผู้เข้าร่วมทางอีเมลแล้ว",
+        title: t("eventAdmin.participants.approve.done", { name: buyerName }),
+        description: paid ? t("eventAdmin.participants.approve.paymentMailed") : t("eventAdmin.participants.approve.ticketsMailed"),
       });
       onDone();
       return reviewed();
@@ -237,28 +239,28 @@ function ApproveButton({ enrollment, buyerName, onDone }: { enrollment: Enrollme
     <AlertDialog>
       <AlertDialogTrigger render={<Button />}>
         <Check data-icon="inline-start" />
-        อนุมัติ
+        {t("eventAdmin.participants.approve.button")}
       </AlertDialogTrigger>
       <AlertDialogContent size="sm">
         <AlertDialogHeader>
-          <AlertDialogMedia className="bg-primary/10 text-primary">
+          <AlertDialogMedia className="bg-primary/10 text-primary dark:text-chart-2">
             <BadgeCheck />
           </AlertDialogMedia>
-          <AlertDialogTitle>อนุมัติ {buyerName}?</AlertDialogTitle>
+          <AlertDialogTitle>{t("eventAdmin.participants.approve.title", { name: buyerName })}</AlertDialogTitle>
           <AlertDialogDescription>
             {paid
-              ? `ผู้ลงทะเบียนต้องชำระ ${formatPrice(enrollment.total)} ภายใน 72 ชั่วโมงจึงจะได้รับตั๋ว ระบบจะส่งอีเมลแจ้งให้ชำระเงิน`
-              : `ผู้เข้าร่วม ${enrollment.quantity} คนจะได้รับตั๋วทางอีเมลทันที`}
+              ? t("eventAdmin.participants.approve.paidDescription", { total: formatPrice(enrollment.total) })
+              : t("eventAdmin.participants.approve.freeDescription", { n: enrollment.quantity })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={approve.isPending}>
             <ArrowLeft data-icon="inline-start" />
-            กลับ
+            {t("eventAdmin.participants.back")}
           </AlertDialogCancel>
           <AlertDialogAction disabled={approve.isPending} onClick={() => approve.mutate()}>
             {approve.isPending ? <Spinner data-icon="inline-start" /> : <Check data-icon="inline-start" />}
-            อนุมัติ
+            {t("eventAdmin.participants.approve.button")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -266,7 +268,7 @@ function ApproveButton({ enrollment, buyerName, onDone }: { enrollment: Enrollme
   );
 }
 
-const rejectSchema = z.object({ note: z.string().trim().max(500, "ยาวได้ไม่เกิน 500 ตัวอักษร") });
+const noteSchema = z.object({ note: z.string().trim().max(500, { error: () => translate("eventAdmin.participants.noteTooLong") }) });
 
 function RejectForm({
   enrollment,
@@ -279,10 +281,11 @@ function RejectForm({
   onBack: () => void;
   onDone: () => void;
 }) {
+  const t = useT();
   const reviewed = useReviewed();
   const form = useForm({
     defaultValues: { note: "" },
-    validators: { onSubmit: rejectSchema },
+    validators: { onSubmit: noteSchema },
     onSubmit: async ({ value }) => {
       const { error } = await registrationClient.api.regis.enrollments({ id: enrollment.id }).reject.post({
         note: value.note.trim() || undefined,
@@ -291,7 +294,7 @@ function RejectForm({
         toast.add({ type: "error", title: problemMessage(error) });
         return void reviewed();
       }
-      toast.add({ type: "success", title: `ไม่อนุมัติ ${buyerName} แล้ว`, description: "ระบบส่งอีเมลแจ้งผลแล้ว" });
+      toast.add({ type: "success", title: t("eventAdmin.participants.reject.done", { name: buyerName }), description: t("eventAdmin.participants.reject.mailed") });
       onDone();
       await reviewed();
     },
@@ -307,19 +310,18 @@ function RejectForm({
       }}
     >
       <DialogHeader>
-        <DialogTitle>ไม่อนุมัติ {buyerName}</DialogTitle>
-        <DialogDescription>หมายเหตุจะถูกส่งไปในอีเมลแจ้งผล</DialogDescription>
+        <DialogTitle>{t("eventAdmin.participants.reject.title", { name: buyerName })}</DialogTitle>
+        <DialogDescription>{t("eventAdmin.participants.reject.description")}</DialogDescription>
       </DialogHeader>
       <FieldGroup>
         <form.Field name="note">
           {(field) => (
             <TextField
               field={field}
-              label="หมายเหตุถึงผู้ลงทะเบียน (ไม่บังคับ)"
-              icon={MessageSquareText}
+              label={t("eventAdmin.participants.reject.note")}
               multiline
               autoFocus
-              placeholder="เช่น ที่นั่งสำหรับกลุ่มนี้เต็มแล้ว"
+              placeholder={t("eventAdmin.participants.reject.notePlaceholder")}
             />
           )}
         </form.Field>
@@ -327,12 +329,12 @@ function RejectForm({
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onBack}>
           <ArrowLeft data-icon="inline-start" />
-          กลับ
+          {t("eventAdmin.participants.back")}
         </Button>
         <form.Subscribe selector={(state) => state.isSubmitting}>
           {(isSubmitting) => (
             <SubmitButton pending={isSubmitting} icon={X} variant="destructive">
-              ไม่อนุมัติ
+              {t("eventAdmin.participants.dialog.reject")}
             </SubmitButton>
           )}
         </form.Subscribe>
@@ -341,15 +343,14 @@ function RejectForm({
   );
 }
 
-const refundSchema = z.object({ note: z.string().trim().max(500, "ยาวได้ไม่เกิน 500 ตัวอักษร") });
-
 /** Cancels a confirmed paid order and refunds all of it, whatever its policy says (e.g. the event is called off). */
 function RefundButton({ enrollment, buyerName, onDone }: { enrollment: Enrollment; buyerName: string; onDone: () => void }) {
+  const t = useT();
   const reviewed = useReviewed();
   const [open, setOpen] = useState(false);
   const form = useForm({
     defaultValues: { note: "" },
-    validators: { onSubmit: refundSchema },
+    validators: { onSubmit: noteSchema },
     onSubmit: async ({ value }) => {
       const { data, error } = await paymentClient.api.payment.enrollments({ id: enrollment.id }).refund.post({
         note: value.note.trim() || undefined,
@@ -360,8 +361,8 @@ function RefundButton({ enrollment, buyerName, onDone }: { enrollment: Enrollmen
       }
       toast.add({
         type: "success",
-        title: `คืนเงิน ${formatBaht(data.amount)} ให้ ${buyerName} แล้ว`,
-        description: "ยกเลิกรายการ และส่งอีเมลแจ้งผู้ซื้อและผู้เข้าร่วมแล้ว",
+        title: t("eventAdmin.participants.refundFlow.done", { amount: formatBaht(data.amount), name: buyerName }),
+        description: t("eventAdmin.participants.refundFlow.doneDescription"),
       });
       onDone();
       await reviewed();
@@ -376,7 +377,7 @@ function RefundButton({ enrollment, buyerName, onDone }: { enrollment: Enrollmen
     >
       <AlertDialogTrigger render={<Button variant="outline" />}>
         <Undo2 data-icon="inline-start" />
-        คืนเงินเต็มจำนวน
+        {t("eventAdmin.participants.refundFlow.button")}
       </AlertDialogTrigger>
       <AlertDialogContent size="sm">
         {/* contents: the header, field and footer stay items of the dialog's grid */}
@@ -392,9 +393,9 @@ function RefundButton({ enrollment, buyerName, onDone }: { enrollment: Enrollmen
             <AlertDialogMedia className="bg-destructive/10 text-destructive">
               <Undo2 />
             </AlertDialogMedia>
-            <AlertDialogTitle>คืนเงินให้ {buyerName}?</AlertDialogTitle>
+            <AlertDialogTitle>{t("eventAdmin.participants.refundFlow.title", { name: buyerName })}</AlertDialogTitle>
             <AlertDialogDescription>
-              คืน {formatPrice(enrollment.total)} เต็มจำนวน และยกเลิกตั๋วทั้ง {enrollment.quantity} ใบ ย้อนกลับไม่ได้
+              {t("eventAdmin.participants.refundFlow.description", { total: formatPrice(enrollment.total), n: enrollment.quantity })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <FieldGroup>
@@ -402,10 +403,9 @@ function RefundButton({ enrollment, buyerName, onDone }: { enrollment: Enrollmen
               {(field) => (
                 <TextField
                   field={field}
-                  label="ข้อความถึงผู้ซื้อ (ไม่บังคับ)"
-                  icon={MessageSquareText}
+                  label={t("eventAdmin.participants.refundFlow.note")}
                   multiline
-                  placeholder="เช่น งานเลื่อนออกไปไม่มีกำหนด"
+                  placeholder={t("eventAdmin.participants.refundFlow.notePlaceholder")}
                 />
               )}
             </form.Field>
@@ -415,10 +415,10 @@ function RefundButton({ enrollment, buyerName, onDone }: { enrollment: Enrollmen
               <AlertDialogFooter>
                 <AlertDialogCancel disabled={isSubmitting}>
                   <ArrowLeft data-icon="inline-start" />
-                  กลับ
+                  {t("eventAdmin.participants.back")}
                 </AlertDialogCancel>
                 <SubmitButton pending={isSubmitting} icon={Undo2} variant="destructive">
-                  คืนเงิน
+                  {t("eventAdmin.participants.refundFlow.submit")}
                 </SubmitButton>
               </AlertDialogFooter>
             )}

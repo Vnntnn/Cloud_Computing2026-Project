@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import { AlignLeft, ListChecks, MailCheck, TextCursorInput, UserCheck, Zap, type LucideIcon } from "lucide-react";
+import { t } from "@/i18n";
 import { eventClient } from "./api";
 import { retryUnlessClientError } from "./events";
 
@@ -8,26 +9,38 @@ export type QuestionType = "short_text" | "long_text" | "choice";
 
 export const kindInfo: Record<TicketKind, { label: string; description: string; icon: LucideIcon }> = {
   first_come: {
-    label: "มาก่อนได้ก่อน",
-    description: "กำหนดจำนวนตั๋ว ผู้ที่ลงทะเบียนครบก่อนได้ตั๋วทันทีจนกว่าจะเต็ม",
+    get label() {
+      return t("shared.ticketKind.first_come.label");
+    },
+    get description() {
+      return t("shared.ticketKind.first_come.description");
+    },
     icon: Zap,
   },
   approval: {
-    label: "ต้องได้รับอนุมัติ",
-    description: "ผู้สนใจส่งคำขอ คุณเลือกอนุมัติทีละรายการ ไม่จำกัดจำนวนคำขอ",
+    get label() {
+      return t("shared.ticketKind.approval.label");
+    },
+    get description() {
+      return t("shared.ticketKind.approval.description");
+    },
     icon: UserCheck,
   },
   invite: {
-    label: "เฉพาะผู้ได้รับเชิญ",
-    description: "ลงทะเบียนได้เฉพาะอีเมลในรายชื่อผู้ได้รับเชิญ คำเชิญละ 1 ครั้ง",
+    get label() {
+      return t("shared.ticketKind.invite.label");
+    },
+    get description() {
+      return t("shared.ticketKind.invite.description");
+    },
     icon: MailCheck,
   },
 };
 
 export const questionTypeInfo: Record<QuestionType, { label: string; icon: LucideIcon }> = {
-  short_text: { label: "ข้อความสั้น", icon: TextCursorInput },
-  long_text: { label: "ข้อความยาว", icon: AlignLeft },
-  choice: { label: "ตัวเลือก", icon: ListChecks },
+  short_text: { get label() { return t("shared.questionType.short_text"); }, icon: TextCursorInput },
+  long_text: { get label() { return t("shared.questionType.long_text"); }, icon: AlignLeft },
+  choice: { get label() { return t("shared.questionType.choice"); }, icon: ListChecks },
 };
 
 /** The services' limits (apps/event ticket-types model, apps/registration). */

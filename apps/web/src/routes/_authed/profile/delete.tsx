@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
+import { useT } from "@/i18n";
 import { auth } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-errors";
 import { useSession } from "@/lib/session";
@@ -22,6 +23,7 @@ import { Section } from "./-components/section";
 import { accountsQueryOptions } from "./-components/queries";
 
 export const Route = createFileRoute("/_authed/profile/delete")({
+  staticData: { title: "account.profile.layout.nav.delete" },
   component: DeleteAccountPage,
 });
 
@@ -34,6 +36,7 @@ function DeleteAccountPage() {
 }
 
 function DeleteAccountSection({ hasPassword, isAdmin }: { hasPassword: boolean; isAdmin: boolean }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
 
@@ -51,18 +54,15 @@ function DeleteAccountSection({ hasPassword, isAdmin }: { hasPassword: boolean; 
 
   return (
     <Section
-      icon={Trash2}
       tone="destructive"
-      title="ลบบัญชี"
+      title={t("account.profile.delete.title")}
       description={
-        isAdmin
-          ? "บัญชีผู้ดูแลระบบลบเองไม่ได้ กรุณาให้ผู้ดูแลระบบคนอื่นเปลี่ยนบทบาทก่อน"
-          : "ข้อมูลบัญชี อุปกรณ์ที่เข้าสู่ระบบ และคำขอเป็นผู้จัดงานจะถูกลบถาวร และไม่สามารถกู้คืนได้"
+        isAdmin ? t("account.profile.delete.adminDescription") : t("account.profile.delete.description")
       }
     >
       <Button variant="destructive" className="self-start" disabled={isAdmin} onClick={() => setOpen(true)}>
         <Trash2 data-icon="inline-start" />
-        ลบบัญชีของฉัน
+        {t("account.profile.delete.button")}
       </Button>
       <AlertDialog
         open={open}
@@ -73,10 +73,10 @@ function DeleteAccountSection({ hasPassword, isAdmin }: { hasPassword: boolean; 
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>ยืนยันการลบบัญชี</AlertDialogTitle>
+            <AlertDialogTitle>{t("account.profile.delete.confirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              การลบบัญชีไม่สามารถย้อนกลับได้
-              {hasPassword ? " กรอกรหัสผ่านเพื่อยืนยัน" : " หากเข้าสู่ระบบมานานแล้ว อาจต้องเข้าสู่ระบบใหม่ก่อนลบ"}
+              {t("account.profile.delete.confirmIntro")}
+              {hasPassword ? t("account.profile.delete.withPassword") : t("account.profile.delete.withoutPassword")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {hasPassword && (
@@ -84,20 +84,20 @@ function DeleteAccountSection({ hasPassword, isAdmin }: { hasPassword: boolean; 
               type="password"
               value={password}
               autoComplete="current-password"
-              placeholder="รหัสผ่านปัจจุบัน"
-              aria-label="รหัสผ่านปัจจุบัน"
+              placeholder={t("account.profile.delete.currentPassword")}
+              aria-label={t("account.profile.delete.currentPassword")}
               onChange={(e) => setPassword(e.target.value)}
             />
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+            <AlertDialogCancel>{t("account.profile.delete.cancel")}</AlertDialogCancel>
             <Button
               variant="destructive"
               disabled={remove.isPending || (hasPassword && !password)}
               onClick={() => remove.mutate()}
             >
               {remove.isPending ? <Spinner data-icon="inline-start" /> : <Trash2 data-icon="inline-start" />}
-              ลบบัญชีถาวร
+              {t("account.profile.delete.confirm")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

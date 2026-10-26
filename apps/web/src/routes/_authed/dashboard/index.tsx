@@ -1,25 +1,22 @@
-import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  ArrowRight,
-  ClipboardCheck,
-  LayoutDashboard,
-  Megaphone,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowRight, LayoutDashboard } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useT } from "@/i18n";
 import { userCountQueryOptions } from "@/lib/admin-users";
+import { formatNumber } from "@/lib/format";
 import { pendingApplicationsQueryOptions } from "@/lib/organizer-applications";
 import { hasRole, useSession } from "@/lib/session";
 import { RecentEvents } from "./-components/recent-events";
 
-export const Route = createFileRoute("/_authed/dashboard/")({ component: Overview });
+export const Route = createFileRoute("/_authed/dashboard/")({
+  staticData: { title: "dashboard.overview.title" }, component: Overview });
 
 function Overview() {
+  const t = useT();
   const { data: session } = useSession();
   const isAdmin = hasRole(session?.user, ["admin"]);
 
@@ -27,64 +24,52 @@ function Overview() {
     <>
       <PageHeader
         icon={LayoutDashboard}
-        title="ภาพรวม"
-        description={session ? `สวัสดีคุณ ${session.user.name}` : undefined}
+        title={t("dashboard.overview.title")}
+        description={session ? t("dashboard.overview.greeting", { name: session.user.name }) : undefined}
       />
-      {isAdmin && (
-        <div className="grid gap-4 md:grid-cols-3">
-          <StatCard
-            icon={Users}
-            label="ผู้ใช้ทั้งหมด"
-            query={userCountQueryOptions()}
-            to="/dashboard/users"
-          />
-          <StatCard
-            icon={Megaphone}
-            label="ผู้จัดงาน"
-            query={userCountQueryOptions("organizer")}
-            to="/dashboard/users"
-          />
-          <StatCard
-            icon={ClipboardCheck}
-            label="คำขอรอพิจารณา"
-            query={{ ...pendingApplicationsQueryOptions, select: (list) => list.length }}
-            to="/dashboard/applications"
-          />
-        </div>
-      )}
-      <RecentEvents title={isAdmin ? "อีเวนต์ล่าสุด" : "อีเวนต์ของฉัน"} />
+      {isAdmin && <Attention />}
+      <RecentEvents title={isAdmin ? t("dashboard.overview.recent.adminTitle") : t("dashboard.overview.recent.ownTitle")} />
     </>
   );
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  query,
-  to,
-}: {
-  icon: LucideIcon;
-  label: string;
-  query: UseQueryOptions<any, Error, number, any>;
-  to: "/dashboard/users" | "/dashboard/applications";
-}) {
-  const { data, isPending } = useQuery(query);
+/** What an admin has to act on (organizer requests, by name, each one click from its review) and, in a line, how big the user base is. */
+function Attention() {
+  const t = useT();
+  const { data: pending, isPending } = useQuery(pendingApplicationsQueryOptions);
+  const { data: users } = useQuery(userCountQueryOptions());
+  const { data: organizers } = useQuery(userCountQueryOptions("organizer"));
+
   return (
-    <Card size="sm">
+    <Card>
       <CardHeader>
-        <CardDescription className="flex items-center gap-2">
-          <Icon className="size-4" />
-          {label}
-        </CardDescription>
-        <CardTitle className="text-3xl font-bold tabular-nums">
-          {isPending ? <Skeleton className="h-9 w-16" /> : (data ?? 0).toLocaleString("th-TH")}
-        </CardTitle>
-        <CardAction>
-          <Link to={to} className={buttonVariants({ variant: "ghost", size: "icon-sm" })} aria-label={`ดู${label}`}>
-            <ArrowRight />
-          </Link>
-        </CardAction>
+        <CardTitle>{t("dashboard.overview.attention.title")}</CardTitle>
+        {users != null && organizers != null && (
+          <CardDescription>{t("dashboard.overview.attention.summary", { users: formatNumber(users), organizers: formatNumber(organizers) })}</CardDescription>
+        )}
       </CardHeader>
+      <CardContent>
+        {isPending ? (
+          <Skeleton className="h-12" />
+        ) : !pending?.length ? (
+          <p className="text-sm text-muted-foreground">{t("dashboard.overview.attention.none")}</p>
+        ) : (
+          <ul className="flex flex-col divide-y">
+            {pending.slice(0, 3).map((application) => (
+              <li key={application.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate font-medium">{application.applicant.name}</span>
+                  <span className="truncate text-sm text-muted-foreground">{application.organizationName}</span>
+                </span>
+                <Link to="/dashboard/applications" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                  {t("dashboard.overview.attention.review")}
+                  <ArrowRight data-icon="inline-end" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
     </Card>
   );
 }

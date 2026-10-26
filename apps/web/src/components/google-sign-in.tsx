@@ -5,6 +5,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { auth } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-errors";
+import { useT } from "@/i18n";
 import { providersQueryOptions } from "@/lib/providers";
 
 // lucide has no brand logos; a single-color mark keeps to the theme tokens
@@ -18,6 +19,7 @@ function GoogleIcon(props: React.ComponentProps<"svg">) {
 
 /** "Continue with Google" plus an "or" separator; renders nothing unless Google login is configured. */
 export function GoogleSignIn({ redirectTo }: { redirectTo: string }) {
+  const t = useT();
   const { data: providers } = useQuery(providersQueryOptions);
   const signIn = useMutation({
     mutationFn: async () => {
@@ -41,9 +43,9 @@ export function GoogleSignIn({ redirectTo }: { redirectTo: string }) {
     <>
       <Button variant="outline" size="lg" disabled={pending} onClick={() => signIn.mutate()}>
         {pending ? <Spinner data-icon="inline-start" /> : <GoogleIcon data-icon="inline-start" />}
-        ดำเนินการต่อด้วย Google
+        {t("shared.google.continue")}
       </Button>
-      <FieldSeparator>หรือ</FieldSeparator>
+      <FieldSeparator>{t("shared.google.or")}</FieldSeparator>
     </>
   );
 }
