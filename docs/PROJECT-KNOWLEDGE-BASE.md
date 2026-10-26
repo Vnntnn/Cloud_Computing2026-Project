@@ -303,7 +303,7 @@ These block nothing today, but two of them could invalidate scope decisions.
 
 ### Added 2026-10-24
 
-- ~~Which real domain goes into `dns.auto.tfvars`?~~ **Superseded 2026-10-25: there is no domain.** Route 53 / ACM / Cloudflare are not deployed; the site is served over `http://<NLB DNS name>` (:443 is a TCP passthrough with a self-signed cert). Consequences: Stripe's webhook and Google sign-in (both need https) stay off; the demo workaround for Stripe is `stripe listen --forward-to http://<nlb>/api/payment/webhook`. The IaC (`infra/terraform/dns.tf`) stays opt-in for if a domain appears.
+- ~~Which real domain goes into `dns.auto.tfvars`?~~ **Resolved 2026-10-25: `creasy.club`, the site is at `https://eventide.creasy.club`** (Cloudflare delegates `eventide` to Route 53; ACM wildcard cert, on the ALB since the production layout of 2026-10-26, on the NLB before; Google sign-in on; Stripe webhook `https://eventide.creasy.club/api/payment/webhook`). History: earlier the same day the plan assumed there was no domain (site over `http://<NLB DNS name>`, Stripe's webhook and Google sign-in off, Stripe demo workaround `stripe listen --forward-to http://<nlb>/api/payment/webhook`); that is no longer true. After a lab reset the Route 53 zone is new and the Cloudflare NS records must follow: `make deploy` does it (see `CLAUDE.md`, "After a lab reset").
 - Gmail App Password / Stripe sandbox key: **dry run for now** (mail logged, payment off) — `*.auto.tfvars` turn them on with no code change.
 
 ## 7. Immediate next actions
