@@ -135,7 +135,7 @@ function Kinds() {
   );
 }
 
-const credits = [photoCredits.lanterns, photoCredits.crowd];
+const credits = [photoCredits.nebula, photoCredits.crowd];
 
 /** Where hosting starts depends on who's looking: sign up, apply, or go straight to a new event. Ends the page on a photograph. */
 function HostBand() {

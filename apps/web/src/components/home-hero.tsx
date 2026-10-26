@@ -78,15 +78,15 @@ export function HomeHero({ onSearch, edge = "sand" }: { onSearch: (query: string
       <InkScene />
       <div ref={plate} aria-hidden className="hero-plate absolute inset-x-0 top-0 -z-10 h-[24rem] lg:inset-y-0 lg:h-auto">
         <img
-          src="/art/hero-lanterns-2400.webp"
-          srcSet="/art/hero-lanterns-1400.webp 1400w, /art/hero-lanterns-2400.webp 2400w, /art/hero-lanterns.webp 4000w"
+          src="/art/hero-nebula-2400.webp"
+          srcSet="/art/hero-nebula-1400.webp 1400w, /art/hero-nebula-2400.webp 2400w, /art/hero-nebula.webp 4000w"
           sizes="(min-width: 1024px) 1980px, 990px"
           width={4000}
-          height={1549}
+          height={1839}
           alt=""
           fetchPriority="high"
           decoding="async"
-          className="size-full object-cover object-[72%_50%]"
+          className="size-full object-cover object-[70%_50%]"
         />
       </div>
       <HeroTicket3D cursor={cursor} className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[24rem] w-full transition-opacity duration-500 lg:inset-y-0 lg:right-0 lg:left-auto lg:h-auto lg:w-[54%]" />

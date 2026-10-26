@@ -21,12 +21,11 @@ const expo = (t: number) => (t >= 1 ? 1 : 1 - 2 ** (-10 * clamp01(t)));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 /**
- * The hero's centrepiece: lantern-lit admission tickets, drawn live in WebGL. One gesture lights both layers: the warm lamp that
+ * The hero's centrepiece: admission tickets, drawn live in WebGL. One gesture lights both layers: the warm lamp that
  * follows the mouse is the same pointer that opens the CSS lantern pool on the photograph, so where the photo glows the tickets'
  * clear coat and foil catch the light. The front ticket rises like a lantern on load, takes one glint, then floats; it hinges on its
- * perforation when hovered and tears off when clicked (the `.date-ticket` motion of the cards, in 3D). Embers drift up out of the
- * lanterns, sized by their distance from the focus plane as a stand-in for depth of field. Everything is procedural: the reflections
- * are a painted canvas, the fleck of the paper a generated map. three loads as its own chunk; rendering stops off screen or with the
+ * perforation when hovered and tears off when clicked (the `.date-ticket` motion of the cards, in 3D). A spark flies off the tear.
+ * Everything is procedural: the reflections are a painted canvas, the fleck of the paper a generated map. three loads as its own chunk; rendering stops off screen or with the
  * tab hidden; reduced motion draws one still frame; the frame time is watched and the quality steps down on a slow machine.
  */
 export function HeroTicket3D({ className, cursor }: { className?: string; cursor?: RefObject<HeroCursor> }) {
@@ -49,8 +48,7 @@ export function HeroTicket3D({ className, cursor }: { className?: string; cursor
       const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
       const fine = matchMedia("(hover: hover) and (pointer: fine)").matches;
       const phone = () => el.clientWidth / el.clientHeight < 1.25;
-      const quality = { dpr: Math.min(devicePixelRatio, phone() ? 1.5 : 2), embers: 1, emberTier: 0 };
-      renderer.setPixelRatio(quality.dpr);
+      renderer.setPixelRatio(Math.min(devicePixelRatio, phone() ? 1.5 : 2));
       renderer.toneMapping = THREE.NeutralToneMapping;
       renderer.toneMappingExposure = 1;
 
@@ -120,15 +118,12 @@ export function HeroTicket3D({ className, cursor }: { className?: string; cursor
       skyLight.position.set(-2, 4, 3);
       scene.add(skyLight);
 
-      // the grade and the grain, inside every material (no composer, which an alpha canvas over the page would make awkward): a little
-      // more saturation and contrast, a teal lift in the shadows to sit in the dusk, and film grain so the CG shares the photograph's noise
-      const shared = { uTime: { value: 0 }, uGrain: { value: phone() ? 0.025 : 0.035 } };
+      // the grade, inside every material (no composer, which an alpha canvas over the page would make awkward): contrast and a teal lift in
+      // the shadows, so the tickets sit in the dusk
       const look = (m: InstanceType<typeof THREE.MeshPhysicalMaterial>) => {
         m.onBeforeCompile = (shader) => {
-          shader.uniforms.uTime = shared.uTime;
-          shader.uniforms.uGrain = shared.uGrain;
           shader.fragmentShader = shader.fragmentShader
-            .replace("void main() {", "uniform float uTime;\nuniform float uGrain;\nvoid main() {")
+            
             .replace(
               "#include <tonemapping_fragment>",
               `#include <tonemapping_fragment>
@@ -138,8 +133,6 @@ export function HeroTicket3D({ className, cursor }: { className?: string; cursor
                 c = mix(vec3(l), c, .96);
                 c = (c - .5) * 1.05 + .5;
                 c += vec3(.0, .012, .016) * (1. - l);
-                float n = fract(sin(dot(floor(gl_FragCoord.xy) + floor(uTime * 24.), vec2(12.9898, 78.233))) * 43758.5453);
-                c += (n - .5) * uGrain;
                 gl_FragColor.rgb = clamp(c, 0., 1.);
               }`,
             );
@@ -327,67 +320,7 @@ export function HeroTicket3D({ className, cursor }: { className?: string; cursor
       });
       const frontTicket = tickets[0];
 
-      // embers: points that rise out of the lanterns, sized and dimmed by their distance from the focus plane; the lamp pushes them aside
-      const emberCount = phone() ? 140 : 420;
-      const emberGeo = own(new THREE.BufferGeometry());
-      {
-        const next = sequence(99);
-        const pos = new Float32Array(emberCount * 3);
-        const seed = new Float32Array(emberCount);
-        const speed = new Float32Array(emberCount);
-        for (let i = 0; i < emberCount; i++) {
-          pos.set([(next() - 0.5) * 8, (next() - 0.5) * 6, (next() - 0.5) * 6 + (i < 12 ? 3 : 0)], i * 3);
-          seed[i] = next();
-          speed[i] = 0.15 + next() * 0.3;
-        }
-        emberGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-        emberGeo.setAttribute("aSeed", new THREE.BufferAttribute(seed, 1));
-        emberGeo.setAttribute("aSpeed", new THREE.BufferAttribute(speed, 1));
-      }
-      const emberU = {
-        uTime: { value: 0 },
-        uPx: { value: 1 },
-        uFocus: { value: 9 },
-        uFadeY: { value: phone() ? 0.32 : 0 },
-        uIn: { value: 0 },
-        uLamp: { value: new THREE.Vector3(0, 0, 9) },
-        uSun: { value: color(sun) },
-        uWarm: { value: color(sunDeep) },
-      };
-      const emberMat = own(
-        new THREE.ShaderMaterial({
-          uniforms: emberU,
-          transparent: true,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-          vertexShader: `
-            uniform float uTime, uPx, uFocus, uFadeY, uIn; uniform vec3 uLamp;
-            attribute float aSeed, aSpeed; varying float vA; varying float vCore;
-            void main() {
-              vec3 p = position; p.y = mod(p.y + uTime * aSpeed + 3., 6.) - 3.;
-              p.x += sin(uTime * .6 + aSeed * 6.283) * .18;
-              vec3 d = p - uLamp; float f = exp(-dot(d, d) * 1.2); p += normalize(d + 1e-4) * f * .5;
-              vec4 mv = modelViewMatrix * vec4(p, 1.); gl_Position = projectionMatrix * mv;
-              float coc = abs(-mv.z - uFocus);
-              gl_PointSize = min((2. + coc * 5.) * uPx / -mv.z, 64.);
-              float flick = .65 + .35 * sin(uTime * (3. + aSeed * 4.) + aSeed * 40.);
-              float ny = gl_Position.y / gl_Position.w * .5 + .5;
-              vA = uIn * flick / (1. + coc * coc * 1.4) * smoothstep(uFadeY, uFadeY + .25, ny) * smoothstep(0., .3, 3. - abs(p.y));
-              vCore = 1. / (1. + coc * 3.);
-            }`,
-          fragmentShader: `
-            uniform vec3 uSun, uWarm; varying float vA; varying float vCore;
-            void main() {
-              float r = length(gl_PointCoord - .5);
-              float a = smoothstep(.5, 0., r) * vA;
-              vec3 c = mix(uWarm, uSun, smoothstep(.25, 0., r) * vCore);
-              gl_FragColor = vec4(c * a, a);
-            }`,
-        }),
-      );
-      const embers = new THREE.Points(emberGeo, emberMat);
-      embers.frustumCulled = false;
-      scene.add(embers);
+      const sparkU = { uPx: { value: 1 }, uSun: { value: color(sun) } };
 
       // the burst when the stub tears off: a few sparks thrown from the perforation
       const sparkN = 40;
@@ -396,7 +329,7 @@ export function HeroTicket3D({ className, cursor }: { className?: string; cursor
       sparkGeo.setAttribute("aA", new THREE.BufferAttribute(new Float32Array(sparkN), 1));
       const sparkMat = own(
         new THREE.ShaderMaterial({
-          uniforms: { uPx: emberU.uPx, uSun: emberU.uSun },
+          uniforms: sparkU,
           transparent: true,
           depthWrite: false,
           blending: THREE.AdditiveBlending,
@@ -476,17 +409,13 @@ export function HeroTicket3D({ className, cursor }: { className?: string; cursor
           scene.fog.near = camera.position.z;
           scene.fog.far = camera.position.z + 10;
         }
-        emberU.uFocus.value = camera.position.z;
-        emberU.uPx.value = renderer.getPixelRatio() * ch * 0.5;
-        emberU.uFadeY.value = narrow ? 0.32 : 0;
-        shared.uGrain.value = narrow ? 0.025 : 0.035;
+        sparkU.uPx.value = renderer.getPixelRatio() * ch * 0.5;
         // two tickets on a phone, the front one a little smaller
         tickets[2].t.visible = !narrow;
         frontTicket.p.s = narrow ? 0.9 : 1;
       };
 
       const draw = (ms: number, dt: number) => {
-        shared.uTime.value = ms / 1000;
         const sec = ms / 1000;
         // the pointer: eased toward the mouse, or parked; the lamp follows it, with a glint sweeping across on load and every 8 s without a mouse
         const c = cursor?.current;
@@ -514,15 +443,12 @@ export function HeroTicket3D({ className, cursor }: { className?: string; cursor
           lamp.position.lerp(point.set(1.2, 1.4, 2.6), 0.05);
           lamp.intensity = lerp(lamp.intensity, 16, 0.05);
         }
-        emberU.uLamp.value.copy(lamp.position);
-        emberU.uIn.value = still ? 1 : expo((ms - 400) / 1800);
 
         // scroll: the tickets drift up like lanterns as the hero is left
         const box = section?.getBoundingClientRect();
         const sp = box ? clamp01(-box.top / Math.max(1, box.height)) : 0;
         group.position.y = sp * 1.6;
         group.rotation.z = sp * 0.15;
-        emberU.uTime.value = still ? 7.3 : sec * (1 + sp);
 
         const lean = mouse ? { x: (eased.x / Math.max(1, innerWidth) - 0.5) * 2, y: (eased.y / Math.max(1, innerHeight) - 0.5) * 2 } : { x: 0, y: 0 };
         tickets.forEach((tk, n) => {
@@ -591,19 +517,15 @@ export function HeroTicket3D({ className, cursor }: { className?: string; cursor
         const dt = Math.min(0.05, delta / 1000);
         last = now;
         draw(now - state.t0, dt);
-        // the frame time is watched: after a warm-up, two slow windows in a row step the quality down (fewer embers and 1x, then no embers)
+        // the frame time is watched: after a warm-up, two slow windows in a row step the quality down (back to 1x pixels)
         if (++frames > 30) {
           dts.push(delta);
           if (dts.length > 45) dts.shift();
           if (dts.length === 45) {
             const median = [...dts].sort((a, b) => a - b)[22];
             slow = median > Math.max(20, 1.8 * 16.7) ? slow + 1 : 0;
-            if (slow >= 45 && quality.emberTier < 2) {
-              quality.emberTier++;
-              if (quality.emberTier === 1) {
-                renderer.setPixelRatio(1);
-                emberGeo.setDrawRange(0, Math.floor(emberCount * 0.6));
-              } else emberGeo.setDrawRange(0, 0);
+            if (slow >= 45 && renderer.getPixelRatio() > 1) {
+              renderer.setPixelRatio(1);
               slow = 0;
               dts.length = 0;
               size();
