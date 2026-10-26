@@ -259,10 +259,11 @@ mail-worker, redis, web, `/files` → S3, db-migrate hook) ·
 `scripts/{tf-init,deploy,teardown,k3d-up,k3d-down,admin,check-lab}.sh`. The k3d parity
 GATE passed locally and **the first EKS session passed on 2026-10-24** (account
 524450451918, fresh build from zero: `make up` → `make deploy` → health/login/upload/mail/
-admin on `http://<nlb>`). **Not deployed:** a custom domain — none is available (2026-10-25), so
-there is no Route 53, ACM or Cloudflare: the site is opened through the NLB's own DNS name over
-`http://`, and Stripe's webhook and Google sign-in (both need https) stay off. The opt-in
-Terraform is in `infra/terraform/dns.tf`. Stripe keys are not set either.
+admin on `http://<nlb>`). **Live at `https://eventide.creasy.club`** (2026-10-25): `creasy.club`'s DNS is
+at Cloudflare, which delegates `eventide` (4 NS records) to a Route 53 zone; an ACM wildcard
+cert terminates TLS on the NLB (:443); Google sign-in is on; the Stripe and Gmail keys are in
+Secrets Manager. Stripe's webhook URL is `https://eventide.creasy.club/api/payment/webhook`.
+Not live: the CI deploy job (needs `make ci-creds`).
 
 ### Read these before doing anything
 
@@ -336,7 +337,7 @@ These are hard and load-bearing — most odd design choices trace back to one of
   the nightly EKS/RDS/NLB in `modules/platform` with `count = var.platform ? 1 : 0`.
   `make down` is `terraform apply -var platform=false` — a normal apply that destroys
   exactly the platform. The state bucket is created by `scripts/tf-init.sh`.
-- **DNS/TLS (opt-in, NOT deployed — no domain available):** `events.<domain>` delegated to Route 53, apex on Cloudflare; zone + wildcard
+- **DNS/TLS (deployed for `eventide.creasy.club`):** `<sub>.<domain>` delegated to Route 53, apex on Cloudflare; zone + wildcard
   ACM cert are permanent (`infra/terraform/dns.tf`, opt-in via `dns.auto.tfvars`); the NLB
   TLS listener + ALIAS record rebuild with the platform. Single host — SPA at `/`, APIs at `/api/*`,
   files at `/files/*`, no CORS. Stripe's webhook and Google's redirect URI both need this
@@ -403,9 +404,10 @@ as the `AWS_*` GitHub secrets.
 1. The **assignment brief has never been seen** — every scope decision is inference.
 2. Exact **checkpoint date** and what it requires.
 3. **Final demo date.**
-4. **No domain** (2026-10-25): Route 53 / ACM / Cloudflare are not deployed. Without https,
-   Stripe's webhook and Google sign-in cannot work; the Stripe demo workaround is
-   `stripe listen --forward-to http://<nlb>/api/payment/webhook` from a laptop.
+4. **After a lab reset the Route 53 zone is new**, so its 4 name servers change: create the
+   zone + cert first (`terraform apply -target=aws_route53_zone.app -target=aws_acm_certificate.app`,
+   then `-target=aws_route53_record.acm_validation`), replace the 4 NS records for `eventide` at
+   Cloudflare, wait for the cert to read `ISSUED`, and only then `make up`.
 
 ### Security
 
