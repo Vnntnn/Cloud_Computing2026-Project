@@ -82,10 +82,10 @@ it (single DB, Redis pod, SQS mail worker, `/files` → S3, 4 k8s Secrets). Spec
       `/files/public/…` 200 from S3 (raw S3 URL 200, `/files/private/x` 403, 4.6 MiB passes
       the ingress and gets the app's 413), password-reset mail via real SQS → mail-worker
       dry-run log, `make admin` → role admin, HPA metrics live.
-- [ ] **Lab session (domain) — BLOCKED: no domain available (2026-10-25).** If one appears: `infra/terraform/dns.auto.tfvars` with the domain →
-      `make up` → paste `terraform output route53_name_servers` into Cloudflare → wait for
-      `ISSUED` → `make deploy` (BETTER_AUTH_URL becomes `https://<domain>`) → the same curls
-      over HTTPS → `make down`. **`GATE`**
+- [x] **Domain live (2026-10-25): `https://eventide.creasy.club`** (Cloudflare NS → Route 53 → ACM → the load balancer's
+      HTTPS listener; the ALB since 2026-10-26). After a lab reset it is one command: `make deploy` re-points the
+      Cloudflare NS records at the new Route 53 zone (with `CLOUDFLARE_API_TOKEN`, else it prints the 4 names), waits for
+      the certificate to read `ISSUED` and brings the system up; then the same curls over HTTPS → `make down`. **`GATE`**
 - [ ] Stripe webhook endpoint (`https://<domain>/api/payment/webhook`) + Gmail App Password →
       `stripe.auto.tfvars` / `gmail.auto.tfvars` — optional; dry run until then.
 - [ ] `REPORT.md` + `DEMO-RUNSHEET.md` pass for the v2 app.
