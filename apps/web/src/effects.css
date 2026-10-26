@@ -377,3 +377,122 @@ html:not(.dark) .on-sand {
 .cursor-ring[data-labelled="true"] {
   opacity: 0;
 }
+
+/*
+ * The date on a cover, as a ticket (DateTicket): two pieces in the category's ink with its words on them. It rests a little askew.
+ * When the card it sits on (`.group`) is hovered or focused, the stub is torn off along the dashed line: the two pieces part and tilt
+ * in opposite ways, and the torn edges turn jagged (the same number of clip points at rest and torn, so the clip animates). Only
+ * with a hovering pointer and when motion is welcome; otherwise the ticket just rests. `--shift` is the distance of the tear:
+ * a few pixels on a card, a few percent of the poster on a poster.
+ */
+.date-ticket {
+  --notch: 5px;
+  --shift: 4px;
+  --tooth: 3px;
+  --ease-tear: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ticket-outline-color: color-mix(in oklab, black 28%, transparent);
+  width: 4rem;
+  rotate: -3deg;
+  color: var(--ticket-ink);
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  /* the outline of .ticket-v and a soft shadow, so the ticket lifts off whatever it lies on */
+  filter: var(--ticket-outline) drop-shadow(0 6px 8px color-mix(in oklab, black 28%, transparent));
+}
+
+.date-ticket > * {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ticket-fill);
+  transition:
+    transform 520ms var(--ease-tear),
+    clip-path 520ms var(--ease-tear);
+  /* the pieces' edges at rest: straight, but with the clip points the torn state moves */
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 85% 100%, 70% 100%, 55% 100%, 40% 100%, 25% 100%, 10% 100%, 0 100%);
+}
+
+.date-ticket-day {
+  height: 2.9rem;
+  border-radius: 6px 6px 0 0;
+  font-size: 1.875rem;
+}
+
+.date-ticket-stub {
+  height: 1.45rem;
+  border-radius: 0 0 6px 6px;
+  font-size: 0.75rem;
+  /* the stub is a shade darker than the day, so the two read as two pieces even before the tear */
+  background: color-mix(in oklab, var(--ticket-fill) 88%, black);
+  clip-path: polygon(0 0, 15% 0, 30% 0, 45% 0, 60% 0, 75% 0, 90% 0, 100% 0, 100% 100%, 0 100%);
+}
+
+.date-ticket > :last-child::before {
+  border-top-color: color-mix(in oklab, var(--ticket-ink) 55%, transparent);
+  transition: opacity var(--dur-fast) ease-out;
+}
+
+/* on a poster the ticket is sized in the poster's own units, so it grows and shrinks with the cover */
+.date-ticket[data-size="poster"] {
+  --notch: 2.3cqmin;
+  --shift: 2.2cqmin;
+  --tooth: 1.1cqmin;
+  width: 30cqmin;
+}
+
+.date-ticket[data-size="poster"] .date-ticket-day {
+  height: 27cqmin;
+  border-radius: 1.8cqmin 1.8cqmin 0 0;
+  font-size: 21cqmin;
+}
+
+.date-ticket[data-size="poster"] .date-ticket-stub {
+  height: 12cqmin;
+  border-radius: 0 0 1.8cqmin 1.8cqmin;
+  font-size: 6.2cqmin;
+}
+
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  /* the day lifts and tips back... */
+  .group:is(:hover, :focus-visible) .date-ticket > :first-child {
+    transform: translate(calc(var(--shift) * -0.35), calc(var(--shift) * -0.5)) rotate(-4deg);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 85% calc(100% - var(--tooth)), 70% 100%, 55% calc(100% - var(--tooth)), 40% 100%, 25% calc(100% - var(--tooth)), 10% 100%, 0 calc(100% - var(--tooth)));
+  }
+
+  /* ...and the stub tears off, drops and swings away from its top-left corner */
+  .group:is(:hover, :focus-visible) .date-ticket > :last-child {
+    transform: translate(calc(var(--shift) * 0.9), calc(var(--shift) * 1.7)) rotate(9deg);
+    transform-origin: 0 0;
+    clip-path: polygon(0 var(--tooth), 15% 0, 30% var(--tooth), 45% 0, 60% var(--tooth), 75% 0, 90% var(--tooth), 100% 0, 100% 100%, 0 100%);
+  }
+
+  /* the dashed line is where it tore: it is gone */
+  .group:is(:hover, :focus-visible) .date-ticket > :last-child::before {
+    opacity: 0;
+  }
+}
+
+/*
+ * A card in a list lifts a few pixels when the pointer is over it (or it has focus) and its cover throws a soft shadow, as a
+ * ticket picked up off a table. `transform`, not `translate`: `rise-in` already owns that property. Fine pointers without reduced
+ * motion only; everyone else keeps the zoom on the picture and the underlined title.
+ */
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .card-lift {
+    transition: transform var(--dur-base) var(--ease-out-expo);
+  }
+
+  .card-lift .card-lift-cover {
+    transition: box-shadow var(--dur-base) var(--ease-out-expo);
+  }
+
+  .card-lift:is(:hover, :focus-visible) {
+    transform: translateY(-6px);
+  }
+
+  .card-lift:is(:hover, :focus-visible) .card-lift-cover {
+    box-shadow: 0 14px 24px -12px color-mix(in oklab, var(--foreground) 40%, transparent);
+  }
+}

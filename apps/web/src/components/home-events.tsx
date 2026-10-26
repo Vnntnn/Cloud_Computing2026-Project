@@ -3,8 +3,9 @@ import { ArrowRight, ArrowUpRight, CalendarDays, MapPin } from "lucide-react";
 import { DateBlock, HourRuler, Kind, LiveMark } from "@/components/event-parts";
 import { CategoryChip, EventPoster } from "@/components/event-poster";
 import { buttonVariants } from "@/components/ui/button";
-import { useT } from "@/i18n";
+import { useLocale, useT } from "@/i18n";
 import { isLive, type Category, type EventSummary } from "@/lib/events";
+import { categoryName } from "@/lib/category-name";
 import { formatDateRange, formatTime } from "@/lib/format";
 import { colourwayOf } from "@/lib/poster";
 import { cn } from "cn";
@@ -31,12 +32,12 @@ export function Billboard({ event, level = 3 }: { event: EventSummary; level?: 2
     </Heading>
   );
   return (
-    <Link to="/events/$slug" params={{ slug: event.slug }} className={cn("group grid gap-6 rounded-sm lg:grid-cols-[7fr_5fr] lg:gap-12", focus)}>
-      <div data-cursor={t("common.cursor.view")} className="relative aspect-[5/4] overflow-hidden rounded-sm bg-muted sm:aspect-[4/3] lg:aspect-[16/9]">
+    <Link to="/events/$slug" params={{ slug: event.slug }} className={cn("card-lift group grid gap-6 rounded-sm lg:grid-cols-[7fr_5fr] lg:gap-12", focus)}>
+      <div data-cursor={t("common.cursor.view")} className="card-lift-cover relative aspect-[5/4] overflow-hidden rounded-sm bg-muted sm:aspect-[4/3] lg:aspect-[16/9]">
         {event.thumbnailUrl ? (
           <img src={event.thumbnailUrl} alt="" loading="lazy" className="size-full object-cover transition-transform duration-700 ease-out-expo group-hover:scale-[1.03]" />
         ) : (
-          <EventPoster event={event} layout={1} bare className="size-full">
+          <EventPoster event={event} layout={1} bare ticket className="size-full">
             <div className="absolute inset-x-0 bottom-0 z-10 p-5 pr-[34%] sm:p-7 sm:pr-[34%]">{title}</div>
           </EventPoster>
         )}
@@ -125,6 +126,7 @@ export function Ledger({ events }: { events: EventSummary[] }) {
  * colour on hover and focus, the colour the category's posters wear everywhere else.
  */
 export function KindIndex({ categories }: { categories: Category[] }) {
+  const locale = useLocale();
   return (
     <ul className="grid gap-x-12 lg:grid-cols-2">
       {categories.map((c) => {
@@ -142,7 +144,7 @@ export function KindIndex({ categories }: { categories: Category[] }) {
               )}
             >
               <CategoryChip slug={c.slug} className="h-10 w-14 sm:h-12 sm:w-[4.5rem]" />
-              <span className="line-clamp-2 min-w-0 flex-1 text-4xl leading-[1.2] font-bold tracking-tight sm:text-5xl sm:leading-[1.2] lg:text-6xl lg:leading-[1.2]">{c.name}</span>
+              <span className="line-clamp-2 min-w-0 flex-1 text-4xl leading-[1.2] font-bold tracking-tight sm:text-5xl sm:leading-[1.2] lg:text-6xl lg:leading-[1.2]">{categoryName(c, locale)}</span>
               <ArrowUpRight className="size-7 shrink-0 transition-transform duration-300 ease-out-expo group-hover:translate-x-1 group-hover:-translate-y-1 group-focus-visible:translate-x-1 group-focus-visible:-translate-y-1 sm:size-9" />
             </Link>
           </li>
