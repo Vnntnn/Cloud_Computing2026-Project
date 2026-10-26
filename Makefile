@@ -1,4 +1,4 @@
-.PHONY: dev db-reset tf-init up plan secrets ci-creds deploy admin load down k3d k3d-down help
+.PHONY: dev db-reset tf-init mirror up plan secrets ci-creds deploy admin load down k3d k3d-down help
 
 # Learner Lab credentials live in infra/aws.env (copy infra/aws.env.example).
 # Every AWS target sources it; Terraform and the AWS CLI read the same variables.
@@ -21,10 +21,13 @@ db-reset: ## wipe the compose volumes, recreate the database, migrate
 tf-init: ## create the state bucket if missing + terraform init (idempotent; `up` runs it)
 	$(AWSENV) bash scripts/tf-init.sh
 
-up: tf-init ## terraform apply — permanent layer + EKS + RDS + NLB + ingress-nginx; point kubectl at it
+up: tf-init ## terraform apply — permanent layer + EKS + RDS + ALB + WAF + ingress-nginx; point kubectl at it
 	$(AWSENV) $(TF) apply -auto-approve -input=false $(if $(NODE_INSTANCE_TYPE),-var node_instance_type=$(NODE_INSTANCE_TYPE))
 	$(AWSENV) aws eks update-kubeconfig --region us-east-1 --name eventide
 	$(AWSENV) kubectl get nodes
+
+mirror: ## copy the ingress-nginx + metrics-server images into ECR (once per tag; the edge nodes can't reach the internet)
+	$(AWSENV) bash scripts/mirror-images.sh
 
 plan: ## terraform plan (no changes)
 	$(AWSENV) $(TF) plan -input=false
@@ -50,10 +53,10 @@ rollback: ## gated Helm rollback (payment preflight first) — make rollback REV
 admin: ## promote a registered user to admin on the running cluster — make admin EMAIL=you@example.com
 	$(AWSENV) bash scripts/admin.sh $(EMAIL)
 
-load: ## k6 autoscaling load test vs /api/events — pass BASE_URL=http://<nlb-dns>
+load: ## k6 autoscaling load test vs /api/events — pass BASE_URL=https://<host>
 	BASE_URL="$(BASE_URL)" k6 run load/k6/events.js
 
-down: ## terraform apply platform=false (EKS/RDS/NLB gone, ECR/S3/SQS/DNS stay) + verify — run at EVERY session end
+down: ## terraform apply platform=false (EKS/RDS/ALB gone, ECR/S3/SQS/DNS stay) + verify — run at EVERY session end
 	$(AWSENV) bash scripts/teardown.sh
 
 # --- local parity: k3d running the same Helm chart as EKS ------------

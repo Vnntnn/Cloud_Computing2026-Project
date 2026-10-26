@@ -35,7 +35,7 @@ output "public_host" {
 }
 
 output "public_url" {
-  description = "https://<public_host> when DNS is on, else \"\" — deploy.sh falls back to http://<nlb>."
+  description = "https://<public_host> when DNS is on, else \"\" — deploy.sh falls back to http://<alb>."
   value       = local.dns_enabled ? "https://${local.zone_name}" : ""
 }
 
@@ -72,9 +72,9 @@ output "configure_kubectl" {
   value       = var.platform ? "aws eks update-kubeconfig --region ${var.region} --name ${var.project}" : ""
 }
 
-output "nlb_dns_name" {
-  description = "Public NLB hostname → ingress-nginx. `curl http://<this>/api/events/health` after deploy."
-  value       = try(module.platform[0].nlb_dns_name, "")
+output "alb_dns_name" {
+  description = "Public ALB hostname → ingress-nginx. `curl http://<this>/api/events/health` after deploy."
+  value       = try(module.platform[0].alb_dns_name, "")
 }
 
 output "rds_endpoint" {
@@ -84,4 +84,9 @@ output "rds_endpoint" {
 output "rds_master_secret_arn" {
   description = "Secrets Manager ARN with DATABASE_URL + BETTER_AUTH_SECRET — scripts/deploy.sh reads it."
   value       = try(module.platform[0].rds_master_secret_arn, "")
+}
+
+output "endpoints_secret_arn" {
+  description = "Secrets Manager ARN with DATABASE_URL (RDS Proxy), DATABASE_MIGRATE_URL (direct) and REDIS_URL."
+  value       = try(module.platform[0].endpoints_secret_arn, "")
 }

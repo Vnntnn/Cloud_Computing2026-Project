@@ -29,6 +29,10 @@ spec:
       {{- if $svc.terminationGracePeriodSeconds }}
       terminationGracePeriodSeconds: {{ $svc.terminationGracePeriodSeconds }}
       {{- end }}
+      {{- with $svc.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       # Spread across nodes so one node loss can't take a whole service down.
       topologySpreadConstraints:
         - maxSkew: 1

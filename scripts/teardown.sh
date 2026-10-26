@@ -31,7 +31,7 @@ else
 fi
 
 echo
-echo "== 2. terraform apply -var platform=false  (destroys EKS + RDS + NLB + add-ons, keeps ECR/S3/SQS/secrets/DNS) =="
+echo "== 2. terraform apply -var platform=false  (destroys EKS + RDS + proxy + ElastiCache + NAT + endpoints + ALB + WAF + alarms + add-ons; keeps the free VPC, ECR/S3/SQS/secrets/DNS) =="
 tf apply -auto-approve -input=false -var platform=false
 
 echo
@@ -49,6 +49,24 @@ aws ec2 describe-instances --filters Name=instance-state-name,Values=running \
   --query 'Reservations[].Instances[].InstanceId' --output text
 echo "--- target groups ---"
 aws elbv2 describe-target-groups --query 'TargetGroups[].TargetGroupName' --output text
+# the production layout bills hourly for these too (NAT, endpoints, cache, proxy, WAF)
+echo "--- NAT gateways (not deleted) ---"
+aws ec2 describe-nat-gateways --filter Name=state,Values=available,pending,deleting \
+  --query 'NatGateways[].NatGatewayId' --output text
+echo "--- Elastic IPs ---"
+aws ec2 describe-addresses --query 'Addresses[].PublicIp' --output text
+echo "--- VPC interface endpoints ---"
+aws ec2 describe-vpc-endpoints --filters Name=vpc-endpoint-type,Values=Interface \
+  --query 'VpcEndpoints[].ServiceName' --output text
+echo "--- ElastiCache replication groups ---"
+aws elasticache describe-replication-groups --query 'ReplicationGroups[].ReplicationGroupId' --output text
+echo "--- RDS proxies ---"
+aws rds describe-db-proxies --query 'DBProxies[].DBProxyName' --output text
+echo "--- WAF web ACLs (regional) ---"
+aws wafv2 list-web-acls --scope REGIONAL --query 'WebACLs[].Name' --output text
+echo "--- CloudWatch alarms / dashboards ---"
+aws cloudwatch describe-alarms --alarm-name-prefix eventide- --query 'MetricAlarms[].AlarmName' --output text
+aws cloudwatch list-dashboards --dashboard-name-prefix eventide --query 'DashboardEntries[].DashboardName' --output text
 echo
 echo "If any line above is non-empty, something survived. Find it now — check the"
 echo "lab credit remaining (expect ~\$1.10/session; more means a resource is still up)."

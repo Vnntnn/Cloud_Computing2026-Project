@@ -14,8 +14,8 @@
 #
 # Secrets — four k8s Secrets assembled here every session (ESO stays off in the
 # lab, SYSTEM-DESIGN §5.2.1; the app only ever reads process.env):
-#   eventide-common       DATABASE_URL, S3_BUCKET, S3_REGION, AWS_REGION, AWS_* session
-#                         creds, MAIL_QUEUE_URL     <- eventide/rds-master, terraform outputs,
+#   eventide-common       DATABASE_URL (RDS Proxy), DATABASE_MIGRATE_URL, REDIS_URL, S3_BUCKET, S3_REGION, AWS_REGION, AWS_* session
+#                         creds, MAIL_QUEUE_URL     <- eventide/endpoints, terraform outputs,
 #                                                     `aws configure export-credentials`
 #   eventide-auth         BETTER_AUTH_SECRET (+ GOOGLE_*)        <- rds-master, eventide/google-oauth
 #   eventide-payment      STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET <- eventide/stripe   ("" = payment off)
@@ -42,12 +42,13 @@ GOOGLE_SECRET="$(tfout google_oauth_secret || true)"
 STRIPE_SECRET="$(tfout stripe_secret || true)"
 GMAIL_SECRET="$(tfout gmail_secret || true)"
 MASTER_SECRET_ARN="$(tfout rds_master_secret_arn)"
-NLB="$(tfout nlb_dns_name)"
-[ -n "$NLB" ] || { echo "no platform in the Terraform state — run \`make up\` first"; exit 1; }
+ENDPOINTS_SECRET_ARN="$(tfout endpoints_secret_arn)"
+ALB="$(tfout alb_dns_name)"
+[ -n "$ALB" ] || { echo "no platform in the Terraform state — run \`make up\` first"; exit 1; }
 # BETTER_AUTH_URL (cookies, OAuth callbacks). Prefer the custom domain (Route 53 +
-# ACM, infra/terraform/dns.tf); fall back to the bare NLB over http until DNS lands.
+# ACM, infra/terraform/dns.tf); fall back to the bare ALB over http until DNS lands.
 PUBLIC_URL_TF="$(tfout public_url || true)"
-PUBLIC_URL="${PUBLIC_URL:-${PUBLIC_URL_TF:-http://$NLB}}"
+PUBLIC_URL="${PUBLIC_URL:-${PUBLIC_URL_TF:-http://$ALB}}"
 
 echo "registry: $REG   tag: $TAG   images: $IMAGES   publicUrl: $PUBLIC_URL"
 
@@ -70,9 +71,13 @@ sm() { aws secretsmanager get-secret-value --region "$REGION" --secret-id "$1" \
 jkey() { echo "$1" | jq -r ".$2 // empty"; } # key of a JSON secret, "" when absent
 
 RDS_JSON="$(sm "$MASTER_SECRET_ARN")"
+# DATABASE_URL (via RDS Proxy), DATABASE_MIGRATE_URL (direct, for the migrate hook), REDIS_URL (ElastiCache, TLS + AUTH)
+EP_JSON="$(sm "$ENDPOINTS_SECRET_ARN")"
 CREDS="$(aws configure export-credentials --format process)"
 mksecret eventide-common \
-  --from-literal=DATABASE_URL="$(jkey "$RDS_JSON" DATABASE_URL)" \
+  --from-literal=DATABASE_URL="$(jkey "$EP_JSON" DATABASE_URL)" \
+  --from-literal=DATABASE_MIGRATE_URL="$(jkey "$EP_JSON" DATABASE_MIGRATE_URL)" \
+  --from-literal=REDIS_URL="$(jkey "$EP_JSON" REDIS_URL)" \
   --from-literal=S3_BUCKET="$UPLOADS_BUCKET" \
   --from-literal=S3_REGION="$REGION" \
   --from-literal=AWS_REGION="$REGION" \
@@ -92,7 +97,7 @@ payment_gate upgrade "$PAYMENT_IMAGE" || { echo "nothing was deployed"; exit 1; 
 
 AUTH_ARGS=(--from-literal=BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-$(jkey "$RDS_JSON" BETTER_AUTH_SECRET)}")
 # Google rejects redirect URIs that are not HTTPS (localhost aside), so the button
-# would only ever fail on the bare http://<nlb> origin: enable it once the custom
+# would only ever fail on the bare http://<alb> origin: enable it once the custom
 # domain serves HTTPS.
 case "$PUBLIC_URL" in https://*) ;; *) GOOGLE_SECRET="" ;; esac
 if [ -n "$GOOGLE_SECRET" ]; then
@@ -127,7 +132,7 @@ release_upgrade values.aws.yaml "$PAYMENT_IMAGE" 420s \
   $(helm_tag_sets "$TAG" $IMAGES) $(keep_sets $IMAGES) \
   || exit 1
 
-for d in $APP_SERVICES redis; do
+for d in $APP_SERVICES; do
   kubectl -n eventide rollout status "deployment/$d" --timeout=180s
 done
 

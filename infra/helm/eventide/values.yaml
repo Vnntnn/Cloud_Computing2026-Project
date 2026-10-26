@@ -58,6 +58,9 @@ files:
 # commonSecretName, so every deploy migrates BEFORE the new pods roll.
 dbMigrate:
   enabled: true
+  # key of the common Secret the Job connects with. EKS points it at the direct-to-RDS URL: the
+  # services use RDS Proxy, a schema change is better off on a plain session.
+  urlKey: DATABASE_URL
   image:
     repository: eventide/db-bootstrap   # ECR repo name kept from v1 (packages/db/Dockerfile)
     tag: latest

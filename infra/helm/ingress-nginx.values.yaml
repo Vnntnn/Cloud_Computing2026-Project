@@ -13,6 +13,21 @@
 controller:
   replicaCount: 2
 
+  config:
+    # behind the ALB: take the client IP from X-Forwarded-For (trusted only from the VPC, see
+    # controller.config.proxy-real-ip-cidr in platform.tf) and keep the ALB's X-Forwarded-Proto
+    use-forwarded-headers: "true"
+    compute-full-forwarded-for: "true"
+
+  # Edge tier only (no route to the internet). The image is our ECR mirror: registry and
+  # image name are set by helm_release.ingress_nginx; the chart's pinned digest belongs to
+  # the upstream manifest, so it is cleared (scripts/mirror-images.sh copies by tag).
+  nodeSelector:
+    eventide/tier: edge
+  image:
+    tag: "v1.15.1"
+    digest: ""
+
   service:
     type: NodePort
     # Preserve the real client IP (the NLB target groups already have

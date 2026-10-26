@@ -42,7 +42,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ $root.Values.commonSecretName }}
-                  key: DATABASE_URL
+                  key: {{ $root.Values.dbMigrate.urlKey | default "DATABASE_URL" }}
           resources:
             requests: { cpu: 100m, memory: 128Mi }
             limits: { cpu: 500m, memory: 512Mi }
