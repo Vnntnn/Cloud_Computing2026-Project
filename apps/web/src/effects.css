@@ -37,7 +37,7 @@
   background:
     linear-gradient(to bottom, color-mix(in oklab, var(--dusk) 70%, transparent), transparent 22%),
     linear-gradient(to top, var(--dusk) 0%, color-mix(in oklab, var(--dusk) 55%, transparent) 38%, transparent 70%),
-    color-mix(in oklab, var(--dusk) 6%, transparent);
+    color-mix(in oklab, var(--dusk) 0%, transparent);
 }
 
 .hero-plate img {
@@ -54,14 +54,14 @@
 
 @media (min-width: 1024px) {
   .hero-plate {
-    mask-image: linear-gradient(to right, transparent, #000 46%);
+    mask-image: linear-gradient(to right, transparent 22%, #000 58%);
   }
 
   .hero-plate::after {
     background:
       linear-gradient(to bottom, color-mix(in oklab, var(--dusk) 70%, transparent), transparent 18%),
-      linear-gradient(to top, var(--dusk) 0%, color-mix(in oklab, var(--dusk) 70%, transparent) 26%, transparent 58%),
-      linear-gradient(to right, color-mix(in oklab, var(--dusk) 60%, transparent), color-mix(in oklab, var(--dusk) 18%, transparent) 70%);
+      linear-gradient(to top, var(--dusk) 0%, color-mix(in oklab, var(--dusk) 60%, transparent) 20%, transparent 46%),
+      linear-gradient(to right, color-mix(in oklab, var(--dusk) 45%, transparent), transparent 65%);
   }
 }
 
