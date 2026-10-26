@@ -1,0 +1,2 @@
+ALTER TABLE "payments" DROP CONSTRAINT "payments_paid_at_check";--> statement-breakpoint
+ALTER TABLE "payments" ADD CONSTRAINT "payments_paid_at_check" CHECK ("payments"."status" not in ('paid', 'refunded') or "payments"."paid_at" is not null or "payments"."recovery_hold" = 'inconsistent') NOT VALID;

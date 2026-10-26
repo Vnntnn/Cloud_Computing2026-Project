@@ -16,7 +16,7 @@ mock.module("@app/auth-guard", () => ({
 }));
 
 const { event: app } = await import("../src/app");
-const { db, eq, eventCategories, eventInvitations, events, inArray, users } = await import("@app/db");
+const { db, dispatchNotifications, eq, eventCategories, eventInvitations, events, inArray, notificationOutbox, sql, users } = await import("@app/db");
 
 const runId = crypto.randomUUID().slice(0, 8);
 const userIds: string[] = [];
@@ -96,6 +96,12 @@ beforeEach(() => {
 });
 
 afterAll(async () => {
+  // the outbox rows of these events' invitations (they point at the invitation by id, not by a foreign key)
+  await db
+    .delete(notificationOutbox)
+    .where(inArray(notificationOutbox.subjectId, db.select({ id: eventInvitations.id }).from(eventInvitations).where(inArray(eventInvitations.eventId, eventIds))));
+  // and any made for an event this file didn't register: every address it invites carries its run id
+  await db.delete(notificationOutbox).where(sql`${notificationOutbox.dedupeKey} like ${`event-invitation:%${runId}@example.com:%`}`);
   await db.delete(events).where(inArray(events.id, eventIds));
   await db.delete(eventCategories).where(eq(eventCategories.id, categoryId));
   await db.delete(users).where(inArray(users.id, userIds));
@@ -260,17 +266,21 @@ describe("mail", () => {
     expect(mailedTo()).toEqual([`new-mail-${runId}@example.com`]);
   });
 
-  test("a failed enqueue doesn't fail the invite, and is retried on the next one", async () => {
+  // Changed with the outbox: a queue that is down used to release the claim (notified_at back to null) so that the *next invite call*
+  // would retry; now the claim and the mail are recorded together, so the invitation is claimed and the mail is retried by the outbox
+  // (see "invitation mail survives a crash"), without anyone having to invite again.
+  test("a failed enqueue doesn't fail the invite; the mail is owed and retried by the outbox, not by the next invite", async () => {
     const event = await createEvent();
     enqueueMail.mockImplementationOnce(async () => {
       throw new Error("queue down");
     });
     const first = await invite(event.id, [`retry-${runId}@example.com`]);
     expect(first.status).toBe(200);
-    expect((await json(first)).invited[0].notifiedAt).toBeNull();
+    expect((await json(first)).invited[0].notifiedAt).not.toBeNull();
 
+    // the next invite mails only its own invitee: the first is the outbox's to retry
     await invite(event.id, [`later-${runId}@example.com`]);
-    expect(mailedTo()).toEqual([`later-${runId}@example.com`, `retry-${runId}@example.com`, `retry-${runId}@example.com`].sort());
+    expect(mailedTo()).toEqual([`later-${runId}@example.com`, `retry-${runId}@example.com`].sort());
     const list = await json(await request("GET", `/${event.id}/invitations`, "owner"));
     expect(list.items.every((i: any) => i.notifiedAt !== null)).toBeTrue();
   });
@@ -310,5 +320,179 @@ describe("access", () => {
     expect((await request("GET", `/${event.id}/invitations`, "owner")).status).toBe(200);
     expect((await json(await invite(event.id, [emailOf("guest")]))).code).toBe("EVENT_SUSPENDED");
     expect((await request("GET", `/${event.slug}`, "guest")).status).toBe(404);
+  });
+});
+
+describe("invitation mail survives a crash", () => {
+  const outboxOf = (eventId: string) =>
+    db
+      .select({ outbox: notificationOutbox })
+      .from(notificationOutbox)
+      .innerJoin(eventInvitations, eq(eventInvitations.id, notificationOutbox.subjectId))
+      .where(eq(eventInvitations.eventId, eventId))
+      .then((rows) => rows.map((r) => r.outbox));
+  const queueDown = () =>
+    enqueueMail.mockImplementation(async () => {
+      throw new Error("queue down");
+    });
+  const queueUp = () => enqueueMail.mockImplementation(async () => {});
+  const dueNow = (eventId: string) =>
+    db
+      .update(notificationOutbox)
+      .set({ nextAttemptAt: new Date(Date.now() - 1000) })
+      .where(inArray(notificationOutbox.subjectId, db.select({ id: eventInvitations.id }).from(eventInvitations).where(eq(eventInvitations.eventId, eventId))));
+  const send = async (eventId: string) => {
+    const ids = (await db.select({ id: eventInvitations.id }).from(eventInvitations).where(eq(eventInvitations.eventId, eventId))).map((r) => r.id);
+    return dispatchNotifications((message) => enqueueMail(message), { subjectIds: ids });
+  };
+
+  test("an invitation committed with the queue down is claimed and its mail recorded together; it is sent once later, and the invitation isn't duplicated", async () => {
+    const event = await createEvent();
+    queueDown();
+    const response = await invite(event.id, [emailOf("guest")]);
+    expect(response.status).toBe(200);
+    const [invited] = (await json(response)).invited;
+    // the invitation stands, claimed, with its mail owed
+    expect(invited.notifiedAt).not.toBeNull();
+    const [owed] = await outboxOf(event.id);
+    expect(owed).toMatchObject({ kind: "event-invitation", state: "pending", dedupeKey: expect.stringMatching(new RegExp(`^event-invitation:${invited.id}:${emailOf("guest")}:\\d+$`)) });
+    expect(owed!.attempts).toBe(1);
+    expect(owed!.lastError).toBe("Error");
+
+    // the process restarts, the backoff passes, the queue is back
+    queueUp();
+    enqueueMail.mockClear();
+    await dueNow(event.id);
+    expect(await send(event.id)).toEqual({ sent: 1, failed: 0, skipped: 0 });
+    expect(await send(event.id)).toEqual({ sent: 0, failed: 0, skipped: 0 });
+    expect(enqueueMail).toHaveBeenCalledTimes(1);
+    expect(enqueueMail.mock.calls[0]![0]).toMatchObject({ to: emailOf("guest"), template: "event-invitation", props: { email: emailOf("guest") } });
+    expect(await db.$count(eventInvitations, eq(eventInvitations.eventId, event.id))).toBe(1);
+  });
+
+  test("a revoked, re-addressed or no-longer-invite-only invitation is not mailed when its time comes", async () => {
+    const event = await createEvent();
+    queueDown();
+    const { invited } = await json(await invite(event.id, [emailOf("guest"), emailOf("stranger"), `third-${runId}@example.com`]));
+    const byEmail = Object.fromEntries(invited.map((i: any) => [i.email, i]));
+    expect((await outboxOf(event.id)).length).toBe(3);
+
+    // revoked
+    expect((await request("DELETE", `/${event.id}/invitations/${byEmail[emailOf("guest")].id}`, "owner")).status).toBeLessThan(300);
+    // re-addressed: the new address gets its own mail, the old one's is stale
+    queueUp();
+    enqueueMail.mockClear();
+    const patched = await request("PATCH", `/${event.id}/invitations/${byEmail[emailOf("stranger")].id}`, "owner", { email: `fixed-${runId}@example.com` });
+    expect(patched.status).toBe(200);
+    await dueNow(event.id);
+    const report = await send(event.id);
+    expect(report.skipped).toBeGreaterThanOrEqual(1);
+    const to = enqueueMail.mock.calls.map(([m]) => m.to).sort();
+    expect(to).toEqual([`fixed-${runId}@example.com`, `third-${runId}@example.com`].sort());
+    expect(to).not.toContain(emailOf("guest"));
+    expect(to).not.toContain(emailOf("stranger"));
+  });
+
+  test("an event switched away from invite-only before the mail goes out: it is skipped", async () => {
+    const event = await createEvent();
+    queueDown();
+    await invite(event.id, [emailOf("guest")]);
+    queueUp();
+    enqueueMail.mockClear();
+    await request("PATCH", `/${event.id}`, "owner", { status: "draft" });
+    await dueNow(event.id);
+    expect(await send(event.id)).toEqual({ sent: 0, failed: 0, skipped: 1 });
+    expect(enqueueMail).not.toHaveBeenCalled();
+  });
+
+  test("duplicate workers send once; recipients that others invited are not touched; unauthorized callers record nothing", async () => {
+    const event = await createEvent();
+    expect((await invite(event.id, [emailOf("guest")], "other")).status).toBe(403);
+    expect((await invite(event.id, [emailOf("guest")], "stranger")).status).toBe(403);
+    expect(await outboxOf(event.id)).toEqual([]);
+
+    queueDown();
+    await invite(event.id, [emailOf("guest")]);
+    queueUp();
+    enqueueMail.mockClear();
+    await dueNow(event.id);
+    const reports = await Promise.all([send(event.id), send(event.id), send(event.id)]);
+    expect(reports.reduce((n, r) => n + r.sent, 0)).toBe(1);
+    expect(enqueueMail).toHaveBeenCalledTimes(1);
+  });
+
+  test("a queue that keeps failing ends as failed with the attempts counted and only the error name kept", async () => {
+    const event = await createEvent();
+    queueDown();
+    await invite(event.id, [emailOf("guest")]);
+    const errors = mock(() => {});
+    const original = console.error;
+    console.error = errors;
+    try {
+      for (let attempt = 2; attempt <= 8; attempt++) {
+        await dueNow(event.id);
+        await send(event.id);
+      }
+    } finally {
+      console.error = original;
+    }
+    const [row] = await outboxOf(event.id);
+    expect(row).toMatchObject({ state: "failed", attempts: 8, lastError: "Error" });
+    // nothing private in the logs
+    expect(JSON.stringify(errors.mock.calls)).not.toContain("@example.com");
+    expect(JSON.stringify(errors.mock.calls)).not.toContain("queue down");
+  });
+
+  test("an invitation whose mail was skipped because the event went back to a draft is mailed when it is switched to invite-only again", async () => {
+    const event = await createEvent();
+    queueDown();
+    const { invited } = await json(await invite(event.id, [emailOf("guest")]));
+    await request("PATCH", `/${event.id}`, "owner", { status: "draft" });
+    queueUp();
+    enqueueMail.mockClear();
+    await dueNow(event.id);
+    expect(await send(event.id)).toEqual({ sent: 0, failed: 0, skipped: 1 });
+    // unclaimed: it is owed again
+    expect((await json(await request("GET", `/${event.id}/invitations`, "owner"))).items[0].notifiedAt).toBeNull();
+
+    await request("PATCH", `/${event.id}`, "owner", { status: "invite" });
+    await waitForMails(1);
+    expect(mailedTo()).toEqual([emailOf("guest")]);
+    expect((await outboxOf(event.id)).filter((r) => r.state === "sent")).toHaveLength(1);
+    expect(invited).toHaveLength(1);
+  });
+
+  test("re-addressed and addressed back: the invitee gets one mail, and the address in between none", async () => {
+    const event = await createEvent();
+    queueDown();
+    const { invited } = await json(await invite(event.id, [emailOf("guest")]));
+    const id = invited[0].id;
+    await request("PATCH", `/${event.id}/invitations/${id}`, "owner", { email: `between-${runId}@example.com` });
+    await request("PATCH", `/${event.id}/invitations/${id}`, "owner", { email: emailOf("guest") });
+    queueUp();
+    enqueueMail.mockClear();
+    await dueNow(event.id);
+    await send(event.id);
+    expect(mailedTo()).toEqual([emailOf("guest")]);
+    expect((await outboxOf(event.id)).length).toBe(3);
+  });
+
+  test("more invitations than one dispatch's default are all sent by the call that recorded them", async () => {
+    const event = await createEvent();
+    const emails = Array.from({ length: 60 }, (_, i) => `bulk${i}-${runId}@example.com`);
+    const response = await invite(event.id, emails);
+    expect(response.status).toBe(200);
+    expect(enqueueMail).toHaveBeenCalledTimes(60);
+    expect((await outboxOf(event.id)).every((r) => r.state === "sent")).toBe(true);
+  });
+
+  test("an invitation saved with the mail recorded is not lost if the process dies before sending: nothing is left unmailed and unowed", async () => {
+    const event = await createEvent();
+    queueDown();
+    await invite(event.id, [emailOf("guest")]);
+    // (the process died here: only the rows exist)
+    const list = (await json(await request("GET", `/${event.id}/invitations`, "owner"))).items;
+    expect(list.every((i: any) => i.notifiedAt !== null)).toBe(true);
+    expect((await outboxOf(event.id)).every((r) => r.state === "pending")).toBe(true);
   });
 });

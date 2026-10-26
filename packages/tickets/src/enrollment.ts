@@ -1,5 +1,5 @@
-import { and, db, enrollments, eq, eventInvitations, gt, inArray, ne, or, seatHolds, sql, ticketTypes } from "@app/db";
-import { EnrollmentClosed, EnrollmentNotFound, SoldOut } from "./errors";
+import { and, db, enrollments, eq, eventInvitations, gt, inArray, ne, or, seatHolds, sql, ticketMailOutbox, tickets, ticketTypes } from "@app/db";
+import { AnotherPaymentAccepted, EnrollmentClosed, EnrollmentNotFound, OverLimit, SoldOut } from "./errors";
 import { announceSeats } from "./seats";
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -77,16 +77,22 @@ export async function invitationTaken(executor: Executor, invitationId: string, 
   return !!row;
 }
 
-/** Marks an enrollment confirmed and uses up its invitation. Run it in the transaction that locked the enrollment. */
-export async function markConfirmed(tx: Tx, enrollment: Pick<EnrollmentRow, "id" | "invitationId">) {
+/**
+ * Marks an enrollment confirmed and uses up its invitation. `paymentId` is the payment that confirmed it (none for a free
+ * or approved-free order). The mail owed to each attendee is recorded here, in the confirming transaction, and sent after it
+ * (outbox.ts), so confirming and owing the mail can't be separated by a crash. Run it in the transaction that locked the enrollment.
+ */
+export async function markConfirmed(tx: Tx, enrollment: Pick<EnrollmentRow, "id" | "invitationId">, paymentId?: string) {
   const now = new Date();
   await tx
     .update(enrollments)
-    .set({ status: "confirmed", confirmedAt: now, expiresAt: null })
+    .set({ status: "confirmed", confirmedAt: now, expiresAt: null, ...(paymentId ? { acceptedPaymentId: paymentId } : {}) })
     .where(eq(enrollments.id, enrollment.id));
   if (enrollment.invitationId) {
     await tx.update(eventInvitations).set({ usedAt: now }).where(eq(eventInvitations.id, enrollment.invitationId));
   }
+  const owed = await tx.select({ ticketId: tickets.id }).from(tickets).where(eq(tickets.enrollmentId, enrollment.id));
+  if (owed.length) await tx.insert(ticketMailOutbox).values(owed).onConflictDoNothing();
 }
 
 /**
@@ -106,26 +112,48 @@ export async function markCancelled(tx: Tx, enrollment: Pick<EnrollmentRow, "id"
 /**
  * Confirms a pending (approved) or paid enrollment. A first_come or invite enrollment whose hold
  * ran out no longer owns its seats or invitation, so it's confirmed only if they're still free;
- * otherwise `SoldOut` (the payment service then refunds). Approval tickets have no seats to protect.
- * `alreadyConfirmed` makes a repeated call (e.g. a webhook delivered twice) a no-op. A new
+ * otherwise `SoldOut` (the payment service then refunds); and only if the buyer's other active orders
+ * leave room under `max_per_user`, otherwise `OverLimit` (the payment service holds it for a person).
+ * Approval tickets have no seats to protect.
+ * `alreadyConfirmed` makes a repeated call (e.g. a webhook delivered twice) a no-op; `paymentId` is recorded as the accepted payment,
+ * and a call with another payment for an order already confirmed by one is `AnotherPaymentAccepted`. A new
  * confirmation is announced to the live seat feed.
  */
-export async function confirmEnrollment(enrollmentId: string) {
+export async function confirmEnrollment(enrollmentId: string, paymentId?: string) {
   const result = await db.transaction(async (tx) => {
     const [enrollment] = await tx.select().from(enrollments).where(eq(enrollments.id, enrollmentId)).for("update");
     if (!enrollment) return new EnrollmentNotFound();
-    if (enrollment.status === "confirmed") return { alreadyConfirmed: true as const };
+    if (enrollment.status === "confirmed") {
+      // confirmed by another payment: this one is the duplicate (an order confirmed before accepted_payment_id existed keeps the old behaviour)
+      if (paymentId && enrollment.acceptedPaymentId && enrollment.acceptedPaymentId !== paymentId) return new AnotherPaymentAccepted();
+      return { alreadyConfirmed: true as const };
+    }
     // a cancelled order stays cancelled; a payment that still lands for it is refunded
     if (enrollment.status === "rejected" || enrollment.status === "cancelled") return new EnrollmentClosed();
 
     // the same lock the registration service takes before counting seats
     const [ticketType] = await tx
-      .select({ kind: ticketTypes.kind, quota: ticketTypes.quota })
+      .select({ kind: ticketTypes.kind, quota: ticketTypes.quota, maxPerUser: ticketTypes.maxPerUser })
       .from(ticketTypes)
       .where(eq(ticketTypes.id, enrollment.ticketTypeId))
       .for("update");
     const lapsed = effectiveStatus(enrollment) === "expired";
     if (lapsed && ticketType?.kind !== "approval") {
+      // the buyer may have ordered again since, and a lapsed order no longer counts against `max_per_user`
+      if (ticketType && enrollment.buyerId) {
+        const [owned] = await tx
+          .select({ total: sql<number>`coalesce(sum(${enrollments.quantity}), 0)`.mapWith(Number) })
+          .from(enrollments)
+          .where(
+            and(
+              eq(enrollments.ticketTypeId, enrollment.ticketTypeId),
+              eq(enrollments.buyerId, enrollment.buyerId),
+              activeEnrollment(),
+              ne(enrollments.id, enrollment.id),
+            ),
+          );
+        if ((owned?.total ?? 0) + enrollment.quantity > ticketType.maxPerUser) return new OverLimit();
+      }
       if (ticketType?.quota != null) {
         const taken = await seatsTaken(tx, enrollment.ticketTypeId, { enrollmentId: enrollment.id });
         if (taken + enrollment.quantity > ticketType.quota) return new SoldOut();
@@ -134,7 +162,7 @@ export async function confirmEnrollment(enrollmentId: string) {
         return new SoldOut();
       }
     }
-    await markConfirmed(tx, enrollment);
+    await markConfirmed(tx, enrollment, paymentId);
     return { alreadyConfirmed: false as const, eventId: enrollment.eventId };
   });
   if (!(result instanceof Error) && !result.alreadyConfirmed) announceSeats(result.eventId);

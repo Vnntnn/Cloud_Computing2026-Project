@@ -5,5 +5,8 @@
   "main": "src/index.ts",
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1156.0"
+  },
+  "scripts": {
+    "test": "bun test"
   }
 }

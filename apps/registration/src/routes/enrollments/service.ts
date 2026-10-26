@@ -2,10 +2,10 @@ import {
   and, asc, count, db, desc, enrollments, eq, eventInvitations, events, ilike, or, seatHolds, sql, ticketTypeQuestions,
   tickets, ticketTypes, users, type TicketAnswer,
 } from "@app/db";
-import { enqueueMail, type MailContent, type MailOrder } from "@app/mail";
+import type { MailContent, MailOrder } from "@app/mail";
 import {
-  accountLink, announceSeats, EnrollmentNotFound, invitationTaken, markConfirmed, seatsTaken,
-  sendTicketMails, SoldOut, ticketCode,
+  accountLink, announceSeats, dispatchNotifications, EnrollmentNotFound, invitationTaken, markConfirmed, queueNotifications,
+  seatsTaken, sendTicketMails, SoldOut, ticketCode, type Tx,
 } from "@app/tickets";
 import { enrollableEvent, manages, type Viewer } from "../../libs/access";
 import { effectiveStatusSql, loadEnrollments, ticketsOwned } from "../../libs/enrollments";
@@ -199,9 +199,10 @@ export async function listEventEnrollments(
 }
 
 type Buyer = { email: string | null; name: string | null };
+type Executor = typeof db | Tx;
 
-async function mailOrder(enrollmentId: string): Promise<{ buyer: Buyer; order: MailOrder } | undefined> {
-  const [row] = await db
+async function mailOrder(executor: Executor, enrollmentId: string): Promise<{ buyer: Buyer; order: MailOrder } | undefined> {
+  const [row] = await executor
     .select({
       buyerEmail: users.email,
       buyerName: users.name,
@@ -227,15 +228,19 @@ async function mailOrder(enrollmentId: string): Promise<{ buyer: Buyer; order: M
   };
 }
 
-/** Mails the buyer about the organizer's decision. Never throws: the decision is already saved. */
-async function mailDecision(enrollmentId: string, compose: (buyer: Buyer, order: MailOrder) => MailContent) {
-  try {
-    const found = await mailOrder(enrollmentId);
-    if (!found?.buyer.email) return;
-    await enqueueMail({ to: found.buyer.email, ...compose(found.buyer, found.order) });
-  } catch (error) {
-    console.error("Failed to enqueue enrollment mail", error);
-  }
+/**
+ * Records the mail about the organizer's decision for the buyer, in the transaction that saves the decision (the notification
+ * outbox, packages/tickets); it is sent after the commit, and by the payment service's reconciler if a crash comes between.
+ */
+async function recordDecisionMail(
+  tx: Tx,
+  enrollmentId: string,
+  kind: "enrollment-approved" | "enrollment-rejected",
+  compose: (buyer: Buyer, order: MailOrder) => MailContent,
+) {
+  const found = await mailOrder(tx, enrollmentId);
+  if (!found?.buyer.email) return;
+  await queueNotifications(tx, [{ key: `${kind}:${enrollmentId}`, kind, enrollmentId, message: { to: found.buyer.email, ...compose(found.buyer, found.order) } }]);
 }
 
 /**
@@ -253,40 +258,47 @@ export async function approveEnrollment(enrollmentId: string, reviewerId: string
       .update(enrollments)
       .set({ reviewedBy: reviewerId, reviewedAt: new Date(), ...(paid ? { status: "awaiting_payment", expiresAt } : {}) })
       .where(eq(enrollments.id, enrollmentId));
+    // a free one is confirmed (its ticket mails are recorded by markConfirmed); a paid one asks the buyer to pay
     if (!paid) await markConfirmed(tx, current);
+    else {
+      await recordDecisionMail(tx, enrollmentId, "enrollment-approved", (buyer, order) => ({
+        template: "enrollment-approved",
+        props: {
+          name: buyer.name,
+          order,
+          payBy: expiresAt.toISOString(),
+          url: accountLink(`/tickets/orders/${enrollmentId}`, true),
+        },
+      }));
+    }
     return { paid, expiresAt, eventId: current.eventId };
   });
   if (result instanceof Error) return result;
   announceSeats(result.eventId);
 
+  // the mails owed were recorded with the decision; this sends them (awaited, at most 10; it never throws)
   if (!result.paid) await sendTicketMails(enrollmentId);
-  else {
-    await mailDecision(enrollmentId, (buyer, order) => ({
-      template: "enrollment-approved",
-      props: {
-        name: buyer.name,
-        order,
-        payBy: result.expiresAt.toISOString(),
-        url: accountLink(`/tickets/orders/${enrollmentId}`, true),
-      },
-    }));
-  }
+  else await dispatchNotifications({ enrollmentId });
   return getEnrollmentById(enrollmentId);
 }
 
 export async function rejectEnrollment(enrollmentId: string, reviewerId: string, note: string | undefined) {
-  const [rejected] = await db
-    .update(enrollments)
-    .set({ status: "rejected", reviewedBy: reviewerId, reviewedAt: new Date() })
-    .where(and(eq(enrollments.id, enrollmentId), eq(enrollments.status, "pending")))
-    .returning({ eventId: enrollments.eventId });
+  const rejected = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(enrollments)
+      .set({ status: "rejected", reviewedBy: reviewerId, reviewedAt: new Date() })
+      .where(and(eq(enrollments.id, enrollmentId), eq(enrollments.status, "pending")))
+      .returning({ eventId: enrollments.eventId });
+    if (!row) return undefined;
+    const reason = note?.trim() || null;
+    await recordDecisionMail(tx, enrollmentId, "enrollment-rejected", (buyer, order) => ({
+      template: "enrollment-rejected",
+      props: { name: buyer.name, order, reason },
+    }));
+    return row;
+  });
   if (!rejected) return new EnrollmentNotPending();
   announceSeats(rejected.eventId);
-
-  const reason = note?.trim() || null;
-  await mailDecision(enrollmentId, (buyer, order) => ({
-    template: "enrollment-rejected",
-    props: { name: buyer.name, order, reason },
-  }));
+  await dispatchNotifications({ enrollmentId });
   return getEnrollmentById(enrollmentId);
 }

@@ -14,8 +14,10 @@ export {
   seatsTaken,
   type Tx,
 } from "./enrollment";
-export { EnrollmentClosed, EnrollmentNotFound, SoldOut } from "./errors";
-export { accountLink, appUrl, registeredEmails, sendTicketMails } from "./mail";
+export { AnotherPaymentAccepted, EnrollmentClosed, EnrollmentNotFound, OverLimit, SoldOut } from "./errors";
+export { accountLink, appUrl, registeredEmails } from "./mail";
+export { dispatchTicketMails, resumeTicketMails, sendTicketMails } from "./outbox";
+export { dispatchNotifications, queueNotifications, resumeNotifications, type Notification } from "./notifications";
 export { refundSatang, refundTerms } from "./refund";
 export { announceSeats, SEATS_CHANNEL } from "./seats";
 

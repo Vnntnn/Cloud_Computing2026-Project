@@ -1,4 +1,4 @@
-import { check, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, check, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { id, timestamps } from "./_columns";
 import { users } from "./auth";
@@ -40,6 +40,9 @@ export const enrollments = pgTable(
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    // the payment that confirmed this order, set with the confirmation under the enrollment's lock, so a
+    // second paid session is the duplicate however the two race; null for a free or approval-free order, and for orders confirmed before this existed
+    acceptedPaymentId: uuid("accepted_payment_id").references((): AnyPgColumn => payments.id, { onDelete: "set null" }),
     // the event's refund policy when ordered (null = no refunds); later edits don't change it
     refundPercent: integer("refund_percent"),
     refundCutoffHours: integer("refund_cutoff_hours"),
@@ -123,9 +126,47 @@ export const payments = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     stripePaymentIntentId: text("stripe_payment_intent_id"),
     paidAt: timestamp("paid_at", { withTimezone: true }),
+    // Recovery (apps/payment libs/settle.ts, libs/reconcile.ts). next_at: nobody works on the payment before it, which
+    // is also the lease of whoever does (set by the claim pending → paid, and by every attempt); attempts: how many
+    // times it was taken up; hold: why recovery stopped and a person has to look (over_limit: paid after the hold
+    // lapsed and past max_per_user; exhausted: attempts ran out; inconsistent: a paid row the code can't trust).
+    recoveryAttempts: integer("recovery_attempts").notNull().default(0),
+    recoveryNextAt: timestamp("recovery_next_at", { withTimezone: true }),
+    recoveryHold: text("recovery_hold"),
     ...timestamps,
   },
-  (table) => [index("payments_enrollment_id_idx").on(table.enrollmentId)],
+  (table) => [
+    index("payments_enrollment_id_idx").on(table.enrollmentId),
+    check("payments_recovery_hold_check", sql`${table.recoveryHold} in ('over_limit', 'exhausted', 'inconsistent')`),
+    // added NOT VALID in the migration: rows older than it are left as they are, and a held row (recovery_hold set, see the
+    // reconciler) may be one of them, so that a malformed old row can still be marked as held (`= 'x'` would be null, and pass, without a hold)
+    check(
+      "payments_paid_at_check",
+      sql`${table.status} not in ('paid', 'refunded') or ${table.paidAt} is not null or ${table.recoveryHold} is not null`,
+    ),
+  ],
+);
+
+// A ticket mail owed to one attendee, recorded in the transaction that confirms the order so a crash can't lose it.
+// apps/payment's reconciler (and the confirming request, right after commit) sends it: at least once, see libs/outbox in packages/tickets.
+// pending → sent; failed after too many attempts; skipped when the order is no longer confirmed.
+export const ticketMailOutbox = pgTable(
+  "ticket_mail_outbox",
+  {
+    ticketId: uuid("ticket_id").primaryKey().references(() => tickets.id, { onDelete: "cascade" }),
+    state: text("state").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+    // as in notification_outbox
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("ticket_mail_outbox_state_idx").on(table.state, table.nextAttemptAt),
+    check("ticket_mail_outbox_state_check", sql`${table.state} in ('pending', 'sent', 'failed', 'skipped')`),
+  ],
 );
 
 // Stripe's refund statuses; requires_action: waiting for the buyer to tell us where to send the
@@ -156,12 +197,57 @@ export const refunds = pgTable(
     // PromptPay); the buyer was mailed how to claim it
     stripeRefundId: text("stripe_refund_id").unique(),
     failureReason: text("failure_reason"),
+    // An intent (status pending, no stripe_refund_id yet, not made by hand) is recorded before Stripe is asked, so the
+    // refund can be finished (the Stripe idempotency key is derived from this row's id) if the process dies in between.
+    // recovery_next_at: nobody takes the intent up before it (it's also the lease of whoever does); attempts: how many times the
+    // scheduler did; hold: why it stopped (exhausted) and a person has to look. See apps/payment libs/refund.ts.
+    recoveryAttempts: integer("recovery_attempts").notNull().default(0),
+    recoveryNextAt: timestamp("recovery_next_at", { withTimezone: true }),
+    recoveryHold: text("recovery_hold"),
     ...timestamps,
   },
   (table) => [
     index("refunds_enrollment_id_idx").on(table.enrollmentId),
+    check("refunds_recovery_hold_check", sql`${table.recoveryHold} in ('exhausted')`),
     uniqueIndex("refunds_payment_id_idx").on(table.paymentId),
     check("refunds_percent_check", sql`${table.percent} between 1 and 100`),
+  ],
+);
+
+// Every other mail that follows a state change, recorded in the transaction that makes the change (a refund recorded, an order
+// approved or rejected, a refund that failed or was cancelled, an organizer application decided, an invitation recorded) and sent
+// after it, by whoever calls dispatchNotifications (notifications.ts here): the request right after commit, and apps/payment's
+// reconciler for what a crash left. `message` is the whole mail as it was when the change was made, or null for a mail that is
+// composed when it is sent because it carries a secret the database already holds (a password reset link: its token lives in
+// `verifications`, and is never copied here). Before sending, the state the mail talks about is looked at again, so a stale one
+// is `skipped`. dedupe_key names the logical mail (e.g. refund-system:<refund id>), so it is recorded once however often a step runs.
+export const notificationOutbox = pgTable(
+  "notification_outbox",
+  {
+    id: id(),
+    dedupeKey: text("dedupe_key").notNull().unique(),
+    kind: text("kind").notNull(),
+    // set for the mails of an order; null for the others
+    enrollmentId: uuid("enrollment_id").references(() => enrollments.id, { onDelete: "cascade" }),
+    refundId: uuid("refund_id").references(() => refunds.id, { onDelete: "cascade" }),
+    // the thing the mail is about when it isn't an order: an invitation, an organizer application, a reset-password verification
+    subjectId: uuid("subject_id"),
+    message: jsonb("message"),
+    state: text("state").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+    // when it was last taken up, and why the last attempt failed (an error name, never a message): pending + a future
+    // next_attempt_at is `leased` with no last_error, `retry scheduled` with one
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("notification_outbox_state_idx").on(table.state, table.nextAttemptAt),
+    index("notification_outbox_enrollment_id_idx").on(table.enrollmentId),
+    index("notification_outbox_subject_id_idx").on(table.subjectId),
+    check("notification_outbox_state_check", sql`${table.state} in ('pending', 'sent', 'failed', 'skipped')`),
   ],
 );
 

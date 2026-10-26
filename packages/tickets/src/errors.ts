@@ -13,3 +13,16 @@ export class SoldOut extends HTTPError.id("SOLD_OUT", 409) {
 export class EnrollmentClosed extends HTTPError.id("ENROLLMENT_CLOSED", 409) {
   override readonly detail = "รายการลงทะเบียนนี้ถูกปฏิเสธหรือหมดเวลาชำระเงินแล้ว";
 }
+
+/**
+ * A lapsed hold's order that would take its buyer past the ticket type's `max_per_user`, because they
+ * ordered again after the hold ran out. Whether to honour or refund such a payment is the owner's call.
+ */
+export class OverLimit extends HTTPError.id("OVER_LIMIT", 409) {
+  override readonly detail = "การลงทะเบียนนี้จะทำให้ผู้ซื้อมีตั๋วเกินจำนวนสูงสุดต่อบัญชี";
+}
+
+/** The order was already confirmed by another payment: this one paid for it a second time. */
+export class AnotherPaymentAccepted extends HTTPError.id("ANOTHER_PAYMENT_ACCEPTED", 409) {
+  override readonly detail = "รายการนี้ยืนยันด้วยการชำระเงินอื่นแล้ว";
+}

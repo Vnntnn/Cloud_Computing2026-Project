@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { admin } from "better-auth/plugins";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { accounts, db, eq, events, sessions, users, verifications } from "@app/db";
+import { accounts, db, dispatchNotifications, eq, events, queueNotifications, sessions, users, verifications } from "@app/db";
 import { markUserRevoked } from "@app/auth-guard";
 import { ac, roles } from "@app/auth-guard/permissions";
 import { enqueueMail } from "@app/mail";
@@ -56,11 +56,25 @@ export const auth = betterAuth({
   advanced: { database: { generateId: "uuid" } },
   emailAndPassword: {
     enabled: true,
-    // Not awaited so response timing doesn't reveal whether the email exists.
-    sendResetPassword: async ({ user, url }) => {
-      enqueueMail({ to: user.email, template: "reset-password", props: { url } }).catch((error) =>
-        console.error("Failed to enqueue reset password mail", error),
-      );
+    // better-auth stores the token (verifications) and then calls this: two steps we don't control, so the mail can't be recorded
+    // in the same transaction. What is recorded here is only that a mail is owed for that token (its verification row's id):
+    // the link is composed when the mail is sent, from the token, which is never copied into the outbox, and a token that has
+    // been used or has expired is not mailed (packages/db notifications.ts). A crash between the two steps is repaired by the
+    // payment service's reconciler (recordMissingResetMails). Not awaited so response timing doesn't reveal whether the email exists.
+    sendResetPassword: async ({ user, url, token }) => {
+      void (async () => {
+        const [verification] = await db
+          .select({ id: verifications.id })
+          .from(verifications)
+          .where(eq(verifications.identifier, `reset-password:${token}`));
+        if (!verification) {
+          // not found (it should be): send the link as before rather than not at all
+          await enqueueMail({ to: user.email, template: "reset-password", props: { url } });
+          return;
+        }
+        await queueNotifications(db, [{ key: `reset-password:${verification.id}`, kind: "reset-password", subjectId: verification.id, message: null }]);
+        await dispatchNotifications(enqueueMail, { subjectId: verification.id });
+      })().catch((error) => console.error("Failed to record or send the reset password mail", error instanceof Error ? error.name : "unknown"));
     },
   },
   user: {

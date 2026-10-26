@@ -1,5 +1,6 @@
 import {
-  and, asc, count, db, desc, eq, eventInvitations, events, ilike, inArray, isNotNull, isNull, or, users,
+  and, asc, count, db, desc, dispatchNotifications, eq, eventInvitations, events, ilike, inArray, isNotNull, isNull, or, queueNotifications,
+  users,
 } from "@app/db";
 import { enqueueMail, type MailMessage } from "@app/mail";
 import { invitationTaken } from "@app/tickets";
@@ -73,45 +74,54 @@ function invitationMail(event: InvitedEvent, email: string, name: string | undef
 }
 
 /**
- * Emails every invitation of the event not emailed yet, if the event is invite-only (a draft's
- * invitees would only reach a page they can't open; they're mailed once it switches to invite).
- * Rows are claimed (notified_at set) before enqueueing, so overlapping calls never mail anyone
- * twice; a failed enqueue releases its claim, so the next call retries it.
- * Never throws: the invitation or event is already saved, and mail mustn't fail that request.
+ * Claims every invitation of the event not mailed yet (notified_at set) and records its mail in the notification outbox,
+ * in `tx`: the transaction that made the invitation, or the one that switched the event to invite-only (a draft's invitees
+ * would only reach a page they can't open; they're mailed once it switches). So a crash can't leave an invitation saved with
+ * no mail owed, or claimed with none recorded, and overlapping calls never record anyone twice. Returns the invitations whose
+ * mail was recorded; `dispatchRecordedInvitations` sends them after the commit (and the payment service's reconciler, if that
+ * didn't happen). The key holds the address and the claim's time: re-addressed, or claimed again after the event went back to
+ * a draft, an invitation is a new mail, never one the outbox already closed.
  */
+export async function recordPendingInvitations(tx: Tx, eventId: string) {
+  const [event] = await tx
+    .select({ status: events.status, title: events.title, slug: events.slug, venue: events.venue, startsAt: events.startsAt })
+    .from(events)
+    .where(eq(events.id, eventId));
+  if (event?.status !== "invite") return [];
+
+  const at = new Date();
+  const claimed = await tx
+    .update(eventInvitations)
+    .set({ notifiedAt: at })
+    .where(and(eq(eventInvitations.eventId, eventId), isNull(eventInvitations.notifiedAt)))
+    .returning({ id: eventInvitations.id, email: eventInvitations.email });
+  if (claimed.length === 0) return [];
+
+  const accounts = await tx
+    .select({ email: users.email, name: users.name })
+    .from(users)
+    .where(inArray(users.email, claimed.map((row) => row.email)));
+  const names = new Map(accounts.map((account) => [account.email, account.name]));
+  await queueNotifications(
+    tx,
+    claimed.map((row) => ({
+      key: `event-invitation:${row.id}:${row.email}:${at.getTime()}`,
+      kind: "event-invitation" as const,
+      subjectId: row.id,
+      message: invitationMail(event, row.email, names.get(row.email)),
+    })),
+  );
+  return claimed.map((row) => row.id);
+}
+
+/** Sends the mails recorded for these invitations (all of them, however many). Never throws. */
+export const dispatchRecordedInvitations = (ids: string[]) =>
+  ids.length > 0 ? dispatchNotifications(enqueueMail, { subjectIds: ids, limit: Math.max(ids.length, 50) }) : undefined;
+
+/** Records and sends the mails of the event's unmailed invitations. Never throws: the invitation or event is already saved, and mail mustn't fail that request. */
 export async function sendPendingInvitations(eventId: string) {
   try {
-    const [event] = await db
-      .select({ status: events.status, title: events.title, slug: events.slug, venue: events.venue, startsAt: events.startsAt })
-      .from(events)
-      .where(eq(events.id, eventId));
-    if (event?.status !== "invite") return;
-
-    const claimed = await db
-      .update(eventInvitations)
-      .set({ notifiedAt: new Date() })
-      .where(and(eq(eventInvitations.eventId, eventId), isNull(eventInvitations.notifiedAt)))
-      .returning({ id: eventInvitations.id, email: eventInvitations.email });
-    if (claimed.length === 0) return;
-
-    const accounts = await db
-      .select({ email: users.email, name: users.name })
-      .from(users)
-      .where(inArray(users.email, claimed.map((row) => row.email)));
-    const names = new Map(accounts.map((account) => [account.email, account.name]));
-
-    const failed: string[] = [];
-    await Promise.all(
-      claimed.map((row) =>
-        enqueueMail(invitationMail(event, row.email, names.get(row.email))).catch((error) => {
-          console.error("Failed to enqueue invitation mail", error);
-          failed.push(row.id);
-        }),
-      ),
-    );
-    if (failed.length > 0) {
-      await db.update(eventInvitations).set({ notifiedAt: null }).where(inArray(eventInvitations.id, failed));
-    }
+    await dispatchRecordedInvitations(await db.transaction((tx) => recordPendingInvitations(tx, eventId)));
   } catch (error) {
     console.error("Failed to send invitation mail", error);
   }
@@ -174,7 +184,7 @@ const lockEvent = (tx: Tx, eventId: string) =>
  */
 export async function createInvitations(eventId: string, emails: string[]) {
   const unique = [...new Set(emails.map(normalizeEmail))];
-  const inserted = await db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     await lockEvent(tx, eventId);
     const [existing] = await tx
       .select({ total: count() })
@@ -186,17 +196,24 @@ export async function createInvitations(eventId: string, emails: string[]) {
       .where(and(eq(eventInvitations.eventId, eventId), inArray(eventInvitations.email, unique)));
     const fresh = unique.filter((email) => !taken.some((row) => row.email === email));
     if ((existing?.total ?? 0) + fresh.length > MAX_INVITATIONS_PER_EVENT) return new InvitationLimitReached();
-    if (fresh.length === 0) return [];
+    if (fresh.length === 0) return { rows: [], owed: [] as string[] };
     // a concurrent email change (which doesn't lock the event) may still take one; it's skipped then
-    return tx
+    const rows = await tx
       .insert(eventInvitations)
       .values(fresh.map((email) => ({ eventId, email })))
       .onConflictDoNothing()
       .returning({ id: eventInvitations.id, email: eventInvitations.email });
+    // their mail is recorded with them (if the event is invite-only)
+    return { rows, owed: rows.length > 0 ? await recordPendingInvitations(tx, eventId) : [] };
   });
-  if (inserted instanceof Error) return inserted;
-  // awaited (at most 100 emails), so the response already shows them as emailed
-  if (inserted.length > 0) await sendPendingInvitations(eventId);
+  if (created instanceof Error) return created;
+  const inserted = created.rows;
+  // awaited, so the response already shows them as emailed
+  try {
+    await dispatchRecordedInvitations(created.owed);
+  } catch (error) {
+    console.error("Failed to send invitation mail", error);
+  }
 
   const rows = inserted.length
     ? await withUser()
@@ -232,20 +249,20 @@ export async function updateInvitation(
       if (!current) return new InvitationNotFound();
       // an enrollment waiting for payment or approval is about to use it
       if (current.usedAt || (await invitationTaken(tx, invitationId))) return new InvitationUsed();
-      if (current.email === email) return null;
-      // the new address hasn't been emailed yet
+      if (current.email === email) return [] as string[];
+      // the new address hasn't been emailed yet: its mail is recorded with the change
       await tx
         .update(eventInvitations)
         .set({ email, notifiedAt: null })
         .where(eq(eventInvitations.id, invitationId));
-      return null;
+      return await recordPendingInvitations(tx, eventId);
     });
-    if (result) return result;
+    if (result instanceof Error) return result;
+    await dispatchRecordedInvitations(result);
   } catch (error) {
     if (isUniqueViolation(error)) return new InvitationExists();
     throw error;
   }
-  await sendPendingInvitations(eventId);
   return getInvitation(invitationId);
 }
 
