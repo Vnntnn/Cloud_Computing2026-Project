@@ -49,6 +49,20 @@ load_aws_env() {
 tf() { terraform -chdir="${ROOT:-.}/infra/terraform" "$@"; }
 tfout() { tf output -raw "$1" 2>/dev/null; }
 
+# Helm releases the cluster has but Terraform's state lost (an interrupted run, a recovered state): the next apply would fail with
+# "cannot re-use a name that is still in use". Adopt each one into the state first. Needs kubeconfig for the cluster. Tested in lib.test.sh.
+adopt_helm_releases() {
+  local entry addr id state
+  state="$(tf state list 2>/dev/null || true)"
+  for entry in 'helm_release.ingress_nginx[0]=ingress-nginx/ingress-nginx' 'helm_release.metrics_server[0]=kube-system/metrics-server'; do
+    addr="${entry%%=*}"; id="${entry#*=}"
+    if grep -qxF -- "$addr" <<<"$state"; then continue; fi
+    helm status -n "${id%%/*}" "${id#*/}" >/dev/null 2>&1 || continue
+    echo "adopting the helm release $id into the state ($addr)"
+    tf import -input=false "$addr" "$id"
+  done
+}
+
 # --- teardown verification ----------------------------------------------------------
 # verify_empty <label> <command...>: runs the command and checks that it printed nothing. A command
 # that FAILS (AccessDenied: the lab cut the credentials) counts as UNVERIFIED, not as empty: that
