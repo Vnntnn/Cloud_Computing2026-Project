@@ -53,3 +53,6 @@ infra/aws.env
 
 # design review screenshots (the rest of apps/web/.impeccable, the design sidecar and surface briefs, stays unignored)
 apps/web/.impeccable/review/*.png
+
+# the demo accounts' password (demo/seed.ts writes it, mode 600)
+demo/.credentials

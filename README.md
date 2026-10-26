@@ -215,15 +215,16 @@ Lab หมดอายุทุก 4 ชั่วโมง และถ้า re
 cp infra/aws.env.example infra/aws.env     # ครั้งเดียว แล้ววาง credential จาก Learner Lab → AWS Details → AWS CLI (ทุก session)
 
 make deploy                                # คำสั่งเดียวจบ: account ว่าง / เพิ่ง reset → ระบบใช้งานได้ (platform รันอยู่แล้ว = redeploy)
-make admin EMAIL=you@example.com           # ตั้ง admin คนแรก หลังสมัครผ่านหน้าเว็บ
+make demo                                  # ใส่ข้อมูล demo ที่เตรียมไว้ (make deploy ทำให้เองตอนจบ) บัญชีอยู่ที่ demo/.credentials
+make admin EMAIL=you@example.com           # ตั้ง admin เพิ่ม (บัญชี admin ของ demo มีให้แล้ว)
 make load BASE_URL=https://eventide.creasy.club   # k6 ทดสอบ HPA
 make down                                  # platform=false + พิสูจน์ว่าไม่มีอะไรคิดเงิน — ทำทุกครั้งก่อนจบ session
 ```
 
-`make deploy` (`scripts/bootstrap.sh`) ทำตามลำดับ: ตรวจเครื่องมือ/Docker/credential → state ของ Terraform → ชั้นถาวร (VPC, ECR, S3, SQS, secrets, Route 53 zone, ขอ ACM cert) → ชี้ NS ที่ Cloudflare แล้วรอ cert เป็น `ISSUED` → คัดลอก image ของ ingress-nginx/metrics-server เข้า ECR → `terraform apply` ตัว platform → build/push/deploy แอป → ทดสอบ health ทั้ง 4 service ถ้าเริ่มจากศูนย์ใช้เวลาราว 30–40 นาที (ยังไม่เคยทดสอบเส้นทางเริ่มจากศูนย์ครบวงจรกับ lab ที่ reset จริง)
+`make deploy` (`scripts/bootstrap.sh`) ทำตามลำดับ: ตรวจเครื่องมือ/Docker/credential → state ของ Terraform → ชั้นถาวร (VPC, ECR, S3, SQS, secrets, Route 53 zone, ขอ ACM cert) → ชี้ NS ที่ Cloudflare แล้วรอ cert เป็น `ISSUED` → คัดลอก image ของ ingress-nginx/metrics-server เข้า ECR → `terraform apply` ตัว platform → build/push/deploy แอป → ทดสอบ health ทั้ง 4 service → ใส่ข้อมูล demo (`SEED_DEMO=0` ข้าม) ถ้าเริ่มจากศูนย์ใช้เวลาราว 30–40 นาที (ยังไม่เคยทดสอบเส้นทางเริ่มจากศูนย์ครบวงจรกับ lab ที่ reset จริง)
 
 - **ขั้นเดียวที่อาจต้องทำมือ:** reset ลบ Route 53 zone จึงได้ name server ชุดใหม่ ต้องเปลี่ยน NS ที่ Cloudflare ตาม ใส่ `CLOUDFLARE_API_TOKEN` ใน `infra/aws.env` (สิทธิ์ Edit zone DNS เฉพาะ zone หลัก) แล้วสคริปต์เปลี่ยนให้เอง ถ้าไม่ใส่ สคริปต์จะพิมพ์ NS 4 ตัวให้วางแล้วรอ (หรือจบด้วย exit 3 ถ้าไม่ได้รันใน terminal ให้วางแล้วรัน `make deploy` ซ้ำ)
-- ฐานข้อมูลใหม่ทุก session: สมัครผ่านหน้าเว็บ แล้วรัน `make admin EMAIL=…`
+- ฐานข้อมูลใหม่ทุก session จึงว่างเปล่า: `make deploy` ใส่ **ข้อมูล demo ที่เตรียมไว้** ให้ท้ายขั้นตอน (บัญชี admin / ผู้จัดที่อนุมัติแล้ว / ผู้เข้าร่วม, หมวดหมู่ที่มีชื่อไทยและอังกฤษ, อีเวนต์ 8 รายการครบทุกแบบของตั๋วและสถานะ) รหัสผ่านสุ่มอยู่ที่ `demo/.credentials` รายละเอียดใน [demo/README.md](demo/README.md)
 - `make redeploy` = เฉพาะแอปบน platform ที่รันอยู่ (build/push 7 image, k8s Secrets, helm upgrade ผ่าน release gate ของ payment) ซึ่งเป็นสิ่งที่ CI รัน; `make up` / `make mirror` / `make secrets` ยังใช้ทีละขั้นได้
 - ไม่ทำให้อัตโนมัติ: การวาง credential และ `make down` ตอนจบ session
 - **ถ้า `make down` ถูกตัดกลางทาง** (lab ตัด credential): platform ยังคิดเงินอยู่ Start Lab ใหม่แล้วรัน `make down` ซ้ำ มันกู้ state เองก่อนแล้วทำลายส่วนที่เหลือ อย่ารัน `terraform apply` เองก่อน

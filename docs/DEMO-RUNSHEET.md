@@ -1,5 +1,9 @@
 # Demo runsheet
 
+> **v2 note (2026-10-26):** the seed personas and data below are v1. In v2, `make deploy` ends by seeding the prepared demo
+> (`make demo` by hand): see [`demo/README.md`](../demo/README.md) for the accounts (`demo/.credentials`), the eight events and what each shows.
+> `make seed-eks` and `make smoke` no longer exist.
+
 Live-demo script for the final presentation (Week 4, ~2 Oct 2026). Companion to
 `SYSTEM-DESIGN.md` §14 (the sequence) and `TODO.md` §5 (rehearsal GATEs).
 
