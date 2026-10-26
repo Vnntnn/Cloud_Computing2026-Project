@@ -1,5 +1,11 @@
 # Load test results — 2026-10-25
 
+> **Measured on the previous layout** (an in-cluster Redis pod, an NLB, public subnets, no WAF). The production layout
+> since 2026-10-26 (ElastiCache with TLS + AUTH, RDS Proxy, ALB + WAF, private tiers) has **not** been load-tested yet.
+> Two things to know before re-running: a single-source k6 run from one IP trips the WAF's per-IP rate rule (raise it for the
+> run with `-var waf_rate_limit=…`), and the Redis comparison needs the cache to be switched off some other way than
+> scaling a pod, because Redis is no longer a pod on AWS.
+
 Cluster: EKS, `t3.medium` nodes, public host `https://eventide.creasy.club`. Only **one node was Ready** during the
 Redis comparison and the all-services run (the second went `NotReady` after the lab session restarted), so the absolute
 numbers are lower-bound; each comparison used the same topology. `event`, `auth` and `registration` were pinned at 2 replicas.
