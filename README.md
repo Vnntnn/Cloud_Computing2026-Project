@@ -6,7 +6,7 @@
 - **หน้าเว็บ** เป็น React SPA ที่เรียก service ผ่าน Eden Treaty จึงได้ type จาก backend ถึง frontend โดยไม่ต้องเขียน API client เอง
 - **แต่ละโดเมนเป็น service ของตัวเอง** (auth, event, registration, payment) แยก process และ port แต่ใช้ Postgres ก้อนเดียวกัน
 - **งานที่ไม่ต้องรอ** อย่างการส่งอีเมล ส่งผ่านคิว SQS ให้ worker ทำ ไฟล์เก็บใน S3
-- **Infrastructure เป็นโค้ดทั้งหมด** Terraform root เดียว สร้างและลบ EKS / RDS / NLB ได้ด้วยคำสั่งเดียว (`make up` / `make down`)
+- **Infrastructure เป็นโค้ดทั้งหมด** Terraform root เดียว สร้างและลบ EKS / RDS / ElastiCache / ALB + WAF ได้ด้วยคำสั่งเดียว (`make up` / `make down`)
 
 ## สารบัญ
 
@@ -86,7 +86,7 @@ flowchart LR
 | ข้อมูล | Drizzle ORM บน Postgres, Redis 8 |
 | ไฟล์และคิว | S3 (MinIO ตอน dev), SQS (ElasticMQ ตอน dev) |
 | ภายนอก | Stripe, Gmail SMTP ผ่าน Nodemailer, Google OAuth |
-| Infra | AWS (EKS, RDS, NLB, ECR, S3, SQS, Route 53, ACM, Secrets Manager), Terraform, Helm, ingress-nginx, k6 |
+| Infra | AWS (EKS, RDS + RDS Proxy, ElastiCache, ALB + WAF, NAT, VPC endpoints, ECR, S3, SQS, Route 53, ACM, CloudWatch, Secrets Manager), Terraform, Helm, ingress-nginx, k6 |
 
 ## Infrastructure บน AWS
 
@@ -98,67 +98,79 @@ flowchart LR
 flowchart TB
   U["Browser"] -->|"HTTPS 443"| CF["Cloudflare DNS<br/>creasy.club"]
   CF -->|"NS delegation: eventide"| R53["Route 53 zone<br/>eventide.creasy.club"]
-  R53 -->|"ALIAS"| NLB["NLB<br/>TLS terminate (ACM wildcard)"]
+  R53 -->|"ALIAS"| ALB["ALB + WAF<br/>TLS terminate (ACM)"]
 
-  subgraph VPC["Default VPC — public subnets us-east-1a/b/c, ไม่มี NAT"]
-    NLB -->|"NodePort 30080"| ING["ingress-nginx"]
-    subgraph EKS["EKS 1.33 — managed node group 2-4 × t3.small"]
+  subgraph VPC["VPC 10.20.0.0/16 — single-AZ (us-east-1a)"]
+    ALB -->|"NodePort 30080"| ING
+    subgraph EDGE["private subnet — ไม่มี route ออก internet · edge node group"]
+      ING["ingress-nginx"]
       ING -->|"/"| WEB["web"]
-      ING -->|"/api/auth"| AUTH["auth"]
       ING -->|"/api/events"| EVT["event<br/>HPA 2→8"]
       ING -->|"/api/regis"| REG["registration"]
+    end
+    subgraph EGRESS["private subnet — ออกผ่าน NAT · egress node group"]
+      ING -->|"/api/auth"| AUTH["auth"]
       ING -->|"/api/payment"| PAY["payment"]
       MW["mail-worker"]
-      RDS_["redis pod<br/>session cache"]
-      MIG["db-migrate Job<br/>(Helm hook)"]
     end
-    RDS[("RDS PostgreSQL 16<br/>db.t3.micro")]
+    NAT["NAT gateway<br/>(public subnet)"]
+    subgraph DATA["private data subnet"]
+      PX["RDS Proxy"] --> RDS[("RDS PostgreSQL 16<br/>db.t3.micro")]
+      RC[("ElastiCache Redis<br/>TLS + AUTH")]
+    end
+    MIG["db-migrate Job<br/>(Helm hook)"]
   end
 
-  AUTH & EVT & REG & PAY & MIG --> RDS
-  AUTH & EVT & REG & PAY -.-> RDS_
+  AUTH & EVT & REG & PAY -->|"SQL"| PX
+  MIG -->|"ต่อ RDS ตรง"| RDS
+  AUTH & EVT & REG & PAY -.->|"session cache"| RC
   AUTH & EVT & REG & PAY -->|"enqueue"| SQS[["SQS mail-queue + DLQ"]]
-  SQS --> MW -->|"SMTP"| GM["Gmail"]
+  SQS --> MW
+  MW & PAY & AUTH ==>|"ออกผ่าน"| NAT
+  NAT --> EXT["Gmail · Stripe · Google OAuth"]
   ING -->|"/files/* rewrite"| S3[("S3 uploads<br/>public/* อ่านได้")]
   EVT & AUTH -->|"upload"| S3
-  PAY <--> STR["Stripe"]
-  AUTH <--> GOO["Google OAuth"]
-  ECR[("ECR × 7")] -.->|"image pull"| EKS
-  SM[("Secrets Manager")] -.->|"deploy.sh อ่านทุก session"| EKS
+  ECR[("ECR × 7 + mirror 2")] -.->|"image pull (ผ่าน VPC endpoint)"| EDGE
+  SM[("Secrets Manager")] -.->|"deploy.sh อ่านทุก session"| EGRESS
+  CW["CloudWatch<br/>alarm 15 + dashboard"] -.-> ALB
 ```
 
-แผนภาพ AWS แบบละเอียด (ไอคอน AWS, ลูกศรทุกเส้นมีเลขและคำอธิบาย) อยู่ที่ [docs/architecture/aws/](docs/architecture/aws/README.md) ส่วน [`AWS_Diagram_Tool.jpg`](docs/architecture/aws/AWS_Diagram_Tool.jpg) คือสถาปัตยกรรมเป้าหมายที่ lab ไม่อนุญาตให้ทำครบ
+![สถาปัตยกรรม AWS ของ Eventide](docs/architecture/aws/eventide-aws-as-built.png)
+
+แผนภาพข้างบนคือของที่ deploy จริง (ไอคอน AWS, ลูกศรทุกเส้นมีเลขและคำอธิบาย; [SVG](docs/architecture/aws/eventide-aws-as-built.svg) ซูมได้ชัดกว่า, [ไฟล์ `.drawio` แก้ไขได้และวิธี generate ใหม่](docs/architecture/aws/README.md)) ส่วน [`AWS_Diagram_Tool.jpg`](docs/architecture/aws/AWS_Diagram_Tool.jpg) คือสถาปัตยกรรมเป้าหมายที่เทียบด้วย ต่างกัน 3 จุดที่ lab บังคับ: **CloudFront → ALB + WAF**, NLB → ALB, Shield ใช้เฉพาะ Standard ที่มากับ ALB
 
 ### ส่วนประกอบ
 
 | ชั้น | ทรัพยากร | รายละเอียด |
 |---|---|---|
-| คำนวณ | **EKS** 1.33 | raw `aws_eks_cluster` + managed node group (`AL2023`, on-demand) 2–4 node, ค่าเริ่มต้น `t3.small`, ใช้ `t3.medium` ตอนทดสอบ HPA |
-| ฐานข้อมูล | **RDS PostgreSQL 16** `db.t3.micro` | database เดียว (`eventide`) role เดียว, 20 GB, master password เก็บใน Secrets Manager (`eventide/rds-master`) |
-| เครือข่าย | Default VPC, subnet `us-east-1a/b/c` | ไม่มี NAT gateway (≈ $1/วัน เกินงบ) node อยู่ public subnet |
-| ทางเข้า | **NLB** (Terraform) → **ingress-nginx** (`NodePort` 30080/30443) | NLB เป็นของ Terraform เพื่อไม่ให้ ELB หลุดจาก state (ห้ามใช้ `type=LoadBalancer`) |
-| TLS / DNS | **Route 53** + **ACM** wildcard cert | NLB ปลด TLS ที่ :443, Cloudflare ถือ apex `creasy.club` แล้ว delegate `eventide` มา Route 53 ด้วย NS 4 ตัว |
-| Image | **ECR** × 7 | `auth` `event` `registration` `payment` `mail-worker` `web` `db-bootstrap` พร้อม lifecycle policy |
+| คำนวณ | **EKS** 1.33 | raw `aws_eks_cluster` + managed node group **2 ชุด**: `edge` (private ไม่มี route ออก: ingress-nginx, event, registration, web) กับ `egress` (ออกผ่าน NAT: auth, payment, mail-worker) ค่าเริ่มต้น `t3.small`, ใช้ `t3.medium` ตอนทดสอบ HPA; chart ผูก pod เข้า tier ด้วย `nodeSelector eventide/tier` |
+| ฐานข้อมูล | **RDS PostgreSQL 16** `db.t3.micro` + **RDS Proxy** | database เดียว (`eventide`) role เดียว, 20 GB, single-AZ ไม่มี backup (สร้างใหม่ทุก session); service ต่อผ่าน proxy (รวม pool ของทุก pod), migrate ต่อ RDS ตรง; master password ใน Secrets Manager (`eventide/rds-master`) |
+| เครือข่าย | VPC เฉพาะ `10.20.0.0/16` (`network.tf`, ฟรี อยู่ถาวร) + **NAT gateway** + **VPC endpoint** | subnet public (ALB, NAT) / edge (ไม่มี route ออก) / egress (route ออก NAT) / data; endpoint: S3 (gateway), ecr.api, ecr.dkr, sts, ec2, sqs, secretsmanager (interface) ให้ tier edge เรียก AWS ได้; subnet ของ 1b มีเฉพาะที่ ALB, EKS และ RDS subnet group บังคับ |
+| ทางเข้า | **ALB** + **WAFv2** (Terraform) → **ingress-nginx** (`NodePort` 30080) | ALB เป็นของ Terraform เพื่อไม่ให้ ELB หลุดจาก state (ห้ามใช้ `type=LoadBalancer`); WAF โหมด block: Common (ยกเว้น multipart upload), KnownBadInputs, IP reputation, rate limit ต่อ IP, เปิด path webhook ของ Stripe; idle timeout 3600 วินาทีสำหรับ WebSocket |
+| TLS / DNS | **Route 53** + **ACM** wildcard cert | ALB ปลด TLS ที่ :443 (:80 → 301), Cloudflare ถือ apex `creasy.club` แล้ว delegate `eventide` มา Route 53 ด้วย NS 4 ตัว (`scripts/delegate-dns.sh` ทำให้เองเมื่อมี `CLOUDFLARE_API_TOKEN`) |
+| Image | **ECR** × 7 + mirror × 2 | `auth` `event` `registration` `payment` `mail-worker` `web` `db-bootstrap` พร้อม lifecycle policy; mirror ของ ingress-nginx และ metrics-server (`make mirror`) เพราะ tier edge ดึงจาก registry สาธารณะไม่ได้ |
 | ไฟล์ | **S3** | อัปโหลดผ่าน service เจ้าของ, ผู้ใช้อ่าน `/files/<key>` ที่ ingress rewrite ไป S3, bucket policy เปิดอ่านเฉพาะ `public/*` |
 | คิว | **SQS** `eventide-mail-queue` + DLQ | ส่งซ้ำ 5 ครั้งแล้วเข้า DLQ |
 | Secrets | **Secrets Manager** | `eventide/{rds-master,google-oauth,stripe,gmail}` |
-| Cache | **Redis** pod | session cache ของ auth-guard ไม่มี persistence (ถ้าหายแค่ช้าหนึ่ง request ไม่เคยผิด) |
+| Cache | **ElastiCache Redis** (1 node, TLS + AUTH) | session cache ของ auth-guard, cache รายละเอียด event, pub/sub ที่นั่งว่าง ไม่มี snapshot (ถ้าหายแค่ช้าหนึ่ง request ไม่เคยผิด); บน k3d ยังเป็น Redis pod |
 | Autoscaling | `metrics-server` + **HPA** บน `event` | 2 → 8 replica ที่ CPU 60% |
+| สังเกตการณ์ | **CloudWatch** alarm 15 ตัว + dashboard `eventide`, SNS `eventide-alerts` | ALB 5xx/health/latency, RDS, RDS Proxy pinning, Redis, DLQ, CPU ของ node, WAF burst (SNS สมัครรับอีเมลด้วย `alert_email`) |
 | CI/CD | GitHub Actions | `check` + `images` ทุก PR, `deploy` เมื่อ push เข้า `main` |
 
 ### Terraform: root เดียว state เดียว แยกชั้นด้วย `var.platform`
 
 ```
 infra/terraform/
-  ecr.tf s3.tf sqs.tf secrets.tf oauth.tf dns.tf   ← permanent: อยู่รอดหลัง make down (~$1/เดือน)
-  platform.tf  modules/platform/                   ← nightly: EKS, node group, RDS, NLB, ALIAS record
+  network.tf ecr.tf s3.tf sqs.tf secrets.tf oauth.tf dns.tf   ← permanent: อยู่รอดหลัง make down (ฟรี/~$1 ต่อเดือน)
+  platform.tf  modules/platform/                   ← nightly: EKS 2 node group, NAT + endpoints, RDS + Proxy,
+                                                     ElastiCache, ALB + WAF, ALIAS record, CloudWatch alarms
                                                      + Helm release ingress-nginx, metrics-server
                                                      (ทั้งหมด count = var.platform ? 1 : 0)
 ```
 
-เหตุผล: lab หยุดแค่ EC2 อัตโนมัติ ส่วน **RDS, EKS control plane และ NLB คิดเงินต่อเนื่อง** จึงต้องทิ้งทุกคืน แต่ image ใน ECR, ไฟล์ใน S3, คิว และ DNS delegation ห้ามหาย `make down` จึงเป็นแค่ `terraform apply -var platform=false` ที่ลบเฉพาะชั้น platform
+เหตุผล: lab หยุดแค่ EC2 อัตโนมัติ ส่วน **EKS control plane, RDS + Proxy, ElastiCache, NAT, VPC endpoint, ALB และ WAF คิดเงินต่อเนื่อง** (ราว $0.5/ชม. ประมาณจากราคา) จึงต้องทิ้งทุกคืน แต่ network, image ใน ECR, ไฟล์ใน S3, คิว และ DNS delegation ห้ามหาย `make down` จึงเป็นแค่ `terraform apply -var platform=false` ที่ลบเฉพาะชั้น platform และ**จบด้วย exit ไม่ใช่ศูนย์ถ้าไม่สะอาดจริง** (apply ล้ม หรือรายการใดยังอยู่/อ่านไม่ได้)
 
-- **State:** S3 `eventide-tfstate-<account>` (สร้างโดย `scripts/tf-init.sh`) ใช้ S3 lockfile ไม่ต้องมี DynamoDB
+- **State:** S3 `eventide-tfstate-<account>` (สร้างโดย `scripts/tf-init.sh`) ใช้ S3 lockfile ไม่ต้องมี DynamoDB; ถ้า run ถูกขัดจังหวะ (lab ตัด credential กลางทาง) `scripts/recover-state.sh` ปลดล็อกค้างและ push `errored.tfstate` ให้เองทุกครั้งที่ `tf-init` / `make down`
 - **Credentials:** ที่เดียวคือ `infra/aws.env` (gitignored) ทุก Make target และ script อ่านไฟล์นี้ ไม่มีค่า account ID ฝังในโค้ด
 - **Secrets เสริม** (เปิดด้วยไฟล์ `infra/terraform/*.auto.tfvars` ที่ gitignored): `dns` (Route 53 + ACM), `google`, `stripe`, `gmail`. ไม่มีไฟล์ = ฟีเจอร์นั้นปิด (ไม่มี Stripe = checkout ปิด, ไม่มี Gmail = mail-worker แค่ log)
 - รายละเอียดทั้งหมด: [infra/terraform/README.md](infra/terraform/README.md)
@@ -172,7 +184,7 @@ infra/terraform/
 | `auth` `event` `registration` `payment` | Deployment + Service + Ingress path | probe ที่ `GET /api/<prefix>/health` |
 | `web` | Deployment + Service + Ingress `/` | Bun server เสิร์ฟ `dist/` และใส่ `<head>` / Open Graph ต่อ URL |
 | `mail-worker` | Deployment | SQS consumer ไม่มี HTTP จัดการ `SIGTERM` |
-| `redis` | Deployment + Service | `redis:8-alpine` |
+| `redis` | Deployment + Service | `redis:8-alpine` เฉพาะ k3d (บน EKS ใช้ ElastiCache: `values.aws.yaml` ตั้ง `redis: null` และ `REDIS_URL` มาจาก Secret) |
 | `files` | ExternalName Service + Ingress `/files/(.*)` | rewrite ไป S3 (EKS) หรือ MinIO (k3d) |
 | `db-migrate` | Job (hook `pre-install,pre-upgrade`) | `drizzle-kit migrate` ก่อน pod ใหม่ roll ทุกครั้งที่ deploy |
 | `event` | HPA | เฉพาะ `values.aws.yaml`: 2 → 8 ที่ CPU 60% |
@@ -197,23 +209,28 @@ Container รันด้วย uid 1000, read-only filesystem และ drop �
 
 ### Session lifecycle
 
-Lab หมดอายุทุก 4 ชั่วโมง วงจรใช้งานจึงเป็นแบบนี้ทุกครั้ง:
+Lab หมดอายุทุก 4 ชั่วโมง และถ้า reset lab ทุกอย่างหายหมด วงจรใช้งานจึงเหลือคำสั่งเดียว:
 
 ```sh
 cp infra/aws.env.example infra/aws.env     # ครั้งเดียว แล้ววาง credential จาก Learner Lab → AWS Details → AWS CLI (ทุก session)
-bash scripts/check-lab.sh                  # หลัง Start Lab: role suffix และสิทธิ์อาจเปลี่ยน
 
-make up                                    # tf-init + terraform apply (ทุกชั้น) + kubeconfig  (~15–20 นาที)
-make deploy                                # build 7 images → ECR, สร้าง k8s Secrets, helm upgrade (migrate ก่อน), roll out
+make deploy                                # คำสั่งเดียวจบ: account ว่าง / เพิ่ง reset → ระบบใช้งานได้ (platform รันอยู่แล้ว = redeploy)
 make admin EMAIL=you@example.com           # ตั้ง admin คนแรก หลังสมัครผ่านหน้าเว็บ
-make secrets                               # คัดลอก Google/Gmail/Stripe จาก .env ไป Secrets Manager (รันซ้ำหลังเติมค่า)
 make load BASE_URL=https://eventide.creasy.club   # k6 ทดสอบ HPA
 make down                                  # platform=false + พิสูจน์ว่าไม่มีอะไรคิดเงิน — ทำทุกครั้งก่อนจบ session
 ```
 
-`make plan` ดูสิ่งที่จะเปลี่ยนโดยไม่แก้อะไร, `NODE_INSTANCE_TYPE=t3.medium make up` สำหรับทดสอบ HPA ถึง 8 replica (t3.small รับได้แค่ ~11 pod)
+`make deploy` (`scripts/bootstrap.sh`) ทำตามลำดับ: ตรวจเครื่องมือ/Docker/credential → state ของ Terraform → ชั้นถาวร (VPC, ECR, S3, SQS, secrets, Route 53 zone, ขอ ACM cert) → ชี้ NS ที่ Cloudflare แล้วรอ cert เป็น `ISSUED` → คัดลอก image ของ ingress-nginx/metrics-server เข้า ECR → `terraform apply` ตัว platform → build/push/deploy แอป → ทดสอบ health ทั้ง 4 service ถ้าเริ่มจากศูนย์ใช้เวลาราว 30–40 นาที (ยังไม่เคยทดสอบเส้นทางเริ่มจากศูนย์ครบวงจรกับ lab ที่ reset จริง)
 
-**กฎ:** อย่าเริ่ม `terraform apply` ของ EKS หลังชั่วโมงที่ 3 ของ session และลืม `make down` ไม่ได้ เพราะทิ้งไว้ให้ครบ ~15 วันงบ $50 หมด
+- **ขั้นเดียวที่อาจต้องทำมือ:** reset ลบ Route 53 zone จึงได้ name server ชุดใหม่ ต้องเปลี่ยน NS ที่ Cloudflare ตาม ใส่ `CLOUDFLARE_API_TOKEN` ใน `infra/aws.env` (สิทธิ์ Edit zone DNS เฉพาะ zone หลัก) แล้วสคริปต์เปลี่ยนให้เอง ถ้าไม่ใส่ สคริปต์จะพิมพ์ NS 4 ตัวให้วางแล้วรอ (หรือจบด้วย exit 3 ถ้าไม่ได้รันใน terminal ให้วางแล้วรัน `make deploy` ซ้ำ)
+- ฐานข้อมูลใหม่ทุก session: สมัครผ่านหน้าเว็บ แล้วรัน `make admin EMAIL=…`
+- `make redeploy` = เฉพาะแอปบน platform ที่รันอยู่ (build/push 7 image, k8s Secrets, helm upgrade ผ่าน release gate ของ payment) ซึ่งเป็นสิ่งที่ CI รัน; `make up` / `make mirror` / `make secrets` ยังใช้ทีละขั้นได้
+- ไม่ทำให้อัตโนมัติ: การวาง credential และ `make down` ตอนจบ session
+- **ถ้า `make down` ถูกตัดกลางทาง** (lab ตัด credential): platform ยังคิดเงินอยู่ Start Lab ใหม่แล้วรัน `make down` ซ้ำ มันกู้ state เองก่อนแล้วทำลายส่วนที่เหลือ อย่ารัน `terraform apply` เองก่อน
+
+`make plan` ดูสิ่งที่จะเปลี่ยนโดยไม่แก้อะไร, `NODE_INSTANCE_TYPE=t3.medium make deploy` สำหรับทดสอบ HPA ถึง 8 replica (t3.small รับได้แค่ ~11 pod; ยกเพดาน WAF ต่อ IP ด้วย `-var waf_rate_limit=…` เมื่อยิง k6 จากเครื่องเดียว)
+
+**กฎ:** อย่าเริ่ม `terraform apply` ของ EKS หลังชั่วโมงที่ 3 ของ session และลืม `make down` ไม่ได้ เพราะทิ้งไว้ ~$0.5/ชม. ทำให้งบ $50 หมดภายในไม่กี่วัน
 
 ### Local parity: k3d
 
@@ -251,23 +268,27 @@ HPA สูงสุด 8 เพราะ `t3.medium` รับได้ 17 pod �
 
 | ข้อจำกัด | ผล |
 |---|---|
-| **งบ $50 ห้ามเกิน** เกินแล้วบัญชีถูกล็อกและงานหาย | ~$1.10 ต่อ session 4 ชม. → ทิ้ง platform ทุกคืนด้วย `make down` |
+| **งบ $50 ห้ามเกิน** เกินแล้วบัญชีถูกล็อกและงานหาย | ราว $2 ต่อ session 4 ชม. กับโครงสร้าง production (ประมาณจากราคา; ก่อนมี NAT/endpoint/Proxy/ElastiCache/ALB/WAF ~$1.10) → ทิ้ง platform ทุกครั้งด้วย `make down` |
 | ไม่มี `iam:CreateRole` | ใช้ `LabEksClusterRole` / `LabEksNodeRole` ของ lab โดยค้นด้วย regex (`data "aws_iam_roles"`) ห้ามฝัง ARN |
 | `iam:GetRole` บน `voclabs` ถูกปฏิเสธ | ใช้ `terraform-aws-modules/eks` ไม่ได้ → เขียน `aws_eks_*` ตรง ๆ |
 | ไม่มี IRSA และไม่มี GitHub OIDC | pod และ CI ใช้ session credentials (หมดอายุพร้อม session) |
 | SCP ปฏิเสธ `s3:GetBucketObjectLockConfiguration` | สร้าง bucket ด้วย CLI (`terraform_data` + `local-exec`) แล้วอ่านผ่าน `data "aws_s3_bucket"`, ตั้งค่าด้วย `aws_s3_bucket_*` |
-| Default VPC เท่านั้น ไม่มี NAT | node อยู่ public subnet, ไม่มี RDS Proxy / ElastiCache (ตัดเพื่องบ) |
-| CloudFront ใช้ไม่ได้ | ingress เสิร์ฟ `/files/*` จาก S3 ตรง |
+| สร้าง VPC, NAT, VPC endpoint, ElastiCache, RDS Proxy, WAF ได้ (ตรวจแล้ว 2026-10-25) | ทำครบตามสถาปัตยกรรมเป้าหมายแบบ single-AZ; ราคาเพิ่ม ~$0.2/ชม. |
+| CloudFront และ Shield Advanced ถูกปฏิเสธ | ใช้ **ALB + WAF** เป็นขอบแทน (Shield Standard มากับ ALB) และ ingress เสิร์ฟ `/files/*` จาก S3 ตรง |
 | EC2 หยุดเองหลัง session แต่ ASG เปิดใหม่ | ต้องลบ platform ทั้งหมด ไม่ใช่รอให้ lab หยุดให้ |
+| tier edge ไม่มี route ออก internet | pull image จาก Docker Hub / `registry.k8s.io` ไม่ได้ → ทุก image ต้องอยู่ใน ECR (`make mirror`) หรือไปรันบน tier egress |
+| ไม่ใช่ production แท้ ๆ | single-AZ, ไม่มี backup ของ RDS, pod ใช้ credential 4 ชม., EKS API เปิดสาธารณะ, log ของ WAF/ALB ปิด, เปิดเฉพาะช่วง session |
 
-หลัง lab reset ให้รัน `bash scripts/check-lab.sh` เสมอ และ **Route 53 zone จะถูกสร้างใหม่ name server เปลี่ยน** ต้องสร้าง zone + cert ก่อน (`terraform apply -target=aws_route53_zone.app -target=aws_acm_certificate.app`, ตามด้วย `-target=aws_route53_record.acm_validation`), แก้ NS 4 ตัวของ `eventide` ที่ Cloudflare, รอให้ cert เป็น `ISSUED` แล้วค่อย `make up`
+หลัง lab reset ให้วาง credential ใหม่แล้วรัน `make deploy` (เปลี่ยน NS ที่ Cloudflare ให้เองเมื่อมี `CLOUDFLARE_API_TOKEN` ดู [Session lifecycle](#session-lifecycle)) `bash scripts/check-lab.sh` ใช้ตรวจสิทธิ์ของ lab ได้เมื่อสงสัย
 
 ### กฎที่ทำให้เสียเวลาถ้าฝ่าฝืน
 
 - **Health endpoint ห้ามแตะ Postgres หรือ Redis** probe ที่ query DB ทำให้ RDS สะดุด 5 วินาทีกลายเป็น pod restart ทั้งระบบ
 - **`/files/*` เปิดสาธารณะเฉพาะ `public/*`** ห้ามเก็บไฟล์ private ด้วย key `public/` และห้ามขยาย bucket policy
 - RDS ต้องตั้ง `skip_final_snapshot = true` และ `deletion_protection = false` ไม่งั้น `make down` ล้ม
-- ห้ามสร้าง ELB ด้วย `type=LoadBalancer` (ใช้ NLB ของ Terraform)
+- ห้ามสร้าง ELB ด้วย `type=LoadBalancer` (ใช้ ALB ของ Terraform)
+- **เปลี่ยน VPC หรือ subnet = สร้าง EKS, DB subnet group และ load balancer ใหม่:** `make down` ก่อนเสมอ (จาก checkout ที่โค้ดตรงกับของที่รันอยู่) แล้วค่อย apply
+- **เส้นทางออกของ tier edge:** อย่าให้ pod ที่ไม่ใช่ egress เรียก internet โดยตรง (จะ timeout) และอย่าเพิ่ม image จาก registry สาธารณะโดยไม่ mirror
 - Bun service ต้องรับ `SIGTERM`
 
 ### อ่านต่อ
@@ -388,10 +409,10 @@ packages/
   db/  auth-guard/  mail/  storage/  tickets/
 infra/
   elasticmq/      ค่าตั้งคิวของ ElasticMQ สำหรับ docker-compose
-  terraform/      root เดียว: ECR, S3, SQS, secrets, DNS + modules/platform (EKS, RDS, NLB) สลับด้วย var.platform
+  terraform/      root เดียว: VPC, ECR, S3, SQS, secrets, DNS + modules/platform (EKS, NAT, endpoints, RDS + Proxy, ElastiCache, ALB + WAF, alarms) สลับด้วย var.platform
   helm/eventide/  Helm chart ของทั้งระบบ (ใช้ชุดเดียวกันทั้ง k3d และ EKS)
   aws.env.example ที่วาง credential ของ Learner Lab (copy เป็น aws.env)
-scripts/          tf-init · deploy · teardown · k3d-up · k3d-down · admin · check-lab · sync-secrets · ci-creds
+scripts/          bootstrap (make deploy) · deploy (make redeploy) · tf-init · recover-state · teardown · delegate-dns · mirror-images · k3d-up · k3d-down · admin · check-lab · sync-secrets · ci-creds
 load/k6/          load test สำหรับ HPA
 .github/workflows/ci.yml   check, images, deploy
 docs/             เอกสารออกแบบ + รายงาน + แผนภาพ
@@ -407,39 +428,3 @@ docs/             เอกสารออกแบบ + รายงาน + �
 - [docs/storage.md](docs/storage.md): การอัปโหลดและเก็บไฟล์
 - [infra/terraform/README.md](infra/terraform/README.md) และ [infra/helm/eventide/README.md](infra/helm/eventide/README.md): รายละเอียด infra
 - [CLAUDE.md](CLAUDE.md): ข้อตกลงในการเขียนโค้ดของโปรเจกต์ทั้งหมด
-
-## Deploy (k3d / AWS)
-
-ระบบ deploy ขึ้น EKS บน AWS Academy Learner Lab ด้วย Terraform + Helm และรัน chart ชุดเดียวกันบน k3d ในเครื่องได้
-
-### สถาปัตยกรรมบน AWS
-
-![สถาปัตยกรรม AWS ของ Eventide](docs/architecture/aws/eventide-aws-as-built.png)
-
-(ไฟล์ [SVG](docs/architecture/aws/eventide-aws-as-built.svg) ซูมได้ชัดกว่า, [แหล่งที่มาแก้ไขได้ `.drawio`](docs/architecture/aws/eventide-aws-as-built.drawio), [คำอธิบายและวิธี generate ใหม่](docs/architecture/aws/README.md))
-
-- **ขอบ:** Route 53 → ALB (TLS ด้วย ACM) + **WAF** (โหมด block: Common, KnownBadInputs, IP reputation, rate limit) → ingress-nginx
-- **เครือข่าย:** VPC เฉพาะของระบบ `10.20.0.0/16` แบ่งเป็น public subnet (ALB, NAT gateway), private tier **edge** ที่ไม่มี route ออก internet (ingress-nginx, event, registration, web), private tier **egress** ที่ออกผ่าน NAT (auth, payment, mail-worker) และ data subnet
-- **ข้อมูล:** RDS PostgreSQL ผ่าน **RDS Proxy**, **ElastiCache Redis** (TLS + AUTH), S3, SQS + DLQ
-- **VPC endpoint:** S3 (gateway) และ ecr.api, ecr.dkr, sts, ec2, sqs, secretsmanager (interface) ให้ tier edge เรียก AWS ได้โดยไม่ต้องมี NAT
-- **สังเกตการณ์:** CloudWatch alarm 15 ตัว + dashboard `eventide` แจ้งเตือนผ่าน SNS
-- **ข้อจำกัดของ Learner Lab:** single-AZ, ไม่มี CloudFront (ใช้ ALB + WAF แทน), database ถูกสร้างใหม่ทุก session (`make up` / `make down`), pod ใช้ credential ของ session (ไม่มี IRSA)
-
-```sh
-make k3d          # k3d + ingress-nginx + chart ทั้งระบบ (ใช้ Postgres/MinIO/ElasticMQ จาก docker compose) → http://localhost:8080
-make k3d-down
-
-cp infra/aws.env.example infra/aws.env   # ครั้งเดียว แล้ววาง credential จาก Learner Lab (AWS Details → AWS CLI) ทุก session
-bash scripts/check-lab.sh   # หลัง Start Lab ทุกครั้ง
-make mirror       # ครั้งเดียวต่อ tag: คัดลอก image ของ ingress-nginx / metrics-server เข้า ECR (tier edge ไม่มี internet ดึงจาก registry.k8s.io ไม่ได้)
-make up           # terraform apply ทั้งหมด (VPC/ECR/S3/SQS/DNS + NAT, endpoints, EKS 2 tier, RDS + Proxy, ElastiCache, ALB + WAF, alarms) — root เดียว state เดียว
-make deploy       # build 7 images → ECR, สร้าง k8s Secrets, helm upgrade (migrate ก่อน), roll out
-make admin EMAIL=you@example.com   # ตั้ง admin คนแรก หลังสมัครผ่านหน้าเว็บ
-make secrets      # คัดลอก Google/Gmail/Stripe จาก .env ไปเป็น Secrets Manager (รันซ้ำหลังเติม Stripe)
-make ci-creds DEPLOY=1   # เก็บ credential ของ session นี้เป็น GitHub secrets → push เข้า main แล้ว deploy ขึ้น AWS อัตโนมัติ
-make down         # terraform apply -var platform=false (ลบ EKS, NAT, endpoints, RDS + Proxy, ElastiCache, ALB, WAF, alarms; เก็บ VPC, ECR/S3/SQS/DNS) — ทำทุกครั้งก่อนจบ session
-```
-
-รายละเอียด: [docs/SYSTEM-DESIGN.md](docs/SYSTEM-DESIGN.md) (สถาปัตยกรรม, §1.1 สรุปสิ่งที่เปลี่ยนตอน merge v2),
-[docs/PROJECT-KNOWLEDGE-BASE.md](docs/PROJECT-KNOWLEDGE-BASE.md) (เหตุผลของการตัดสินใจ, ข้อจำกัดของ lab),
-[docs/TODO.md](docs/TODO.md) (checklist และ GATE), [CLAUDE.md](CLAUDE.md) (ส่วน Cloud infrastructure)

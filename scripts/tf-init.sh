@@ -37,3 +37,8 @@ fi
 
 echo "== terraform init (bucket=$BUCKET) =="
 tf init -input=false -backend-config="bucket=$BUCKET"
+
+# an interrupted run (credentials cut mid-apply) leaves errored.tfstate and a stale lock: fix them
+# before anything reads or writes the state (scripts/recover-state.sh)
+echo "== recover an interrupted state (if any) =="
+bash "$ROOT/scripts/recover-state.sh"

@@ -49,6 +49,23 @@ load_aws_env() {
 tf() { terraform -chdir="${ROOT:-.}/infra/terraform" "$@"; }
 tfout() { tf output -raw "$1" 2>/dev/null; }
 
+# --- teardown verification ----------------------------------------------------------
+# verify_empty <label> <command...>: runs the command and checks that it printed nothing. A command
+# that FAILS (AccessDenied: the lab cut the credentials) counts as UNVERIFIED, not as empty: that
+# silence is how a half-finished `make down` once looked clean. Sets VERIFY_BAD=1 on anything else.
+VERIFY_BAD=0
+verify_empty() {
+  local label="$1" out rc; shift
+  out="$("$@" 2>&1)"; rc=$?
+  if [ "$rc" -ne 0 ]; then
+    printf '  UNVERIFIED   %s: %s\n' "$label" "$(printf '%s' "$out" | head -n1 | cut -c1-110)"; VERIFY_BAD=1
+  elif [ -n "$(printf '%s' "$out" | tr -d '[:space:]')" ]; then
+    printf '  STILL THERE  %s: %s\n' "$label" "$(printf '%s' "$out" | tr '\n\t' '  ')"; VERIFY_BAD=1
+  else
+    printf '  gone         %s\n' "$label"
+  fi
+}
+
 # --- the payment release gate --------------------------------------------------
 # Every Helm mutation of the app goes through these (deploy.sh, k3d-up.sh and release.sh): the payment service refunds and settles
 # money under rules a release can change, and an older version doesn't know the refund intents a newer one leaves behind. So

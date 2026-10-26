@@ -47,6 +47,12 @@ jobs:
       - run: bash scripts/scan-secrets.test.sh
       - name: no credential-shaped string in a file git would share (prints where, never what)
         run: bash scripts/scan-secrets.sh
+      # the session scripts, against stand-ins for aws / terraform / Cloudflare (no AWS, no network)
+      - name: test the session scripts (state recovery, teardown, DNS delegation)
+        run: |
+          bash scripts/recover-state.test.sh
+          bash scripts/teardown.test.sh
+          bash scripts/delegate-dns.test.sh
       - run: bun run db:migrate
       - name: test the packages and services that have a test script
         run: |

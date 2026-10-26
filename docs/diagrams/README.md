@@ -8,8 +8,9 @@ These browser-ready diagrams are generated from the repository's Makefile, deplo
 system-design documentation.
 
 - [`learner-lab-deployment-steps.html`](learner-lab-deployment-steps.html) — the start-to-teardown AWS Academy
-  session flow. It predates the production layout: also run `make mirror` once per tag before `make up`, and the
-  teardown proof now lists NAT gateways, endpoints, ElastiCache, RDS proxies, WAF ACLs and alarms.
+  session flow. It predates the production layout: `make deploy` now does the whole start (mirror, DNS, certificate,
+  platform, application) in one command, and the teardown proof lists NAT gateways, endpoints, ElastiCache, RDS
+  proxies, WAF ACLs and alarms.
 - [`eventide-system-design.html`](eventide-system-design.html) — the logical service and
   data ownership boundaries.
 
