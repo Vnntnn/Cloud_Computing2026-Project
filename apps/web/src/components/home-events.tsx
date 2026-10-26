@@ -3,8 +3,9 @@ import { ArrowRight, ArrowUpRight, CalendarDays, MapPin } from "lucide-react";
 import { DateBlock, HourRuler, Kind, LiveMark } from "@/components/event-parts";
 import { CategoryChip, EventPoster } from "@/components/event-poster";
 import { buttonVariants } from "@/components/ui/button";
-import { useT } from "@/i18n";
+import { useLocale, useT } from "@/i18n";
 import { isLive, type Category, type EventSummary } from "@/lib/events";
+import { categoryName } from "@/lib/category-name";
 import { formatDateRange, formatTime } from "@/lib/format";
 import { colourwayOf } from "@/lib/poster";
 import { cn } from "cn";
@@ -125,6 +126,7 @@ export function Ledger({ events }: { events: EventSummary[] }) {
  * colour on hover and focus, the colour the category's posters wear everywhere else.
  */
 export function KindIndex({ categories }: { categories: Category[] }) {
+  const locale = useLocale();
   return (
     <ul className="grid gap-x-12 lg:grid-cols-2">
       {categories.map((c) => {
@@ -142,7 +144,7 @@ export function KindIndex({ categories }: { categories: Category[] }) {
               )}
             >
               <CategoryChip slug={c.slug} className="h-10 w-14 sm:h-12 sm:w-[4.5rem]" />
-              <span className="line-clamp-2 min-w-0 flex-1 text-4xl leading-[1.2] font-bold tracking-tight sm:text-5xl sm:leading-[1.2] lg:text-6xl lg:leading-[1.2]">{c.name}</span>
+              <span className="line-clamp-2 min-w-0 flex-1 text-4xl leading-[1.2] font-bold tracking-tight sm:text-5xl sm:leading-[1.2] lg:text-6xl lg:leading-[1.2]">{categoryName(c, locale)}</span>
               <ArrowUpRight className="size-7 shrink-0 transition-transform duration-300 ease-out-expo group-hover:translate-x-1 group-hover:-translate-y-1 group-focus-visible:translate-x-1 group-focus-visible:-translate-y-1 sm:size-9" />
             </Link>
           </li>
