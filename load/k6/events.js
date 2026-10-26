@@ -50,7 +50,7 @@ export default function () {
   const res = http.get(`${BASE_URL}/api/events`);
   check(res, {
     "status is 200": (r) => r.status === 200,
-    "body is a JSON array": (r) => r.body.charAt(0) === "[",
+    "body has items": (r) => r.status !== 200 || "items" in r.json(),
   });
   sleep(0.3);
 }
