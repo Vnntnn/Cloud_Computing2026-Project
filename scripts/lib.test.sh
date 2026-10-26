@@ -69,3 +69,21 @@ if command -v helm >/dev/null; then
 else
   echo "lib.test.sh: payment chart check skipped (no helm)"
 fi
+
+# adopt_helm_releases: imports a release only when the cluster has it AND the state does not; never twice, never a missing one.
+IMPORTS=""
+tf() { case "$1" in state) printf '%s\n' "${STATE:-}" ;; import) IMPORTS="$IMPORTS|$3=$4" ;; esac; }
+helm() { case " ${HAVE:-} " in *" $4 "*) return 0 ;; *) return 1 ;; esac; }   # stub: `helm status -n <ns> <name>`
+STATE=$'terraform_data.x\nhelm_release.metrics_server[0]'; HAVE="ingress-nginx metrics-server"; IMPORTS=""
+adopt_helm_releases >/dev/null
+[ "$IMPORTS" = "|helm_release.ingress_nginx[0]=ingress-nginx/ingress-nginx" ] || { echo "FAIL (adopt only what the state lacks): got '$IMPORTS'"; exit 1; }
+STATE=""; HAVE="metrics-server"; IMPORTS=""
+adopt_helm_releases >/dev/null
+[ "$IMPORTS" = "|helm_release.metrics_server[0]=kube-system/metrics-server" ] || { echo "FAIL (adopt only what the cluster has): got '$IMPORTS'"; exit 1; }
+STATE=$'helm_release.ingress_nginx[0]\nhelm_release.metrics_server[0]'; HAVE="ingress-nginx metrics-server"; IMPORTS=""
+adopt_helm_releases >/dev/null
+[ -z "$IMPORTS" ] || { echo "FAIL (nothing to adopt when the state has both): got '$IMPORTS'"; exit 1; }
+STATE=""; HAVE=""; IMPORTS=""
+adopt_helm_releases >/dev/null
+[ -z "$IMPORTS" ] || { echo "FAIL (nothing to adopt on an empty cluster): got '$IMPORTS'"; exit 1; }
+echo "lib.test.sh: adopt_helm_releases 4 pass"

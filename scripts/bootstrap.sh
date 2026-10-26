@@ -102,6 +102,11 @@ else
 fi
 
 step "6. platform (EKS, NAT, endpoints, RDS + Proxy, ElastiCache, ALB + WAF, alarms)"
+if [ "$LIVE" = 1 ]; then
+  # a state that lost the Helm releases would make the apply fail on "cannot re-use a name"
+  aws eks update-kubeconfig --region "$REGION" --name "$PROJECT" >/dev/null
+  adopt_helm_releases
+fi
 tf apply -auto-approve -input=false ${NODE_INSTANCE_TYPE:+-var node_instance_type=$NODE_INSTANCE_TYPE}
 aws eks update-kubeconfig --region "$REGION" --name "$PROJECT" >/dev/null
 kubectl wait --for=condition=Ready node --all --timeout=300s >/dev/null && echo "nodes ready: $(kubectl get nodes --no-headers | wc -l)"
