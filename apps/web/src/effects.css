@@ -37,7 +37,7 @@
   background:
     linear-gradient(to bottom, color-mix(in oklab, var(--dusk) 70%, transparent), transparent 22%),
     linear-gradient(to top, var(--dusk) 0%, color-mix(in oklab, var(--dusk) 55%, transparent) 38%, transparent 70%),
-    color-mix(in oklab, var(--dusk) 28%, transparent);
+    color-mix(in oklab, var(--dusk) 6%, transparent);
 }
 
 .hero-plate img {
