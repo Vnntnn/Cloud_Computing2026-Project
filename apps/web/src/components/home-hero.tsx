@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, CalendarX, Clock, MapPin, Search, Telescope } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { HeroTicket3D } from "@/components/hero-ticket-3d";
 import { InkScene } from "@/components/navbar";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -82,6 +83,7 @@ export function HomeHero({ onSearch, edge = "sand" }: { onSearch: (query: string
           className="size-full object-cover object-[72%_50%]"
         />
       </div>
+      <HeroTicket3D className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[24rem] w-full lg:inset-y-0 lg:right-0 lg:left-auto lg:h-auto lg:w-[54%]" />
 
       <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-10 px-4 pt-[17.5rem] pb-8 lg:justify-center lg:gap-12 lg:pt-16 lg:pb-10">
         <div className="flex flex-col gap-7 lg:gap-8">
