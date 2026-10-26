@@ -19,6 +19,7 @@
 #   6 platform         terraform apply: EKS, NAT, endpoints, RDS + Proxy, ElastiCache, ALB + WAF, alarms
 #   7 application      scripts/deploy.sh: build + push, k8s Secrets, helm upgrade (migrates first)
 #   8 smoke test       the public health endpoints
+#   9 demo data        accounts, categories and events for the presentation (scripts/seed-demo.sh; SEED_DEMO=0 skips)
 # Cost: while the platform is up it bills about $0.5/h; `make down` at the end of the session.
 set -euo pipefail
 
@@ -126,9 +127,18 @@ done
 [ "$bad" = 0 ] && echo "health: auth events regis payment all answer 200 at $URL" \
   || echo "WARNING: not every health endpoint answers 200 yet at $URL (give the load balancer a few more minutes, then check: kubectl -n eventide get pods)"
 
+step "9. prepared demo data"
+# a new database is empty: seed the demo (idempotent: it does nothing when the demo accounts exist). It is not part
+# of what makes the system work, so a failure here warns and does not fail the deploy.
+if [ "${SEED_DEMO:-1}" = 0 ]; then
+  echo "(skipped: SEED_DEMO=0)"
+else
+  BASE_URL="$URL" bash "$ROOT/scripts/seed-demo.sh" || echo "WARNING: the demo data was not seeded (see above). The system itself is up; retry with: make demo"
+fi
+
 cat <<EOF
 
 done. $URL
-  first admin:  register in the web, then  make admin EMAIL=<that email>   (the database is new every session)
+  demo accounts: demo/.credentials (admin, organizer, attendee; or SEED_DEMO=0 and register one yourself, then make admin EMAIL=…)
   end of session:  make down   (the platform bills about \$0.5/h until then)
 EOF

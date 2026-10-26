@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useT } from "@/i18n";
+import { useLocale, useT } from "@/i18n";
+import { categoryName } from "@/lib/category-name";
 import { categoriesQueryOptions } from "@/lib/events";
 import { hasRole, useSession } from "@/lib/session";
 
@@ -17,9 +18,10 @@ type CategorySelectProps = {
 
 export function CategorySelect({ value, onValueChange, onBlur, invalid, errors, disabled }: CategorySelectProps) {
   const t = useT();
+  const locale = useLocale();
   const { data: categories, isPending } = useQuery(categoriesQueryOptions);
   const { data: session } = useSession();
-  const items = (categories ?? []).map((category) => ({ value: category.id, label: category.name }));
+  const items = (categories ?? []).map((category) => ({ value: category.id, label: categoryName(category, locale) }));
   const none = !isPending && items.length === 0;
 
   return (

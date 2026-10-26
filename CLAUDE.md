@@ -495,7 +495,11 @@ takes about 30-40 min. Things to know:
   verification list is empty. A list it cannot read (credentials cut) is `UNVERIFIED`, never
   "empty". After an interrupted `make down` the platform is still billing: Start Lab and run it
   again.
-- The database is new every session: register, then `make admin EMAIL=…`.
+- The database is new every session, so `make deploy` ends with the **prepared demo** (`scripts/seed-demo.sh` -> `demo/seed.ts`,
+  through the public API, idempotent; `SEED_DEMO=0` skips it, `make demo` runs it by hand): accounts (admin, an approved
+  organizer, an attendee; random password in `demo/.credentials`, gitignored), six categories with Thai and English names and eight
+  events covering every ticket kind and state. The accounts use plus-addresses of the Gmail sender (approval and invitation mails
+  are real: an address nobody owns would end in the DLQ). `demo/README.md`; `bun test demo/` checks the data and runs in CI.
 - Not automated, by design: the credentials, and `make down` at the end.
 - `scripts/{delegate-dns,recover-state,teardown}.test.sh` test the DNS delegation, the state
   recovery and `make down`'s exit codes against stand-ins for Cloudflare, `aws` and `terraform`

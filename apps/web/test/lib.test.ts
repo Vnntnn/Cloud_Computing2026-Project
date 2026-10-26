@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { categoryName } from "../src/lib/category-name.ts";
 import { colourwayOf } from "../src/lib/poster.ts";
 import { pageTitle, SITE_NAME } from "../src/lib/site.ts";
 
@@ -29,5 +30,20 @@ describe("pageTitle", () => {
     expect(pageTitle("ตั๋วของฉัน")).toBe(`ตั๋วของฉัน | ${SITE_NAME}`);
     expect(pageTitle()).toBe(SITE_NAME);
     expect(pageTitle("")).toBe(SITE_NAME);
+  });
+});
+
+describe("categoryName", () => {
+  const music = { name: "ดนตรี", nameEn: "Music" };
+
+  test("the English name in English, the Thai one in Thai", () => {
+    expect(categoryName(music, "en")).toBe("Music");
+    expect(categoryName(music, "th")).toBe("ดนตรี");
+  });
+
+  test("a category without an English name shows the Thai one in both languages", () => {
+    expect(categoryName({ name: "ทั่วไป", nameEn: null }, "en")).toBe("ทั่วไป");
+    expect(categoryName({ name: "ทั่วไป" }, "en")).toBe("ทั่วไป");
+    expect(categoryName({ name: "ทั่วไป", nameEn: "" }, "en")).toBe("ทั่วไป");
   });
 });

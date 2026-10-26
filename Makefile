@@ -1,4 +1,4 @@
-.PHONY: dev db-reset tf-init mirror up plan secrets ci-creds deploy redeploy admin load down k3d k3d-down help
+.PHONY: dev db-reset tf-init mirror up plan secrets ci-creds deploy redeploy demo admin load down k3d k3d-down help
 
 # Learner Lab credentials live in infra/aws.env (copy infra/aws.env.example).
 # Every AWS target sources it; Terraform and the AWS CLI read the same variables.
@@ -52,6 +52,9 @@ redeploy: ## app only, on a running platform: build+push the 7 images, k8s Secre
 
 rollback: ## gated Helm rollback (payment preflight first) — make rollback REV=<helm revision>
 	$(AWSENV) bash scripts/release.sh rollback $(REV)
+
+demo: ## seed the prepared demo (accounts, categories in Thai + English, 8 events) into the deployed system; idempotent. make deploy does it too
+	$(AWSENV) bash scripts/seed-demo.sh
 
 admin: ## promote a registered user to admin on the running cluster — make admin EMAIL=you@example.com
 	$(AWSENV) bash scripts/admin.sh $(EMAIL)

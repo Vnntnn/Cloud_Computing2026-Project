@@ -12,11 +12,15 @@ export class CategoryInUse extends HTTPError.id("CATEGORY_IN_USE", 409) {
   override readonly detail = "ลบไม่ได้ เพราะยังมีอีเวนต์ในหมวดหมู่นี้";
 }
 
-const toCategory = ({ id, name, slug }: typeof eventCategories.$inferSelect): CategoryModel.Category => ({
+const toCategory = ({ id, name, nameEn, slug }: typeof eventCategories.$inferSelect): CategoryModel.Category => ({
   id,
   name,
+  nameEn,
   slug,
 });
+
+// "" and whitespace mean "no English name", the same as null
+const cleanEn = (value: string | null | undefined) => (value == null ? value : value.trim() || null);
 
 export async function listCategories() {
   const rows = await db.select().from(eventCategories).orderBy(asc(eventCategories.name));
@@ -27,7 +31,7 @@ export async function createCategory(input: CategoryModel.Post["Body"]) {
   try {
     const [row] = await db
       .insert(eventCategories)
-      .values({ name: input.name.trim(), slug: input.slug })
+      .values({ name: input.name.trim(), nameEn: cleanEn(input.nameEn) ?? null, slug: input.slug })
       .returning();
     return toCategory(row!);
   } catch (error) {
@@ -44,7 +48,7 @@ export async function updateCategory(id: string, input: CategoryModel.ByIdPatch[
   try {
     const [row] = await db
       .update(eventCategories)
-      .set({ name: input.name?.trim(), slug: input.slug })
+      .set({ name: input.name?.trim(), nameEn: cleanEn(input.nameEn), slug: input.slug })
       .where(eq(eventCategories.id, id))
       .returning();
     if (!row) return new CategoryNotFound();

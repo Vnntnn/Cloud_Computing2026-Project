@@ -22,7 +22,8 @@ import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/u
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { useT } from "@/i18n";
+import { useLocale, useT } from "@/i18n";
+import { categoryName } from "@/lib/category-name";
 import { eventQueryOptions, eventUrl, hasEnded, isLive, isScheduled, problemCode, statusInfo } from "@/lib/events";
 import { formatDateRange, formatDateTime, formatDuration } from "@/lib/format";
 import { hasRole, useSession } from "@/lib/session";
@@ -34,6 +35,7 @@ export const Route = createFileRoute("/events/$slug")({ component: EventPage });
 
 function EventPage() {
   const t = useT();
+  const locale = useLocale();
   const { slug } = Route.useParams();
   const { data: event, isPending, isError, error } = useQuery(eventQueryOptions(slug));
   const { data: session } = useSession();
@@ -82,7 +84,7 @@ function EventPage() {
     <>
       <span className="flex items-center gap-2 rounded-full bg-dusk-foreground/12 px-3 py-1 text-sm font-semibold">
         <CategoryChip slug={event.category.slug} className="size-4" />
-        {event.category.name}
+        {categoryName(event.category, locale)}
       </span>
       {isLive(event) && <span className="rounded-full bg-sun px-3 py-1 text-sm font-bold text-sun-foreground">{t("pub.event.badge.live")}</span>}
       {hasEnded(event) && <span className="rounded-full border border-dusk-foreground/40 px-3 py-1 text-sm">{t("pub.event.badge.ended")}</span>}

@@ -127,6 +127,13 @@
       "when": 1793002926330,
       "tag": "0017_quiet_fixer",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793024616005,
+      "tag": "0018_category_name_en",
+      "breakpoints": true
     }
   ]
 }

@@ -1,15 +1,18 @@
 import { CategoryChip, EventPoster } from "@/components/event-poster";
-import { useT } from "@/i18n";
+import { useLocale, useT } from "@/i18n";
+
+import { categoryName } from "@/lib/category-name";
 import { formatDay, formatMonth, isValidDate } from "@/lib/format";
 import { colourwayOf } from "@/lib/poster";
 import { cn } from "cn";
 
 /** The category as a small chip in its own colourway (the one its posters and its row in the index use) and its name. */
-export function Kind({ category, className }: { category: { slug: string; name: string }; className?: string }) {
+export function Kind({ category, className }: { category: { slug: string; name: string; nameEn?: string | null }; className?: string }) {
+  const locale = useLocale();
   return (
     <span className={cn("flex items-center gap-2 text-sm font-semibold", className)}>
       <CategoryChip slug={category.slug} className="size-4" />
-      <span className="line-clamp-1">{category.name}</span>
+      <span className="line-clamp-1">{categoryName(category, locale)}</span>
     </span>
   );
 }

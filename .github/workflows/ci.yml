@@ -43,6 +43,8 @@ jobs:
           docker compose wait minio-init || true
       - run: bun install --frozen-lockfile
       - run: bash scripts/lib.test.sh
+      - name: the demo data (slugs, dates, ticket rules) is valid
+        run: bun test demo/
       - run: bash scripts/release.test.sh
       - run: bash scripts/scan-secrets.test.sh
       - name: no credential-shaped string in a file git would share (prints where, never what)

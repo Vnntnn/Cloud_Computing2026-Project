@@ -16,7 +16,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/toast";
-import { useT, type Translate } from "@/i18n";
+import { getLocale, useT, type Translate } from "@/i18n";
+import { categoryName } from "@/lib/category-name";
 import { eventUrl, hasEnded, isLive, type EventSummary } from "@/lib/events";
 import { formatLongDate, formatTime } from "@/lib/format";
 import { DeleteEventDialog } from "./delete-event-dialog";
@@ -42,7 +43,7 @@ const eventColumns = (t: Translate, canModerate: boolean) =>
               >
                 {event.title}
               </Link>
-              <span className="truncate text-sm text-muted-foreground">{event.category.name}</span>
+              <span className="truncate text-sm text-muted-foreground">{categoryName(event.category, getLocale())}</span>
             </div>
           </div>
         );

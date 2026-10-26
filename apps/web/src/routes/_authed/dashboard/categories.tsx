@@ -62,6 +62,12 @@ const categoryColumns = (t: Translate) =>
         </span>
       ),
     }),
+    columnHelper.accessor((category) => category.nameEn ?? "", {
+      id: "nameEn",
+      header: t("dashboard.categories.columns.nameEn"),
+      cell: ({ getValue }) =>
+        getValue() ? <span>{getValue()}</span> : <span className="text-muted-foreground">{t("dashboard.categories.columns.noNameEn")}</span>,
+    }),
     columnHelper.accessor("slug", {
       header: t("dashboard.categories.columns.slug"),
       cell: ({ getValue }) => <span className="text-muted-foreground">{getValue()}</span>,
@@ -104,6 +110,11 @@ const schema = z.object({
     .trim()
     .min(1, { error: () => t("dashboard.categories.validation.nameRequired") })
     .max(60, { error: () => t("dashboard.categories.validation.tooLong") }),
+  // optional: empty means "no English name" and is sent as null
+  nameEn: z
+    .string()
+    .trim()
+    .max(60, { error: () => t("dashboard.categories.validation.tooLong") }),
   slug: z
     .string()
     .trim()
@@ -124,10 +135,10 @@ function CategoryDialog({
   const t = useT();
   const queryClient = useQueryClient();
   const form = useForm({
-    defaultValues: { name: category?.name ?? "", slug: category?.slug ?? "" },
+    defaultValues: { name: category?.name ?? "", nameEn: category?.nameEn ?? "", slug: category?.slug ?? "" },
     validators: { onSubmit: schema },
     onSubmit: async ({ value }) => {
-      const body = { name: value.name.trim(), slug: value.slug.trim() };
+      const body = { name: value.name.trim(), nameEn: value.nameEn.trim() || null, slug: value.slug.trim() };
       const { error } = category
         ? await eventClient.api.events.categories({ id: category.id }).patch(body)
         : await eventClient.api.events.categories.post(body);
@@ -159,6 +170,15 @@ function CategoryDialog({
           </DialogHeader>
           <FieldGroup>
             <form.Field name="name">{(field) => <TextField field={field} label={t("dashboard.categories.dialog.nameLabel")} autoFocus />}</form.Field>
+            <form.Field name="nameEn">
+              {(field) => <TextField
+                  field={field}
+                  label={t("dashboard.categories.dialog.nameEnLabel")}
+                  description={t("dashboard.categories.dialog.nameEnHint")}
+                  placeholder="Music"
+                  autoComplete="off"
+                />}
+            </form.Field>
             <form.Field name="slug">
               {(field) => <TextField
                   field={field}

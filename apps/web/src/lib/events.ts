@@ -88,6 +88,7 @@ export const categoriesQueryOptions = queryOptions({
 
 export type Category = NonNullable<Awaited<ReturnType<typeof eventClient.api.events.categories.get>>["data"]>[number];
 
+
 export const publicEventsQueryOptions = (
   query: Page & { categoryId?: string; organizerId?: string; when?: "upcoming" | "past" },
 ) =>
