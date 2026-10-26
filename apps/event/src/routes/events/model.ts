@@ -1,5 +1,6 @@
 import { t, type UnwrapModels, type UnwrapSchema } from "elysia";
 import { SLUG_PATTERN } from "../../libs/slug";
+import { Category } from "../categories/model";
 
 const Id = t.String({ format: "uuid" });
 const DateTime = t.String({ format: "date-time" });
@@ -24,7 +25,6 @@ const VenueUrl = t.String({ maxLength: 500, pattern: "^https?://\\S+$" });
 const RefundCutoffHours = t.Integer({ minimum: 0, maximum: 24 * 365 });
 const RefundPercent = t.Integer({ minimum: 0, maximum: 100 });
 
-const Category = t.Object({ id: t.String(), name: t.String(), slug: t.String() });
 
 // One shape for list rows and the detail; the list leaves `description` (HTML) out.
 const Summary = {

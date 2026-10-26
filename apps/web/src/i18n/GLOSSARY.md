@@ -17,6 +17,7 @@ what the user reads.
 | Event page | event page | หน้าอีเวนต์ | |
 | Explore page | Explore | สำรวจ / สำรวจอีเวนต์ | |
 | Category | category | หมวดหมู่ | not "ประเภท" (that is ticket type) |
+| Category name | (data) | (data) | not site text: an admin types it, once in Thai (`name`) and once in English (`nameEn`); the web shows the one for the current language through `categoryName()` (`lib/category-name.ts`) and falls back to the Thai one |
 | Venue | venue | สถานที่ | |
 | Draft | Draft | ฉบับร่าง | |
 | Public event | Public | สาธารณะ | |

@@ -31,7 +31,7 @@ const toSummary = (event: EventRow, category: CategoryRow): EventModel.EventSumm
   slug: event.slug,
   title: event.title,
   status: event.status,
-  category: { id: category.id, name: category.name, slug: category.slug },
+  category: { id: category.id, name: category.name, nameEn: category.nameEn, slug: category.slug },
   venue: event.venue,
   thumbnailUrl: event.coverImageKey ? fileUrl(event.coverImageKey) : null,
   startsAt: event.startsAt.toISOString(),

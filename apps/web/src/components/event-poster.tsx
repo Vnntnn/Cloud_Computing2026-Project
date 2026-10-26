@@ -1,8 +1,11 @@
+import { useLocale } from "@/i18n";
+
+import { categoryName } from "@/lib/category-name";
 import { formatDay, formatMonth } from "@/lib/format";
 import { colourwayOf, layoutOf } from "@/lib/poster";
 import { cn } from "cn";
 
-type PosterEvent = { id: string; startsAt: string; category: { slug: string; name: string } };
+type PosterEvent = { id: string; startsAt: string; category: { slug: string; name: string; nameEn?: string | null } };
 
 /** Five tide lines, the logo's waves, run across the poster. They are the only texture. */
 export function Tide({ color, className }: { color: string; className?: string }) {
@@ -23,6 +26,7 @@ export function Tide({ color, className }: { color: string; className?: string }
  * month so the caller can set its own words on the poster.
  */
 export function EventPoster({ event, className, layout: fixed, bare, children }: { event: PosterEvent; className?: string; layout?: 0 | 1 | 2; bare?: boolean; children?: React.ReactNode }) {
+  const locale = useLocale();
   const colourway = colourwayOf(event.category.slug);
   const layout = fixed ?? layoutOf(event.id);
   const text = colourway.tone === "dark" ? "text-dusk-foreground" : "text-sun-foreground";
@@ -49,7 +53,7 @@ export function EventPoster({ event, className, layout: fixed, bare, children }:
         {!bare && (
           <>
             <span className={cn("absolute z-10 hidden max-w-[70%] truncate text-[6cqmin] leading-tight font-bold @min-[9rem]:block", layout === 1 ? "bottom-[5cqmin] left-[5cqmin]" : "top-[5cqmin] left-[5cqmin]")}>
-              {event.category.name}
+              {categoryName(event.category, locale)}
             </span>
             <span className={cn("absolute z-10 hidden text-[6cqmin] leading-tight font-bold @min-[9rem]:block", layout === 1 ? "bottom-[5cqmin] right-[5cqmin]" : "top-[5cqmin] right-[5cqmin]")}>
               {formatMonth(event.startsAt)}

@@ -22,6 +22,8 @@ export const eventStatus = pgEnum("event_status", ["draft", "public", "invite", 
 export const eventCategories = pgTable("event_categories", {
   id: id(),
   name: text("name").notNull().unique(),
+  // the name shown when the site is in English; null = show `name` (the Thai one) in both languages
+  nameEn: text("name_en"),
   slug: text("slug").notNull().unique(),
   ...timestamps,
 });

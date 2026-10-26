@@ -10,12 +10,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { useT } from "@/i18n";
+import { useLocale, useT } from "@/i18n";
 import { EventCard } from "@/components/event-card";
 import { Billboard } from "@/components/home-events";
 import { CategoryChip } from "@/components/event-poster";
 import { PageHeader } from "@/components/page-header";
 import { UserAvatar } from "@/components/user-avatar";
+import { categoryName } from "@/lib/category-name";
 import { categoriesQueryOptions, publicEventsQueryOptions, type EventSummary } from "@/lib/events";
 import { formatMonthYear } from "@/lib/format";
 import { organizerQueryOptions } from "@/lib/organizers";
@@ -37,6 +38,7 @@ export const Route = createFileRoute("/events/_browse")({
 
 function EventsListPage() {
   const t = useT();
+  const locale = useLocale();
   // `to: "."` keeps the current path; navigating from this layout would resolve "." to /events and drop the category
   const navigate = useNavigate();
   const { category: slug } = useParams({ strict: false });
@@ -58,7 +60,7 @@ function EventsListPage() {
   const category = slug ? categories?.find((c) => c.slug === slug) : undefined;
   const categoryMissing = !!slug && !!categories && !category;
   // a category path keeps its title until the categories load
-  usePageTitle(slug ? category?.name : t("pub.browse.title"));
+  usePageTitle(slug ? (category && categoryName(category, locale)) : t("pub.browse.title"));
   const { data, isError, isPlaceholderData, refetch, isRefetching } = useQuery({
     ...publicEventsQueryOptions({
       page,
@@ -93,7 +95,7 @@ function EventsListPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 py-6">
-      <PageHeader size="lg" title={category?.name ?? t("pub.browse.title")} description={t("pub.browse.subtitle")} />
+      <PageHeader size="lg" title={(category && categoryName(category, locale)) ?? t("pub.browse.title")} description={t("pub.browse.subtitle")} />
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-3">
@@ -163,7 +165,7 @@ function EventsListPage() {
             {categories.map((c) => (
               <ToggleGroupItem key={c.id} value={c.id}>
                 <CategoryChip slug={c.slug} className="size-3.5" />
-                {c.name}
+                {categoryName(c, locale)}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>

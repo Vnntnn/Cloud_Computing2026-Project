@@ -73,6 +73,35 @@ describe("categories", () => {
     expect((await request("PATCH", `/${category.id}`, "organizer", { name: "x" })).status).toBe(403);
   });
 
+  test("the English name: set, changed, cleared, and never blank", async () => {
+    const created = await json(
+      await request("POST", "", "admin", { name: `th-${runId}`, nameEn: `Music ${runId}`, slug: `en-${runId}` }),
+    );
+    categoryIds.push(created.id);
+    expect(created.nameEn).toBe(`Music ${runId}`);
+
+    // a category made without one has none, and the list carries the field
+    const plain = await json(await request("POST", "", "admin", { name: `p-${runId}`, slug: `p-${runId}` }));
+    categoryIds.push(plain.id);
+    expect(plain.nameEn).toBeNull();
+    const listed: any[] = await json(await request("GET", ""));
+    expect(listed.find((c) => c.id === created.id)?.nameEn).toBe(`Music ${runId}`);
+
+    // PATCH changes it, leaves it alone when absent, and null clears it
+    const changed = await json(await request("PATCH", `/${created.id}`, "admin", { nameEn: `Live ${runId}` }));
+    expect(changed.nameEn).toBe(`Live ${runId}`);
+    const untouched = await json(await request("PATCH", `/${created.id}`, "admin", { name: `th2-${runId}` }));
+    expect(untouched.nameEn).toBe(`Live ${runId}`);
+    const cleared = await json(await request("PATCH", `/${created.id}`, "admin", { nameEn: null }));
+    expect(cleared.nameEn).toBeNull();
+
+    // an empty or blank English name is not a name: the form sends null to say "none"
+    expect((await request("PATCH", `/${created.id}`, "admin", { nameEn: "" })).status).toBe(422);
+    expect((await request("PATCH", `/${created.id}`, "admin", { nameEn: "   " })).status).toBe(422);
+    // only admins, as for the Thai name
+    expect((await request("PATCH", `/${created.id}`, "organizer", { nameEn: "x" })).status).toBe(403);
+  });
+
   test("a category in use cannot be deleted", async () => {
     const category = await json(
       await request("POST", "", "admin", { name: `u-${runId}`, slug: `u-${runId}` }),
