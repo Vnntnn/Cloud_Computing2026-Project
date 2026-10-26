@@ -20,7 +20,7 @@ export const pub = defineMessages(
         },
       },
       categories: "ดูตามหมวดหมู่",
-      credits: { label: "ภาพจาก Wikimedia Commons", changes: "ครอปและปรับสี" },
+      credits: { label: "ภาพจาก Wikimedia Commons", changes: "ครอป กลับด้าน และปรับสี" },
       upcoming: {
         heading: "อีเวนต์ที่กำลังจะมาถึง",
         viewAll: "ดูทั้งหมด",
@@ -259,7 +259,7 @@ export const pub = defineMessages(
         },
       },
       categories: "Browse by category",
-      credits: { label: "Photos from Wikimedia Commons", changes: "cropped and colour-graded" },
+      credits: { label: "Photos from Wikimedia Commons", changes: "cropped, mirrored and colour-graded" },
       upcoming: {
         heading: "Coming up",
         viewAll: "View all",
